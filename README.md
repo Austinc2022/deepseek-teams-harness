@@ -56,7 +56,7 @@ name: vuln-hunter
 description: Audits a source tree for vulnerabilities
 role: |                       # appended to the Claude Code system prompt
   ...
-backend: claude-code          # claude-code (default) | dsh (runs through dsh headless, e.g. a DeepSeek model)
+backend: claude-code          # claude-code (default, Agent SDK) | claude-cli | codex | opencode (your local CLI) | dsh (dsh headless, e.g. a DeepSeek model)
 model: opus                   # opus | sonnet | haiku | full model id
 effort: high                  # low | medium | high | xhigh | max
 permission: allow             # allow (default) | acceptEdits | auto | plan | deny
@@ -110,6 +110,32 @@ Install skills:
 - **Console:** Skills tab → Install.
 - **CLI:** `./forge-cli skill install github:anthropics/skills/skills/webapp-testing`, or a GitHub tree URL, or a local folder.
 - Then add the skill to the agent's `skills:` list.
+
+## Local CLI agents: Claude Code, Codex and OpenCode
+
+Any agent can run through a coding CLI installed on your machine, using that CLI's own login:
+
+| backend | Runs | Log in once with |
+|---|---|---|
+| `claude-cli` | `claude -p --output-format stream-json` | `claude` (then `/login`) |
+| `codex` | `codex exec --json` | `codex login` |
+| `opencode` | `opencode run --format json` | `opencode auth login` |
+
+Install them with `npm i -g @anthropic-ai/claude-code @openai/codex opencode-ai`.
+Ready-made agents named `claude-cli`, `codex` and `opencode` are in `forge/agents/`.
+
+**Running many at once.** Every reply spawns its own CLI process, so you can:
+- open several chats in **Agent chat** and send to all of them without waiting;
+- put several CLI agents (or the same one several times) in a room set to `parallel`;
+- use CLI agents as parallel stages in a workflow (`FORGE_MAX_PARALLEL`, default 4, caps workflow concurrency).
+
+How agent settings map to each CLI:
+- **model**: `opus`/`sonnet`/`haiku` go to Claude. For Codex and OpenCode, use `default` (the CLI's own choice) or an id such as `gpt-5.5` or `provider/model`.
+- **effort**: `--effort`, Codex `model_reasoning_effort`, or OpenCode `--variant`.
+- **permission**: `allow` skips approvals. `plan`/`deny` run read-only (Codex `-s read-only`, OpenCode plan agent). Codex with `execution.mode: sandbox` uses `-s workspace-write`.
+- **memory.mode: session** resumes the CLI's own session.
+- **Other settings**: role, memory context and the folder list go into the system prompt. Claude also gets `--add-dir`, MCP servers and tool lists. Forge memory tools (`memory_save` and similar) and skills only apply to the `claude-code` backend.
+- **Custom binary**: set `cliPath` on an agent, or `FORGE_CLAUDE_BIN` / `FORGE_CODEX_BIN` / `FORGE_OPENCODE_BIN`.
 
 ## The three use cases
 

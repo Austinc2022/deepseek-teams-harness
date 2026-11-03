@@ -1,0 +1,8 @@
+name: claude-cli
+description: Your local Claude Code CLI (claude -p) as a chat agent
+role: |
+  You are a capable software engineering agent. Do the work the user asks for, using your tools, and report what you did.
+backend: claude-cli
+model: sonnet
+permission: allow
+tags: [cli]

@@ -22,6 +22,7 @@ import { openMemory } from './memory.js'
 import { buildSkillPlugin } from './skills.js'
 import { filesSummary } from './agent-files.js'
 import { McpLibrary } from './mcp.js'
+import { runCli, CLI_BACKENDS } from './cli-backends.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits', auto: 'auto', plan: 'plan', deny: 'dontAsk' }
@@ -109,7 +110,9 @@ export async function runAgent(p) {
 
   let res
   try {
-    res = def.backend === 'dsh' ? await runDsh(p, mem, cwd) : await runClaudeCode(p, mem, cwd, write)
+    res = def.backend === 'dsh' ? await runDsh(p, mem, cwd)
+      : CLI_BACKENDS.includes(def.backend) ? await runCli(p, mem, cwd, write, systemAppend(def, mem, p, cwd))
+      : await runClaudeCode(p, mem, cwd, write)
   } catch (e) {
     res = { ok: false, error: e?.message ?? String(e) }
   }

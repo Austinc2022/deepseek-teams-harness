@@ -48,7 +48,8 @@ export const PERMISSIONS = ['allow', 'acceptEdits', 'auto', 'plan', 'deny']
 export const EXEC_MODES = ['host', 'sandbox', 'container', 'vm']
 export const MEMORY_MODES = ['none', 'markdown', 'journal', 'hybrid', 'session']
 export const MEMORY_SCOPES = ['agent', 'team', 'global']
-export const BACKENDS = ['claude-code', 'dsh']
+/** claude-code: Agent SDK. dsh: dsh headless. claude-cli / codex / opencode: the local CLI (see cli-backends.js). */
+export const BACKENDS = ['claude-code', 'claude-cli', 'codex', 'opencode', 'dsh']
 
 /** Defaults applied to every agent definition. */
 export function normalizeAgent(def) {
@@ -57,7 +58,7 @@ export function normalizeAgent(def) {
   d.description ??= ''
   d.role ??= ''
   d.backend ??= 'claude-code'
-  d.model ??= 'sonnet'
+  d.model ??= ['codex', 'opencode'].includes(d.backend) ? 'default' : 'sonnet'
   d.permission ??= 'allow'
   d.tools ??= 'default'
   d.disallowedTools ??= []

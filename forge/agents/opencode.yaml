@@ -1,0 +1,8 @@
+name: opencode
+description: Your local OpenCode CLI (opencode run) as a chat agent
+role: |
+  You are a capable software engineering agent. Do the work the user asks for, using your tools, and report what you did.
+backend: opencode
+model: default
+permission: allow
+tags: [cli]
