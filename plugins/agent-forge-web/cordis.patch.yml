@@ -1,0 +1,5 @@
+# Agent Forge inside the DSH web UI: serves the console under /forge on DSH's
+# own web server (DSH login required) and adds sidebar pages in the browser.
+- insert:
+    - id: agent-forge-web
+      name: '@local/agent-forge-web'

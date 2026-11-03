@@ -1,0 +1,16 @@
+#!/bin/bash
+# Launcher for DeepSeek Harness installed in this folder.
+#   ./dsh web                 start the Web UI (http://127.0.0.1:3080)
+#   ./dsh headless "task"     one-shot task
+#   ./dsh plugin --profile web add <pkg|dir>
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$ROOT/node_modules/.bin:$PATH"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
+mkdir -p "$DSH_HOME"
+TOKEN_FILE="$DSH_HOME/claude-bridge-token"
+if [ ! -s "$TOKEN_FILE" ]; then
+  (umask 077; node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))" > "$TOKEN_FILE")
+fi
+export CLAUDE_BRIDGE_TOKEN="$(cat "$TOKEN_FILE")"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+exec "$ROOT/node_modules/.bin/dsh" "$@"

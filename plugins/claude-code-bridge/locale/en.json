@@ -1,0 +1,1 @@
+{ "meta": { "title": "Claude Code bridge", "description": "Runs harness model calls through your local Claude Code login, so agents use your Claude subscription. Adds the claude-code provider (Opus, Sonnet, Haiku)." } }

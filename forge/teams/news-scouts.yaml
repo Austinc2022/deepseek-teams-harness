@@ -1,0 +1,4 @@
+name: news-scouts
+description: Daily world news discovery - regional scouts in parallel, a verifier, and an editor who writes the brief.
+members: [news-scout, news-verifier, news-editor]
+orchestrations: [world-news]

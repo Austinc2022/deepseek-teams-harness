@@ -1,0 +1,4 @@
+name: security-hunters
+description: Finds security bugs in newly released open-source software - recon, sandboxed hunters, triage, private advisories.
+members: [release-recon, vuln-hunter, vuln-triager, advisory-writer]
+orchestrations: [security-hunt]

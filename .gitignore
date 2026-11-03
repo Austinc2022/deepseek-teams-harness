@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Local DeepSeek harness state (contains credentials, tokens, sessions, logs)
+.dsh-home/
+
+# Secrets
+.env
+.env.*
+*.pem
+*credentials*
+*-token
+
+# OS / editor
+.DS_Store
+*.log
+
+# Agent Forge runtime data (personal runs, memory, sessions, caches, tokens)
+forge/runs/
+forge/memory/
+forge/.cache/
+forge/workspaces/
+forge/reports/
+forge/agent-homes/
+forge/mcp/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Personal chat history
+forge/chats/

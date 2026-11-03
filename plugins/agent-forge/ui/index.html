@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Forge</title>
+<style>
+/* Design tokens. Embedded in the DSH web UI, the page copies DSH's live --dsw-* theme
+   tokens onto <html> (inline, so they win); these values are the standalone fallback
+   and match DSH's light and dark themes. */
+:root {
+  color-scheme: light;
+  --dsw-alias-bg-base: #fff; --dsw-alias-bg-layer-1: #fff; --dsw-alias-bg-layer-2: #fff;
+  --dsw-alias-label-primary: #0f1115; --dsw-alias-label-secondary: #61666b; --dsw-alias-label-tertiary: #81858c; --dsw-alias-label-primary-inverted: #fff;
+  --dsw-alias-border-l1: #0000000a; --dsw-alias-border-l2: #0000001a; --dsw-alias-border-l3: #0000001f;
+  --dsw-alias-interactive-bg-hover: #2631480f; --dsw-alias-interactive-bg-active: #2631481a;
+  --dsw-alias-state-error-primary: #ec1313; --dsw-alias-state-success-primary: #22c55e; --dsw-alias-state-business-primary: #4176e6; --dsw-alias-state-business-tertiary: #e4edfd; --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-alias-bg-skeleton: #0000000a; --dsw-alias-scrollbar-bg-l1: #e5e5e5;
+  --dsw-elevation-soft: 0 0 0 .5px #00000029, 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008;
+  --dsw-elevation-prominent: 0 0 0 .5px #00000029, 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d;
+  --dsw-radius-xs: 4px; --dsw-radius-sm: 8px; --dsw-radius-md: 12px; --dsw-radius-lg: 16px; --dsw-radius-xl: 20px;
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --dsh-font-family-code-default: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.embedded) {
+    color-scheme: dark;
+    --dsw-alias-bg-base: #151517; --dsw-alias-bg-layer-1: #232324; --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-label-primary: #f9fafb; --dsw-alias-label-secondary: #cfd3d6; --dsw-alias-label-tertiary: #adb2b8; --dsw-alias-label-primary-inverted: #353638;
+    --dsw-alias-border-l1: #ffffff0f; --dsw-alias-border-l2: #ffffff1f; --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-interactive-bg-hover: #ffffff14; --dsw-alias-interactive-bg-active: #ffffff24;
+    --dsw-alias-state-error-primary: #f25a5a; --dsw-alias-state-business-primary: #7aaaff; --dsw-alias-state-business-tertiary: #34415b;
+    --dsw-alias-bg-skeleton: #ffffff14; --dsw-alias-scrollbar-bg-l1: #3c3c3d;
+    --dsw-elevation-soft: 0 0 0 .5px #fff3, 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008;
+    --dsw-elevation-prominent: 0 0 0 .5px #fff3, 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d;
+  }
+}
+:root {
+  --bg: var(--dsw-alias-bg-base); --surface: var(--dsw-alias-bg-layer-1); --surface-2: var(--dsw-alias-bg-layer-2);
+  --ink: var(--dsw-alias-label-primary); --ink-2: var(--dsw-alias-label-secondary); --ink-3: var(--dsw-alias-label-tertiary); --ink-inv: var(--dsw-alias-label-primary-inverted);
+  --line-1: var(--dsw-alias-border-l1); --line: var(--dsw-alias-border-l2); --line-3: var(--dsw-alias-border-l3);
+  --hover: var(--dsw-alias-interactive-bg-hover); --active: var(--dsw-alias-interactive-bg-active);
+  --ok: var(--dsw-alias-state-success-primary); --bad: var(--dsw-alias-state-error-primary); --info: var(--dsw-alias-state-business-primary); --info-bg: var(--dsw-alias-state-business-tertiary); --warn: var(--dsw-alias-state-warn-primary);
+  --r-xs: var(--dsw-radius-xs); --r-sm: var(--dsw-radius-sm); --r-md: var(--dsw-radius-md); --r-lg: var(--dsw-radius-lg); --r-xl: var(--dsw-radius-xl);
+  --mono: var(--dsh-font-family-code-default);
+  --inset: clamp(20px, 4vw, 48px);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(--dsw-font-family); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--active); }
+* { scrollbar-width: thin; scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent; }
+
+/* ---------- page frame (Plugins page proportions) ---------- */
+.page { display: flex; flex-direction: column; height: 100%; padding: 0 var(--inset); }
+.page > * { width: 100%; max-width: 1180px; margin-inline: auto; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 16px; padding-top: 28px; }
+.page-head h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.page-head .intro { margin: 4px 0 0; color: var(--ink-2); }
+.head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tabs { display: flex; gap: 20px; margin-top: 18px; border-bottom: .5px solid var(--line-3); overflow-x: auto; scrollbar-width: none; }
+.tabs:empty { display: none; }
+.tabs:empty + .split { margin-top: 18px; border-top: .5px solid var(--line-3); }
+.tabs button { position: relative; flex: none; padding: 0 0 10px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
+.tabs button.on { color: var(--ink); font-weight: 500; }
+.tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -.5px; height: 2px; border-radius: 2px; background: var(--ink); }
+.split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 0; padding: 0; }
+.master { display: flex; flex-direction: column; min-height: 0; padding: 16px 16px 16px 0; border-right: .5px solid var(--line); }
+.detail { min-width: 0; min-height: 0; overflow: auto; padding: 22px 0 64px 32px; }
+.search { position: relative; margin-bottom: 10px; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.search input { padding-left: 32px; }
+.list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
+.list-empty { color: var(--ink-3); padding: 14px 8px; }
+
+/* list rows: icon tile + title + meta */
+.item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 2px 12px; align-items: center; padding: 8px; border-radius: var(--r-md); cursor: pointer; }
+.item .tile { grid-row: span 3; align-self: start; }
+.item .t { font-size: 13.5px; font-weight: 500; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .s { color: var(--ink-3); font-size: 12px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .chips { margin-top: 2px; }
+.item.on { background: var(--active); }
+@media (hover: hover) { .item:hover:not(.on) { background: var(--hover); } }
+.tile { display: grid; place-items: center; width: 36px; height: 36px; border: .5px solid var(--line-3); border-radius: var(--r-sm); background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 500; }
+.tile.lg { width: 48px; height: 48px; border-radius: var(--r-lg); font-size: 18px; }
+
+/* typography inside the detail pane */
+h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; font-size: 18px; line-height: 26px; font-weight: 500; }
+h3 { margin: 24px 0 8px; font-size: 14px; font-weight: 500; }
+.muted { color: var(--ink-3); }
+.err { color: var(--bad); white-space: pre-wrap; }
+a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; cursor: pointer; }
+@media (hover: hover) { a:hover { text-decoration-color: var(--ink-2); } }
+code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: var(--r-xs); background: var(--hover); }
+
+/* form controls */
+label { display: block; margin: 14px 0 6px; color: var(--ink-2); font-size: 12px; line-height: 16px; }
+input, select, textarea { width: 100%; min-height: 34px; padding: 6px 10px; border: .5px solid var(--line-3); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font: inherit; outline: none; transition: border-color .12s, box-shadow .12s; }
+input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: .8; }
+input:focus, select:focus, textarea:focus { border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--hover); }
+input:disabled, select:disabled { opacity: .55; }
+select { appearance: none; padding-right: 30px; background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%); background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat; text-overflow: ellipsis; }
+textarea { min-height: 84px; resize: vertical; line-height: 19px; }
+textarea.code, .sec textarea[placeholder^="{"] { font-family: var(--mono); font-size: 12px; }
+textarea.code { min-height: 380px; }
+input[type=checkbox] { width: 15px; height: 15px; min-height: 0; padding: 0; margin: 0; accent-color: var(--ink); box-shadow: none; flex: none; }
+@media (pointer: coarse) { input, select, textarea { font-size: 16px; } }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 14px; }
+
+/* buttons: neutral, DSH style */
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+button.b { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px; border: .5px solid var(--line-3); border-radius: var(--r-sm); background: transparent; color: var(--ink); font: inherit; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background .12s; }
+button.b.p { background: var(--ink); color: var(--ink-inv); border-color: transparent; }
+button.b.d { color: var(--bad); }
+button.b:disabled { opacity: .45; cursor: default; }
+@media (hover: hover) { button.b:not(.p):not(:disabled):hover { background: var(--hover); } button.b.p:not(:disabled):hover { opacity: .88; } button.b.d:not(:disabled):hover { background: color-mix(in srgb, var(--bad) 10%, transparent); } }
+button.b:focus-visible, .tabs button:focus-visible, .item:focus-visible { outline: 2px solid var(--ink-3); outline-offset: 2px; }
+
+/* chips / status */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--r-xs); background: var(--hover); color: var(--ink-3); font-size: 11px; line-height: 18px; font-weight: 400; white-space: nowrap; }
+.chip.info { background: var(--info-bg); color: var(--info); }
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.st::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.st.completed::before, .st.done::before { background: var(--ok); }
+.st.failed::before, .st.cancelled::before { background: var(--bad); }
+.st.failed, .st.cancelled { color: var(--bad); }
+.st.running::before, .st.queued::before { background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* selectable pills for checkbox groups */
+.checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.checks > label { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 5px 10px; border: .5px solid var(--line-3); border-radius: var(--r-sm); color: var(--ink); font-size: 13px; line-height: 18px; cursor: pointer; transition: background .12s, border-color .12s; }
+.checks > label > span.muted, .checks > label > span[style] { color: var(--ink-3); }
+.checks > label:has(input:checked) { background: var(--active); border-color: var(--ink-3); }
+.checks > label:has(input:disabled) { cursor: default; }
+@media (hover: hover) { .checks > label:not(:has(input:disabled)):hover { background: var(--hover); } }
+label.checks { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 12px 0 0; cursor: pointer; }
+label.checks > span:first-child { color: var(--ink) !important; font-size: 13px !important; }
+
+/* collapsible sections and cards */
+details.sec { margin: 12px 0; border: .5px solid var(--line-3); border-radius: var(--r-md); background: var(--surface); }
+details.sec > summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 14px; font-weight: 500; list-style: none; cursor: pointer; border-radius: var(--r-md); }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::after { content: ''; margin-left: auto; width: 8px; height: 8px; border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(-45deg); transition: transform .15s; }
+details.sec[open] > summary::after { transform: rotate(45deg); }
+@media (hover: hover) { details.sec > summary:hover { background: var(--hover); } }
+.sec-body { padding: 0 16px 16px; }
+.sec-body > :first-child > label:first-child, .sec-body > label:first-child { margin-top: 2px; }
+.stage { margin: 12px 0; padding: 14px 16px; border: .5px solid var(--line-3); border-radius: var(--r-md); background: var(--surface); }
+.stage .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stage .head input { width: 150px; }
+.stage .head select { width: auto; }
+.stage .head button.b { height: 30px; padding: 0 10px; }
+.stage .step { position: relative; margin-top: 12px; padding: 2px 0 4px 16px; border-left: 2px solid var(--line-3); }
+.stage > h2 { font-size: 15px; margin-bottom: 8px; }
+
+/* tables, code blocks */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 9px 10px 9px 0; border-bottom: .5px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--ink-3); font-size: 12px; font-weight: 400; white-space: nowrap; }
+td { overflow-wrap: anywhere; }
+tr:last-child > td, tr:last-child > th { border-bottom: 0; }
+.overflow { overflow-x: auto; }
+pre { margin: 0; padding: 12px 14px; max-height: 520px; overflow: auto; border-radius: var(--r-md); background: var(--hover); font-family: var(--mono); font-size: 12px; line-height: 18px; white-space: pre-wrap; word-break: break-word; }
+
+/* empty + loading states */
+.empty-state { display: grid; place-items: center; align-content: center; gap: 10px; min-height: 52vh; text-align: center; color: var(--ink-3); }
+.empty-state .tile { width: 48px; height: 48px; border-radius: var(--r-lg); }
+.empty-state b { color: var(--ink); font-size: 14px; font-weight: 500; }
+.spinner-wrap { display: grid; place-items: center; min-height: 40vh; }
+.spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-3); border-top-color: var(--ink-2); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* toast (bottom center, like DSH) */
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: var(--r-md); background: var(--surface-2); color: var(--ink); box-shadow: var(--dsw-elevation-prominent); opacity: 0; transform: translate(-50%, 8px); transition: opacity .18s, transform .18s; pointer-events: none; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- chat ---------- */
+body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 0 0 0 0; overflow: hidden; }
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 0 14px 32px; border-bottom: .5px solid var(--line); }
+.chat-head h2 { flex: 1 1 auto; margin: 0; font-size: 16px; }
+.chat-head select { width: auto; height: 32px; min-height: 32px; }
+.msgs { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 22px; padding: 24px 8px 24px 32px; }
+.msg { max-width: 760px; width: 100%; }
+.msg .who { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--ink-3); font-size: 12px; }
+.msg .who b { color: var(--ink); font-size: 13px; font-weight: 500; }
+.msg .bubble { font-size: 14px; line-height: 23px; white-space: pre-wrap; word-break: break-word; }
+.msg:not(.user) .bubble { padding-left: 30px; }
+.msg.user { align-self: flex-end; width: auto; max-width: min(620px, 85%); }
+.msg.user .who { justify-content: flex-end; }
+.msg.user .bubble { padding: 10px 16px; border-radius: var(--r-xl); background: var(--active); }
+.msg.pending .bubble { color: var(--ink-3); }
+.msg.pending .bubble::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--ink-3); animation: pulse 1.2s infinite; vertical-align: middle; }
+.msg.failed .bubble, .msg.cancelled .bubble { color: var(--bad); }
+.msg .tools { margin: 6px 0 0 30px; color: var(--ink-3); font-size: 12px; }
+.msg .tools summary { cursor: pointer; width: fit-content; }
+.msg .tools pre, .msg details.tools { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; }
+.msg pre { margin: 8px 0; white-space: pre-wrap; }
+.composer { padding: 10px 8px 20px 32px; }
+.composer-box { border: .5px solid var(--line-3); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--dsw-elevation-soft); padding: 10px 10px 8px 14px; transition: border-color .12s; }
+.composer-box:focus-within { border-color: var(--ink-3); }
+.composer textarea { min-height: 48px; max-height: 240px; padding: 2px 0; border: 0; background: transparent; box-shadow: none; font-size: 14px; line-height: 22px; resize: none; }
+.composer-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.composer-foot .hint { flex: 1; min-width: 0; color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.send { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--ink); color: var(--ink-inv); cursor: pointer; flex: none; }
+.send:disabled { opacity: .35; cursor: default; }
+.mentions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.mentions button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 4px; border: .5px solid var(--line-3); border-radius: 999px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; cursor: pointer; }
+@media (hover: hover) { .mentions button:hover { background: var(--hover); color: var(--ink); } }
+.av { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 500; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 760px) {
+  .page { padding: 0 16px; height: auto; min-height: 100%; }
+  .split { grid-template-columns: 1fr; }
+  .master { border-right: 0; border-bottom: .5px solid var(--line); padding: 14px 0; }
+  .list { max-height: 260px; }
+  .detail { padding: 20px 0 48px; overflow: visible; }
+  .chat-head, .msgs, .composer { padding-left: 0; padding-right: 0; }
+  body[data-tab="chat"] .detail { height: 78vh; }
+  .page-head { padding-top: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-head">
+    <div class="heading"><h1 id="title">Agent Forge</h1><p class="intro" id="intro"></p></div>
+    <div class="head-actions" id="listBtns"></div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main class="split">
+    <aside class="master">
+      <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="filter" placeholder="Search" autocomplete="off"></div>
+      <div class="list" id="list"></div>
+    </aside>
+    <section class="detail" id="detail"><div class="spinner-wrap"><div class="spinner"></div></div></section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<span id="home" hidden></span>
+<script>
+(() => {
+  const qs = new URLSearchParams(location.search)
+  // Embedded in the DeepSeek Harness web UI (served under /forge/, DSH login cookie) or standalone (token).
+  const embedded = location.pathname.replace(/\/index\.html$/, '/').endsWith('/forge/')
+  const view = qs.get('view') ?? 'all'
+  let token = qs.get('token')
+  try { if (token) sessionStorage.setItem('forgeToken', token); else token = sessionStorage.getItem('forgeToken') } catch {}
+  if (qs.get('token')) { qs.delete('token'); history.replaceState(null, '', location.pathname + (qs.toString() ? `?${qs}` : '')) }
+  if (embedded && window.parent !== window) {
+    document.documentElement.classList.add('embedded')
+    // Adopt DSH's live design tokens (same origin): read them from the iframe element, which
+    // inherits the theme container's custom properties, and re-sync when the theme changes.
+    let tokenNames = null
+    const syncTheme = () => {
+      try {
+        const frame = window.frameElement, pd = window.parent.document
+        if (!frame) return
+        if (!tokenNames) {
+          tokenNames = new Set()
+          const walk = rules => { for (const r of rules) { if (r.style) for (const p of r.style) if (p.startsWith('--dsw-') || p.startsWith('--dsh-font') || p.startsWith('--dsh-scrollbar')) tokenNames.add(p); if (r.cssRules) walk(r.cssRules) } }
+          for (const sheet of pd.styleSheets) { try { walk(sheet.cssRules) } catch { /* cross-origin sheet */ } }
+        }
+        const cs = window.parent.getComputedStyle(frame), root = document.documentElement
+        for (const n of tokenNames) { const v = cs.getPropertyValue(n).trim(); if (v) root.style.setProperty(n, v) }
+        root.style.colorScheme = cs.colorScheme || window.parent.getComputedStyle(pd.documentElement).colorScheme || ''
+      } catch { /* not inside a same-origin DSH page */ }
+    }
+    syncTheme()
+    try { new MutationObserver(() => setTimeout(syncTheme, 30)).observe(window.parent.document.documentElement, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-theme', 'data-ds-theme', 'data-ds-theme-source'] }) } catch {}
+    try { window.parent.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(syncTheme, 30)) } catch {}
+  }
+
+  const api = async (method, path, body) => {
+    const r = await fetch(new URL(path, location.href), { method, credentials: 'same-origin', headers: { 'x-forge-request': '1', ...(token ? { 'x-forge-token': token } : {}), 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error ?? r.statusText)
+    return j
+  }
+  const $ = s => document.querySelector(s)
+  const h = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k.startsWith('on')) e.addEventListener(k.slice(2), v)
+      else if (k === 'value') e.value = v
+      else if (k === 'checked') e.checked = v
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v)
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : String(k))
+    return e
+  }
+  const toast = msg => { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600) }
+  const guard = fn => async (...a) => { try { await fn(...a) } catch (e) { toast(e.message) } }
+
+  const ALL_TABS = [['chat', 'Agent chat'], ['agents', 'Agents'], ['teams', 'Teams'], ['orchestrations', 'Workflows'], ['runs', 'Runs'], ['mcp', 'MCP servers'], ['skills', 'Skills']]
+  // Each DSH sidebar page opens one view; the standalone console shows every tab.
+  const VIEWS = { all: ALL_TABS.map(t => t[0]), agents: ['agents', 'mcp', 'skills'], teams: ['teams', 'chat'], workflows: ['orchestrations', 'runs'], chat: ['chat'] }
+  const TITLES = { all: 'Agent Forge', agents: 'Agents', teams: 'Agent teams', workflows: 'Workflow orchestration', chat: 'Agent chat' }
+  const TABS = (VIEWS[view] ?? VIEWS.all).map(id => ALL_TABS.find(t => t[0] === id))
+  const state = { tab: qs.get('tab') && TABS.some(t => t[0] === qs.get('tab')) ? qs.get('tab') : TABS[0][0], sel: null, meta: null, agents: [], skills: [], teams: [], poll: null }
+  $('#title').textContent = TITLES[view] ?? TITLES.all
+  const INTROS = {
+    chat: 'Talk with several agents at once. They reply in turn, together, or when @mentioned.',
+    agents: 'Configure each agent: model, tools, MCP servers, skills, memory, folders and where it runs.',
+    teams: 'Group agents into teams for shared memory, group chats and workflows.',
+    orchestrations: 'Build multi-agent workflows from stages that run in order or in parallel.',
+    runs: 'Live and past workflow runs with per-agent transcripts and results.',
+    mcp: 'MCP servers shared by all agents. Each agent picks the servers it can use.',
+    skills: 'Skill folders that agents can load. Install from GitHub or a local folder.',
+  }
+  const ICON_PATHS = {
+    agents: ['M12 8V4H8', 'M4 8h16a0 0 0 0 1 0 0v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z', 'M2 14h2', 'M20 14h2', 'M9 13v2', 'M15 13v2'],
+    teams: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+    orchestrations: ['M3 5h6v4H3z', 'M15 15h6v4h-6z', 'M15 5h6v4h-6z', 'M6 9v4a2 2 0 0 0 2 2h7', 'M9 7h6'],
+    runs: ['M5 4l14 8-14 8V4z'],
+    skills: ['M12 3l2.2 5.5L20 9.3l-4.4 3.9 1.3 5.8L12 16l-4.9 3 1.3-5.8L4 9.3l5.8-.8z'],
+    mcp: ['M9 2v6', 'M15 2v6', 'M6 8h12v4a6 6 0 0 1-12 0V8z', 'M12 18v4'],
+    chat: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+    folder: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+    send: ['M12 19V5', 'M5 12l7-7 7 7'],
+  }
+  const icon = (name, size = 18) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('width', size); svg.setAttribute('height', size); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.6'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round'); for (const d of ICON_PATHS[name] ?? []) { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); svg.append(p) } return svg }
+  const SINGULAR = { agents: 'agent', teams: 'team', orchestrations: 'workflow', runs: 'run', skills: 'skill', mcp: 'MCP server', chat: 'chat' }
+  const emptyState = (title, text) => h('div', { class: 'empty-state' }, h('span', { class: 'tile' }, icon(state.tab, 22)), h('b', {}, title), text ? h('span', {}, text) : null)
+  const spinner = () => h('div', { class: 'spinner-wrap' }, h('div', { class: 'spinner' }))
+  const STATUS = new Set(['running', 'completed', 'failed', 'cancelled', 'queued', 'replying…'])
+  const goto = (tab, sel = null) => {
+    if (!TABS.some(t => t[0] === tab)) { if (embedded) { location.href = `./?view=${tab === 'runs' || tab === 'orchestrations' ? 'workflows' : tab === 'chat' ? 'chat' : ['agents', 'mcp', 'skills'].includes(tab) ? 'agents' : tab === 'teams' ? 'teams' : 'all'}&tab=${tab}${sel ? `&sel=${encodeURIComponent(sel)}` : ''}`; return Promise.resolve() } }
+    state.tab = tab; state.sel = sel; return load()
+  }
+  if (qs.get('sel')) state.sel = qs.get('sel')
+
+  function renderTabs() {
+    $('#tabs').replaceChildren(...(TABS.length > 1 ? TABS : []).map(([id, name]) => h('button', { role: 'tab', 'aria-selected': state.tab === id ? 'true' : 'false', class: state.tab === id ? 'on' : '', onclick: () => { if (state.tab === id) return; state.tab = id; state.sel = null; $('#filter').value = ''; $('#detail').replaceChildren(spinner()); load() } }, name)))
+  }
+
+  async function load() {
+    clearInterval(state.poll)
+    clearTimeout(state.chatPoll)
+    renderTabs()
+    document.body.dataset.tab = state.tab
+    $('#intro').textContent = INTROS[state.tab] ?? ''
+    $('#filter').placeholder = `Search ${SINGULAR[state.tab] ?? ''}s`.replace('chats', 'chats').replace('MCP servers', 'MCP servers')
+    if (!token && !embedded) { $('#detail').replaceChildren(h('p', { class: 'err' }, 'Missing token. Open the console URL printed by the harness or `./forge-cli serve` (it ends with ?token=...).')); return }
+    state.meta ??= await api('GET', 'api/meta')
+    $('#home').textContent = state.meta.home
+    ;[state.agents, state.skills, state.teams] = await Promise.all([api('GET', 'api/agents'), api('GET', 'api/skills'), api('GET', 'api/teams')])
+    state.mcp = await api('GET', 'api/mcp')
+    const EMPTY_TEXT = { runs: 'Pick a run from the list. Start runs from the Workflows tab.', mcp: 'Pick a server from the list, or add one.', skills: 'Pick a skill from the list, or install one.' }
+    if (!state.sel) $('#detail').replaceChildren(emptyState(`No ${SINGULAR[state.tab]} selected`, EMPTY_TEXT[state.tab] ?? `Pick one from the list, or create a new ${SINGULAR[state.tab]}.`))
+    await (({ chat: listChats, mcp: listMcp, agents: listAgents, teams: listTeams, orchestrations: listOrchs, runs: listRuns, skills: listSkills })[state.tab] ?? listChats)()
+  }
+
+  const applyFilter = () => { const q = $('#filter').value.trim().toLowerCase(); let shown = 0; for (const n of $('#list').querySelectorAll('.item')) { const on = !q || n.textContent.toLowerCase().includes(q); n.hidden = !on; shown += on } $('#list').querySelector('.list-empty')?.remove(); if (!shown) $('#list').append(h('div', { class: 'list-empty' }, q ? 'No matches.' : 'Nothing here yet.')) }
+  $('#filter').addEventListener('input', applyFilter)
+  const setList = (items, btns = []) => { $('#list').replaceChildren(...items); $('#listBtns').replaceChildren(...btns); applyFilter() }
+  const tileFor = title => state.tab === 'agents' || state.tab === 'chat' && false ? h('span', { class: 'tile' }, String(title)[0]?.toUpperCase() ?? '?') : h('span', { class: 'tile' }, icon(state.tab))
+  const item = (key, title, sub, chips = [], onclick) => {
+    const select = () => { state.sel = key; onclick(); document.querySelectorAll('.item').forEach(n => n.classList.toggle('on', n.dataset.k === key)) }
+    return h('div', { class: `item${state.sel === key ? ' on' : ''}`, tabindex: 0, role: 'button', onclick: select, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select() } }, 'data-k': key },
+      tileFor(title), h('div', { class: 't' }, title), sub ? h('div', { class: 's' }, sub) : null,
+      chips.length ? h('div', { class: 'chips' }, chips.map(c => STATUS.has(c) ? h('span', { class: `st ${c === 'replying…' ? 'running' : c}` }, c) : h('span', { class: 'chip' }, c))) : null)
+  }
+
+  // ---------------- Agents
+  async function listAgents() {
+    setList(state.agents.map(a => item(a.name, a.name, a.invalid ? `INVALID: ${a.invalid}` : a.description, a.invalid ? [] : [a.model, a.execution.mode, `mem:${a.memory.mode}`, ...(a.skills.length ? [`${a.skills.length} skills`] : []), ...(a.subagents.length ? [`${a.subagents.length} sub`] : []), ...((a.mcp ?? []).length + Object.keys(a.mcpServers ?? {}).length ? [`${(a.mcp ?? []).length + Object.keys(a.mcpServers ?? {}).length} mcp`] : [])], () => showAgent(a.name))),
+      [h('button', { class: 'b p', onclick: () => showAgent(null) }, 'New agent')])
+    if (state.sel) showAgent(state.sel)
+  }
+
+  async function showAgent(name) {
+    const base = name ? (await api('GET', `api/agents/${name}`)) : { definition: { name: '', description: '', role: '', model: 'sonnet', permission: 'allow', tools: 'default', backend: 'claude-code', execution: { mode: 'host' }, memory: { mode: 'none', scope: 'agent' }, skills: [], subagents: [], mcp: [], settingSources: ['project'] }, source: '' }
+    const d = base.definition
+    const M = state.meta
+    const mcpLib = state.mcp ?? []
+    const f = {}
+    const sel = (key, opts, val, attrs = {}) => (f[key] = h('select', attrs, opts.map(o => Array.isArray(o) ? h('option', { value: o[0], selected: o[0] === val ? true : false }, o[1]) : h('option', { value: o, selected: o === val ? true : false }, o))))
+    const inp = (key, val, ph = '', attrs = {}) => (f[key] = h('input', { value: val ?? '', placeholder: ph, ...attrs }))
+    const area = (key, val, ph = '', rows = 2) => (f[key] = h('textarea', { value: val ?? '', placeholder: ph, style: `min-height:${rows * 22 + 16}px` }))
+    const tick = (key, label, on, hint) => h('label', { class: 'checks', style: 'margin:8px 0 0' }, h('span', { style: 'display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px' }, f[key] = h('input', { type: 'checkbox', checked: !!on, style: 'width:auto' }), label), hint ? h('span', { class: 'muted', style: 'font-size:12px' }, hint) : null)
+    const checks = (key, all, chosen) => (f[key] = h('div', { class: 'checks' }, all.map(n => { const [v, label, title] = Array.isArray(n) ? n : [n, n, '']; return h('label', { title }, h('input', { type: 'checkbox', value: v, checked: chosen.includes(v) }), label) })))
+    const picked = el => [...el.querySelectorAll('input:checked')].map(i => i.value)
+    const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint ? h('div', { class: 'muted', style: 'font-size:11.5px;margin-top:3px' }, hint) : null)
+    const section = (title, open, ...kids) => h('details', { class: 'sec', open: open ? true : false }, h('summary', {}, title), h('div', { class: 'sec-body' }, ...kids))
+    const ex = d.execution ?? {}
+    const lines = v => String(v ?? '').split('\n').map(s => s.trim()).filter(Boolean)
+    const kv = (v, sep = '=') => Object.fromEntries(lines(v).map(l => { const i = l.indexOf(sep); return i < 0 ? [l, ''] : [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
+
+    // ---- tools
+    const knownTools = M.builtinTools.flatMap(g => g.tools.map(t => t[0]))
+    const allTools = d.tools === 'default'
+    const chosenTools = allTools ? [] : d.tools
+    const toolMode = sel('toolMode', [['all', 'All Claude Code tools'], ['some', 'Only the tools selected below']], allTools ? 'all' : 'some', { onchange: () => { toolBox.style.opacity = f.toolMode.value === 'all' ? '.45' : '1'; toolBox.querySelectorAll('input').forEach(i => { i.disabled = f.toolMode.value === 'all' }) } })
+    const toolBox = h('div', {}, M.builtinTools.map(g => h('div', { style: 'margin-top:6px' }, h('div', { class: 'muted', style: 'font-size:11.5px' }, g.group),
+      h('div', { class: 'checks' }, g.tools.map(([t, desc]) => h('label', { title: desc }, h('input', { type: 'checkbox', class: 'tool', value: t, checked: chosenTools.includes(t), disabled: allTools }), t, h('span', { class: 'muted', style: 'font-size:11px' }, desc)))))))
+    toolBox.style.opacity = allTools ? '.45' : '1'
+    const extraTools = inp('extraTools', chosenTools.filter(t => !knownTools.includes(t)).join(', '), 'other tool names, comma separated (e.g. Glob, Grep on older Claude Code)')
+
+    // ---- MCP
+    const selectedMcp = d.mcp ?? []
+    const mcpBox = mcpLib.length
+      ? checks('mcp', mcpLib.filter(s => !s.invalid).map(s => [s.name, `${s.name} · ${s.type}`, s.description]), selectedMcp)
+      : (f.mcp = h('div', { class: 'muted' }, 'No MCP servers in the library yet.'))
+    const missingMcp = selectedMcp.filter(n => !mcpLib.some(s => s.name === n))
+
+    // ---- execution sub-panels
+    const execPanels = {
+      sandbox: h('div', { class: 'row' },
+        h('div', {}, tick('netOff', 'Block all network', ex.network === false)),
+        field('Extra allowed domains (comma)', inp('domains', (ex.allowedDomains ?? []).join(', '), 'api.example.com'), 'Package registries and GitHub are allowed by default.'),
+        field('Extra writable paths (one per line)', area('allowWrite', (ex.allowWrite ?? []).join('\n'), '/tmp/shared', 1)),
+        h('div', {}, tick('localBind', 'Allow binding local ports (dev servers)', ex.allowLocalBinding))),
+      container: h('div', { class: 'row' },
+        field('Image', inp('image', ex.image, 'agent-forge-claude:latest'), 'Build: docker build -t agent-forge-claude plugins/agent-forge/container'),
+        field('Runtime', sel('runtime', ['docker', 'podman'], ex.runtime ?? 'docker')),
+        field('Extra mounts (one per line, host:container)', area('mounts', (ex.mounts ?? []).join('\n'), '/data:/data', 1)),
+        h('div', {}, tick('cNetOff', 'No network', ex.network === false))),
+      vm: h('div', { class: 'row' },
+        field('Command prefix (comma)', inp('vmcmd', (ex.command ?? []).join(', '), 'ssh, -T, devbox   or   limactl, shell, default')),
+        field('claude binary on the VM', inp('claudePath', ex.claudePath, 'claude'))),
+    }
+    const execBox = h('div', {})
+    const drawExec = () => execBox.replaceChildren(execPanels[f.exec.value] ?? h('p', { class: 'muted', style: 'font-size:12px' }, 'Runs directly on this Mac with your user permissions.'))
+
+    const form = h('div', {},
+      h('h2', {}, name ? `Agent: ${name}` : 'New agent', d.clonedFrom ? h('span', { class: 'chip' }, `cloned from ${d.clonedFrom}`) : null),
+      section('Basics', true,
+        h('div', { class: 'row' }, field('Name', inp('name', d.name, 'lowercase-with-hyphens')), field('Tags (comma)', inp('tags', (d.tags ?? []).join(', '), 'dev, review'))),
+        field('Description (shown to other agents and in pickers)', inp('description', d.description)),
+        field('Role / instructions (appended to the Claude Code system prompt)', f.role = h('textarea', { value: d.role ?? '', style: 'min-height:120px' }))),
+      section('Model and limits', true,
+        h('div', { class: 'row' },
+          field('Backend', sel('backend', M.backends, d.backend), 'dsh runs the agent through dsh headless.'),
+          field('Model', inp('model', d.model, 'opus', { list: 'models' }), 'opus, sonnet, haiku or a full model id'),
+          field('Effort', sel('effort', [['', 'default'], ...M.efforts], d.effort ?? '')),
+          field('Fallback model', inp('fallbackModel', d.fallbackModel, 'optional', { list: 'models' }), 'Used if the main model is overloaded.')),
+        h('div', { class: 'row' },
+          field('Max turns', inp('maxTurns', d.maxTurns, 'unlimited', { type: 'number', min: 1 })),
+          field('Max budget per run (USD)', inp('maxBudgetUsd', d.maxBudgetUsd, 'unlimited', { type: 'number', min: 0, step: '0.5' }), 'Stops the run when estimated cost passes this.'))),
+      section(`Tools${allTools ? ' (all)' : ` (${chosenTools.length})`}`, true,
+        field('Built-in tools', toolMode), toolBox, extraTools,
+        field('Blocked tools (comma)', inp('disallowed', (d.disallowedTools ?? []).join(', '), 'WebSearch, mcp__github__delete_repository'), 'Always unavailable, even when all tools are on. Block one MCP tool as mcp__<server>__<tool>.')),
+      section(`MCP servers (${selectedMcp.length + Object.keys(d.mcpServers ?? {}).length})`, true,
+        h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px' }, 'Pick servers from the shared library. ', h('a', { onclick: () => goto('mcp') }, 'Manage MCP servers')),
+        mcpBox,
+        missingMcp.length ? h('p', { class: 'err' }, `Not in the library: ${missingMcp.join(', ')}`) : null,
+        field('Private servers for this agent only (JSON, Claude Code mcpServers format)', area('mcpInline', Object.keys(d.mcpServers ?? {}).length ? JSON.stringify(d.mcpServers, null, 2) : '', '{ "my-server": { "type": "stdio", "command": "npx", "args": ["-y", "some-mcp-server"] } }', 3), 'Values can reference environment variables as ${VAR}.')),
+      section('Skills and sub-agents', true,
+        h('label', {}, 'Skills'), checks('skills', state.skills.map(s => [s.name, s.name, s.description]), d.skills ?? []),
+        tick('builtinSkills', 'Also allow Claude Code\'s bundled and personal skills', d.builtinSkills === true),
+        h('label', {}, 'Sub-agents (other forge agents this agent can delegate to with the Task tool)'), checks('subagents', state.agents.filter(a => a.name !== name && !a.invalid).map(a => [a.name, a.name, a.description]), d.subagents ?? [])),
+      section('Memory', false,
+        h('div', { class: 'row' },
+          field('Memory system', sel('memMode', M.memoryModes, d.memory.mode), 'none is stateless; session resumes the last conversation.'),
+          field('Scope', sel('memScope', M.memoryScopes, d.memory.scope)),
+          field('Shared namespace', inp('memNs', d.memory.namespace, 'optional'), 'Agents with the same namespace share memory.'),
+          field('Memory shown per run (characters)', inp('injectChars', d.memory.injectChars ?? 6000, '', { type: 'number', min: 0 }))),
+        tick('claudeAutoMemory', 'Also use Claude Code\'s own per-project auto memory', d.memory.claudeAutoMemory === true)),
+      section('Permissions and execution', true,
+        h('div', { class: 'row' },
+          field('Permission', sel('permission', M.permissions, d.permission), 'allow never asks; plan is read-only.'),
+          field('Runs in', sel('exec', [['host', 'host (this Mac)'], ['sandbox', 'sandbox (macOS sandbox)'], ['container', 'container (Docker)'], ['vm', 'vm (SSH or Lima)']], ex.mode, { onchange: () => drawExec() }))),
+        execBox),
+      section('Folders', !!(d.project || (d.folders ?? []).length),
+        h('div', { class: 'row' },
+          field('Project folder (default working directory)', inp('project', d.project, '~/code/my-app'), 'Blank: the agent works in its own folder.'),
+          field('Extra folders (one per line)', area('folders', (d.folders ?? []).join('\n'), '~/Documents/specs', 1)))),
+      section('Advanced', false,
+        h('label', {}, 'Load Claude Code settings from'), checks('settingSources', [['project', 'project (CLAUDE.md and .claude/ in the working folder)'], ['local', 'local (.claude/settings.local.json)'], ['user', 'user (~/.claude: your personal settings, plugins, hooks)']], d.settingSources ?? ['project']),
+        field('Environment variables (KEY=VALUE, one per line)', area('env', Object.entries(d.env ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'), 'MY_FLAG=1', 2), 'Passed to the agent and its tools. Prefer referencing secrets in MCP servers as ${VAR}.'),
+        tick('externalMcp', 'Also load MCP servers from Claude Code config (project .mcp.json, your user settings and claude.ai connectors)', d.externalMcp === true),
+        tick('useApiKey', 'Bill this agent to ANTHROPIC_API_KEY instead of the Claude subscription', d.useApiKey === true)),
+      h('datalist', { id: 'models' }, ['opus', 'sonnet', 'haiku', ...M.models].filter((v, i, a) => a.indexOf(v) === i).map(m => h('option', { value: m }))),
+    )
+    drawExec()
+
+    const collect = () => {
+      const def = structuredClone(d)
+      Object.assign(def, { name: f.name.value.trim(), backend: f.backend.value, model: f.model.value.trim(), description: f.description.value, role: f.role.value, permission: f.permission.value })
+      const opt = (key, v) => { if (v === '' || v == null || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) delete def[key]; else def[key] = v }
+      opt('effort', f.effort.value)
+      opt('fallbackModel', f.fallbackModel.value.trim())
+      opt('maxTurns', f.maxTurns.value ? Number(f.maxTurns.value) : '')
+      opt('maxBudgetUsd', f.maxBudgetUsd.value ? Number(f.maxBudgetUsd.value) : '')
+      opt('tags', f.tags.value.split(',').map(s => s.trim()).filter(Boolean))
+      def.tools = f.toolMode.value === 'all' ? 'default' : [...[...toolBox.querySelectorAll('input.tool:checked')].map(i => i.value), ...f.extraTools.value.split(',').map(s => s.trim()).filter(Boolean)]
+      if (Array.isArray(def.tools) && !def.tools.length) throw new Error('Select at least one tool, or choose "All Claude Code tools"')
+      opt('disallowedTools', f.disallowed.value.split(',').map(s => s.trim()).filter(Boolean))
+      opt('mcp', f.mcp.querySelectorAll ? picked(f.mcp).concat(missingMcp) : missingMcp)
+      if (f.mcpInline.value.trim()) { try { def.mcpServers = JSON.parse(f.mcpInline.value) } catch (e) { throw new Error(`Private MCP servers: invalid JSON (${e.message})`) } } else delete def.mcpServers
+      def.skills = picked(f.skills)
+      opt('builtinSkills', f.builtinSkills.checked ? true : '')
+      def.subagents = picked(f.subagents)
+      def.memory = { ...d.memory, mode: f.memMode.value, scope: f.memScope.value, injectChars: Number(f.injectChars.value || 6000) }
+      if (f.memNs.value) def.memory.namespace = f.memNs.value; else delete def.memory.namespace
+      if (f.claudeAutoMemory.checked) def.memory.claudeAutoMemory = true; else delete def.memory.claudeAutoMemory
+      const e = { ...ex, mode: f.exec.value }
+      const set = (k, v) => { if (v === '' || v == null || v === false || (Array.isArray(v) && !v.length)) delete e[k]; else e[k] = v }
+      set('allowedDomains', f.domains.value.split(',').map(s => s.trim()).filter(Boolean))
+      set('allowWrite', lines(f.allowWrite.value))
+      set('allowLocalBinding', f.localBind.checked)
+      set('image', f.image.value.trim())
+      set('runtime', f.runtime.value === 'docker' ? '' : f.runtime.value)
+      set('mounts', lines(f.mounts.value))
+      set('command', f.vmcmd.value.split(',').map(s => s.trim()).filter(Boolean))
+      set('claudePath', f.claudePath.value.trim())
+      set('network', e.mode === 'sandbox' ? (f.netOff.checked ? false : '') : e.mode === 'container' ? (f.cNetOff.checked ? false : '') : e.network)
+      if (e.network !== false) delete e.network
+      def.execution = e
+      opt('project', f.project.value.trim())
+      opt('folders', lines(f.folders.value))
+      def.settingSources = picked(f.settingSources)
+      opt('env', kv(f.env.value))
+      opt('useApiKey', f.useApiKey.checked ? true : '')
+      opt('externalMcp', f.externalMcp.checked ? true : '')
+      return def
+    }
+    const yaml = h('textarea', { class: 'code', value: base.source })
+    const out = h('div', {})
+    const btns = h('div', { class: 'btns' },
+      h('button', { class: 'b p', onclick: guard(async () => { const def = collect(); await api('PUT', `api/agents/${def.name}`, { definition: def }); toast('Saved'); state.sel = def.name; load() }) }, 'Save'),
+      name ? h('button', { class: 'b', onclick: guard(async () => { const n = prompt(`Clone ${name} as:`, `${name}-copy`); if (!n) return; await api('POST', `api/agents/${name}/clone`, { name: n }); toast(`Cloned to ${n}`); state.sel = n; load() }) }, 'Clone') : null,
+      name ? h('button', { class: 'b', onclick: guard(async () => {
+        const task = prompt(`Task for ${name}:`); if (!task) return
+        const cwd = prompt('Working directory (blank = the agent\'s project folder, or its own folder):', '') ?? ''
+        const { id } = await api('POST', `api/agents/${name}/run`, { prompt: task, cwd })
+        const tick = async () => { const r = await api('GET', `api/adhoc/${id}`); out.replaceChildren(h('h2', {}, 'Ad-hoc run ', h('span', { class: `st ${r.status}` }, r.status)), h('pre', {}, r.tools.map(t => `> ${t}`).join('\n') + (r.result ? `\n\n${typeof r.result === 'string' ? r.result : JSON.stringify(r.result, null, 2)}` : ''))); if (r.status === 'running') setTimeout(tick, 2500) }
+        tick()
+      }) }, 'Run task') : null,
+      name ? h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete agent ${name}?`)) return; await api('DELETE', `api/agents/${name}`); state.sel = null; toast('Deleted'); load() }) }, 'Delete') : null)
+    const raw = name ? h('details', {}, h('summary', { class: 'muted', style: 'margin-top:16px;cursor:pointer' }, 'Edit raw YAML'), yaml,
+      h('div', { class: 'btns' }, h('button', { class: 'b', onclick: guard(async () => { await api('PUT', `api/agents/${name}`, { source: yaml.value }); toast('Saved YAML'); load() }) }, 'Save YAML'))) : null
+    $('#detail').replaceChildren(form, btns, out, name ? filesPanel(name) : '', raw ?? '')
+  }
+
+  // The agent's own folder and its files/ content library.
+  function filesPanel(name) {
+    const box = h('div', { class: 'stage', style: 'margin-top:18px' }, h('p', { class: 'muted' }, 'Loading folders…'))
+    const viewer = h('div', {})
+    const fmt = n => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`)
+    const editFile = (path, content) => {
+      const p = h('input', { value: path, placeholder: 'notes/brief.md' })
+      const ta = h('textarea', { class: 'code', style: 'min-height:260px', value: content })
+      viewer.replaceChildren(h('label', {}, 'File path inside files/'), p, h('label', {}, 'Content'), ta,
+        h('div', { class: 'btns' },
+          h('button', { class: 'b p', onclick: guard(async () => { await api('PUT', `api/agents/${name}/file`, { path: p.value.trim(), content: ta.value }); toast('Saved file'); draw() }) }, 'Save file'),
+          h('button', { class: 'b', onclick: () => viewer.replaceChildren() }, 'Close')))
+      viewer.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    const upload = h('input', { type: 'file', multiple: true, style: 'display:none', onchange: guard(async e => {
+      for (const file of e.target.files) {
+        const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] ?? ''); r.onerror = rej; r.readAsDataURL(file) })
+        await api('PUT', `api/agents/${name}/file`, { path: file.name, content: b64, encoding: 'base64' })
+      }
+      toast(`Uploaded ${e.target.files.length} file(s)`); e.target.value = ''; draw()
+    }) })
+    async function draw() {
+      const [fo, files] = await Promise.all([api('GET', `api/agents/${name}/folders`), api('GET', `api/agents/${name}/files`)])
+      box.replaceChildren(
+        h('h2', {}, 'Folders and files'),
+        h('table', {},
+          h('tr', {}, h('th', {}, 'Own folder'), h('td', {}, h('code', {}, fo.home))),
+          h('tr', {}, h('th', {}, 'Content folder'), h('td', {}, h('code', {}, fo.files))),
+          h('tr', {}, h('th', {}, 'Project folder'), h('td', {}, fo.project ? h('code', {}, fo.project) : h('span', { class: 'muted' }, 'not set'))),
+          h('tr', {}, h('th', {}, 'Extra folders'), h('td', {}, fo.extra.length ? fo.extra.map(x => h('div', {}, h('code', {}, x))) : h('span', { class: 'muted' }, 'none'))),
+          h('tr', {}, h('th', {}, 'Works in by default'), h('td', {}, h('code', {}, fo.defaultCwd)))),
+        h('p', { class: 'muted' }, 'Files in the content folder are listed in the agent\'s instructions on every run. Put reference docs, briefs, examples or data here; the agent can also save its own work products here.'),
+        files.length ? h('table', {}, h('tr', {}, h('th', {}, 'File'), h('th', {}, 'Size'), h('th', {}, 'Modified'), h('th', {}, '')),
+          files.map(fl => h('tr', {},
+            h('td', {}, h('a', { onclick: guard(async () => { const r = await api('GET', `api/agents/${name}/file?path=${encodeURIComponent(fl.path)}`); if (r.binary) { toast(`${fl.path} is binary${r.note ? ` (${r.note})` : ''}; the agent can still read it`); return } editFile(fl.path, r.content) }) }, fl.path)),
+            h('td', { class: 'muted' }, fmt(fl.size)), h('td', { class: 'muted' }, fl.mtime.slice(0, 16).replace('T', ' ')),
+            h('td', {}, h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete ${fl.path}?`)) return; await api('DELETE', `api/agents/${name}/file?path=${encodeURIComponent(fl.path)}`); draw() }) }, 'Delete')))))
+          : h('p', { class: 'muted' }, 'The content folder is empty.'),
+        h('div', { class: 'btns' },
+          h('button', { class: 'b', onclick: () => editFile('', '') }, 'New file'),
+          h('button', { class: 'b', onclick: () => upload.click() }, 'Upload files'), upload),
+        viewer)
+    }
+    draw().catch(e => box.replaceChildren(h('p', { class: 'err' }, e.message)))
+    return box
+  }
+
+  // ---------------- Teams
+  async function listTeams() {
+    setList(state.teams.map(t => item(t.name, t.name, t.description, [`${t.members.length} agents`, ...(t.orchestrations ?? [])], () => showTeam(t))),
+      [h('button', { class: 'b p', onclick: () => showTeam({ name: '', description: '', members: [], orchestrations: [] }) }, 'New team')])
+  }
+  function showTeam(t) {
+    const name = h('input', { value: t.name }), desc = h('input', { value: t.description ?? '' })
+    const members = h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', {}, h('input', { type: 'checkbox', value: a.name, checked: t.members.includes(a.name) }), a.name)))
+    $('#detail').replaceChildren(h('h2', {}, t.name ? `Team: ${t.name}` : 'New team'), h('label', {}, 'Name'), name, h('label', {}, 'Description'), desc, h('label', {}, 'Members'), members,
+      h('div', { class: 'btns' },
+        h('button', { class: 'b p', onclick: guard(async () => { await api('PUT', `api/teams/${name.value.trim()}`, { ...t, description: desc.value, members: [...members.querySelectorAll('input:checked')].map(i => i.value) }); toast('Saved'); load() }) }, 'Save'),
+        t.name ? h('button', { class: 'b', onclick: () => { if (!TABS.some(x => x[0] === 'orchestrations')) { location.href = `./?view=workflows&tab=orchestrations&newFor=${encodeURIComponent(t.name)}`; return } state.tab = 'orchestrations'; state.sel = null; load().then(() => showBuilder({ name: '', description: '', team: t.name, args: {}, stages: [] })) } }, 'New workflow from this team') : null,
+        t.name ? h('button', { class: 'b', onclick: () => goto('chat').then(() => newChatForm({ team: t.name })) }, 'Chat with this team') : null,
+        t.name ? h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete team ${t.name}?`)) return; await api('DELETE', `api/teams/${t.name}`); load() }) }, 'Delete') : null))
+  }
+
+  // ---------------- Orchestrations
+  async function listOrchs() {
+    const os = await api('GET', 'api/orchestrations')
+    setList(os.map(o => item(o.name, o.name, o.invalid ? `INVALID: ${o.invalid}` : o.description, [o.format, ...(o.team ? [o.team] : [])], () => showOrch(o.name))),
+      [h('button', { class: 'b p', onclick: () => showBuilder({ name: '', description: '', args: {}, stages: [] }) }, 'Build new (visual)'),
+       h('button', { class: 'b', onclick: () => showCode({ name: '', format: 'js', source: JS_TEMPLATE }) }, 'New code orchestration')])
+  }
+  const JS_TEMPLATE = `export const meta = {\n  name: 'my-orchestration',\n  description: 'What it does',\n  team: '',\n  args: { task: 'The task' },\n}\n\nexport default async function ({ agent, parallel, pipeline, phase, log, save, args }) {\n  phase('Work')\n  const a = await agent('planner', \`Plan: \${args.task}\`)\n  const reviews = await parallel([\n    () => agent('code-reviewer', \`Review: \${a}\`),\n    () => agent('security-reviewer', \`Review: \${a}\`),\n  ])\n  return { plan: a, reviews }\n}\n`
+
+  async function showOrch(name) {
+    const o = await api('GET', `api/orchestrations/${name}`)
+    if (o.format === 'yaml' && o.spec) return showBuilder(o.spec, o)
+    showCode(o)
+  }
+
+  function runForm(name, argsSpec) {
+    const keys = Object.keys(argsSpec ?? {})
+    const fields = {}
+    const body = h('div', { class: 'stage', style: 'margin-top:28px' }, h('h2', {}, 'Run'),
+      keys.length ? keys.map(k => h('div', {}, h('label', {}, `${k}: ${argsSpec[k]}`), fields[k] = h('input', {}))) : h('p', { class: 'muted' }, 'No declared arguments.'),
+      h('label', {}, 'Extra args (JSON object, optional)'), fields.__json = h('textarea', { style: 'min-height:50px', value: '{}' }),
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => {
+        const args = JSON.parse(fields.__json.value || '{}')
+        for (const k of keys) if (fields[k].value) { try { args[k] = JSON.parse(fields[k].value) } catch { args[k] = fields[k].value } }
+        const { id } = await api('POST', 'api/runs', { orchestration: name, args })
+        toast(`Run ${id} started`); goto('runs', id)
+      }) }, `Run ${name}`)))
+    return body
+  }
+
+  function showCode(o) {
+    const nameEl = h('input', { value: o.name, placeholder: 'orchestration-name' })
+    const ta = h('textarea', { class: 'code', value: o.source })
+    $('#detail').replaceChildren(h('h2', {}, o.name ? `Orchestration: ${o.name}` : 'New code orchestration', h('span', { class: 'chip' }, o.format)),
+      o.name ? '' : h('div', {}, h('label', {}, 'Name'), nameEl),
+      h('p', { class: 'muted' }, 'Hooks: agent(name, prompt, {schema, label, cwd, model, effort}), parallel([...thunks]), pipeline(items, ...stages), phase(title), log(msg), save(file, content), args, run, team(name).'),
+      ta,
+      h('div', { class: 'btns' },
+        h('button', { class: 'b p', onclick: guard(async () => { const n = o.name || nameEl.value.trim(); await api('PUT', `api/orchestrations/${n}`, { format: o.format, source: ta.value }); toast('Saved'); state.sel = n; load() }) }, 'Save'),
+        o.name ? h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete ${o.name}?`)) return; await api('DELETE', `api/orchestrations/${o.name}`); load() }) }, 'Delete') : null),
+      o.name ? runForm(o.name, {}) : '')
+    if (o.name) api('GET', 'api/orchestrations').then(list => { const m = list.find(x => x.name === o.name); if (m) $('#detail').lastChild.replaceWith(runForm(o.name, m.args)) })
+  }
+
+  // Visual builder: produces the declarative YAML format.
+  function showBuilder(spec, orig) {
+    spec = structuredClone(spec)
+    spec.stages ??= []
+    const team = spec.team ? state.teams.find(t => t.name === spec.team) : null
+    const agentNames = () => (teamSel.value ? (state.teams.find(t => t.name === teamSel.value)?.members ?? []) : state.agents.filter(a => !a.invalid).map(a => a.name))
+    const nameEl = h('input', { value: spec.name, placeholder: 'orchestration-name' })
+    const descEl = h('input', { value: spec.description ?? '' })
+    const teamSel = h('select', { onchange: () => drawStages() }, h('option', { value: '' }, '(all agents)'), state.teams.map(t => h('option', { value: t.name, selected: t.name === spec.team ? true : false }, t.name)))
+    const argsEl = h('textarea', { style: 'min-height:60px', value: Object.entries(spec.args ?? {}).map(([k, v]) => `${k}: ${v}`).join('\n') })
+    const stagesBox = h('div', {})
+    const stepEditor = (step, onDel) => {
+      const ag = h('select', { onchange: () => { step.agent = ag.value } }, agentNames().map(n => h('option', { value: n, selected: n === step.agent ? true : false }, n)))
+      if (!step.agent) step.agent = agentNames()[0]
+      return h('div', { class: 'step' },
+        h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Agent'), ag), h('div', {}, h('label', {}, 'Label'), h('input', { value: step.label ?? '', oninput: e => { step.label = e.target.value || undefined } })), h('div', {}, h('label', {}, 'Working dir (template ok)'), h('input', { value: step.cwd ?? '', placeholder: '{{args.repo}}', oninput: e => { step.cwd = e.target.value || undefined } }))),
+        h('label', {}, 'Prompt: use {{args.name}}, {{stages.<id>}}, {{date}}'), h('textarea', { value: step.prompt ?? '', oninput: e => { step.prompt = e.target.value } }),
+        onDel ? h('button', { class: 'b d', onclick: onDel }, 'Remove agent') : null)
+    }
+    const drawStages = () => {
+      stagesBox.replaceChildren(...spec.stages.map((s, i) => {
+        const isPar = Array.isArray(s.parallel)
+        return h('div', { class: 'stage' },
+          h('div', { class: 'head' }, h('b', {}, `Stage ${i + 1}`), h('input', { value: s.id, placeholder: 'id', oninput: e => { s.id = e.target.value } }),
+            h('select', { onchange: e => { if (e.target.value === 'parallel' && !isPar) { spec.stages[i] = { id: s.id, title: s.title, parallel: [{ agent: s.agent, prompt: s.prompt, cwd: s.cwd }] } } else if (e.target.value === 'single' && isPar) { const f0 = s.parallel[0] ?? {}; spec.stages[i] = { id: s.id, title: s.title, agent: f0.agent, prompt: f0.prompt, cwd: f0.cwd } } drawStages() } },
+              h('option', { value: 'single', selected: !isPar ? true : false }, 'single agent'), h('option', { value: 'parallel', selected: isPar ? true : false }, 'parallel agents')),
+            h('button', { class: 'b', disabled: i === 0, onclick: () => { [spec.stages[i - 1], spec.stages[i]] = [spec.stages[i], spec.stages[i - 1]]; drawStages() } }, '↑'),
+            h('button', { class: 'b', disabled: i === spec.stages.length - 1, onclick: () => { [spec.stages[i + 1], spec.stages[i]] = [spec.stages[i], spec.stages[i + 1]]; drawStages() } }, '↓'),
+            h('button', { class: 'b d', onclick: () => { spec.stages.splice(i, 1); drawStages() } }, 'Delete stage')),
+          isPar ? [...s.parallel.map((st, j) => stepEditor(st, () => { s.parallel.splice(j, 1); drawStages() })), h('button', { class: 'b', style: 'margin-top:8px', onclick: () => { s.parallel.push({ prompt: '' }); drawStages() } }, '+ parallel agent')] : stepEditor(s))
+      }), h('button', { class: 'b', onclick: () => { spec.stages.push({ id: `stage${spec.stages.length + 1}`, prompt: '' }); drawStages() } }, '+ Add stage'))
+    }
+    drawStages()
+    const save = guard(async () => {
+      const n = (orig?.name ?? nameEl.value).trim()
+      const args = Object.fromEntries(argsEl.value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf(':'); return i < 0 ? [l, ''] : [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
+      const out = { name: n, description: descEl.value, ...(teamSel.value ? { team: teamSel.value } : {}), args, stages: spec.stages, ...(spec.output ? { output: spec.output } : {}) }
+      await api('PUT', `api/orchestrations/${n}`, { format: 'yaml', spec: out })
+      toast('Saved'); state.sel = n; await load(); showOrch(n)
+    })
+    $('#detail').replaceChildren(h('h2', {}, orig ? `Orchestration: ${spec.name}` : 'New orchestration', h('span', { class: 'chip' }, 'visual builder')),
+      h('div', { class: 'row' }, orig ? '' : h('div', {}, h('label', {}, 'Name'), nameEl), h('div', {}, h('label', {}, 'Team (filters agent pickers)'), teamSel)),
+      h('label', {}, 'Description'), descEl,
+      h('label', {}, 'Arguments (one per line: name: description)'), argsEl,
+      h('label', {}, 'Stages run in order; a parallel stage runs its agents at the same time. Later prompts can include {{stages.<id>}}.'), stagesBox,
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: save }, 'Save'),
+        orig ? h('button', { class: 'b', onclick: () => showCode(orig) }, 'Edit as YAML') : null,
+        orig ? h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete ${spec.name}?`)) return; await api('DELETE', `api/orchestrations/${spec.name}`); load() }) }, 'Delete') : null),
+      orig ? runForm(spec.name, spec.args) : '')
+  }
+
+
+  // ---------------- Runs
+  async function listRuns() {
+    const runs = await api('GET', 'api/runs')
+    setList(runs.map(r => item(r.id, r.orchestration, r.id, [r.status, `${r.agents} agents`, ...(r.phase ? [r.phase] : [])], () => showRun(r.id))))
+    if (state.sel) showRun(state.sel)
+    state.poll = setInterval(async () => { if (state.tab !== 'runs') return; const rs = await api('GET', 'api/runs'); if (rs.some(r => r.status === 'running')) { if (state.sel) showRun(state.sel, true) } }, 4000)
+  }
+  async function showRun(id, quiet) {
+    const r = await api('GET', `api/runs/${id}`)
+    const transcript = h('pre', { style: 'display:none' })
+    const dur = (a, b) => a ? `${Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 1000)}s` : ''
+    if (quiet && $('#detail').dataset.run === id && $('#detail').dataset.open) return
+    $('#detail').dataset.run = id
+    $('#detail').replaceChildren(
+      h('h2', {}, `${r.orchestration} `, h('span', { class: `st ${r.status}` }, r.status), h('span', { class: 'chip' }, r.phase ?? '-'), h('span', { class: 'muted', style: 'font-weight:400;font-size:12px' }, `${id} · ${dur(r.startedAt, r.endedAt)}`),
+        r.status === 'running' ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/runs/${id}/cancel`); toast('Cancelling') }) }, 'Cancel') : null),
+      h('label', {}, 'Args'), h('pre', {}, JSON.stringify(r.args, null, 2)),
+      h('label', {}, 'Agents'),
+      h('div', { class: 'overflow' }, h('table', {}, h('tr', {}, h('th', {}, '#'), h('th', {}, 'label'), h('th', {}, 'agent'), h('th', {}, 'status'), h('th', {}, 'time'), h('th', {}, 'activity')),
+        r.agents.map(a => h('tr', {}, h('td', {}, a.n), h('td', {}, h('a', { onclick: guard(async () => { const { content } = await api('GET', `api/runs/${id}/file?path=${encodeURIComponent(a.file)}`); transcript.textContent = content; transcript.style.display = 'block'; $('#detail').dataset.open = '1'; transcript.scrollIntoView({ behavior: 'smooth' }) }) }, a.label)), h('td', {}, a.agent, h('span', { class: 'muted' }, ` ${a.model}`)), h('td', { class: `st ${a.status}` }, a.status), h('td', {}, dur(a.startedAt, a.endedAt)), h('td', { class: 'muted' }, a.error ? h('span', { class: 'err' }, a.error) : `${a.tools} tools${a.lastTool ? ` · ${a.lastTool.slice(0, 80)}` : ''}`))))),
+      transcript,
+      h('label', {}, 'Log'), h('pre', {}, r.log.map(l => `${l.ts.slice(11, 19)} ${l.msg}`).join('\n') || '-'),
+      r.error ? [h('label', {}, 'Error'), h('pre', { class: 'err' }, r.error)] : '',
+      r.result != null ? [h('label', {}, 'Result'), h('pre', {}, typeof r.result === 'string' ? r.result : JSON.stringify(r.result, null, 2))] : '')
+  }
+
+  // ---------------- Agent chat (multi-agent group chat)
+  const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply' }
+  const hue = name => [...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
+  const avatar = name => h('span', { class: 'av', style: `background:hsl(${hue(name)} 45% 45%)` }, name[0].toUpperCase())
+  // Minimal, safe Markdown: fenced code, inline code, bold. Everything is text nodes.
+  const md = text => {
+    const out = []
+    String(text).split(/```[\w-]*\n?/).forEach((part, i) => {
+      if (i % 2) { out.push(h('pre', {}, part.replace(/\n$/, ''))); return }
+      for (const seg of part.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/)) {
+        if (/^`[^`]+`$/.test(seg)) out.push(h('code', {}, seg.slice(1, -1)))
+        else if (/^\*\*[^*]+\*\*$/.test(seg)) out.push(h('b', {}, seg.slice(2, -2)))
+        else if (seg) out.push(seg)
+      }
+    })
+    return out
+  }
+
+  async function listChats() {
+    const rooms = await api('GET', 'api/chats')
+    setList(rooms.map(r => item(r.id, r.title, `${r.agents.length} agents · ${r.mode}`, [...(r.busy ? ['replying…'] : []), `${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))),
+      [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
+    if (state.sel) showChat(state.sel)
+    else if (!rooms.length) newChatForm({})
+    else $('#detail').replaceChildren(emptyState('No chat selected', 'Pick a chat from the list, or start a new one.'))
+  }
+
+  function newChatForm(pre) {
+    clearTimeout(state.chatPoll)
+    const team = h('select', { onchange: () => { const t = state.teams.find(x => x.name === team.value); if (t) agentsBox.querySelectorAll('input').forEach(i => { i.checked = t.members.includes(i.value) }) } },
+      h('option', { value: '' }, '(pick agents below)'), state.teams.map(t => h('option', { value: t.name, selected: t.name === pre.team ? true : false }, t.name)))
+    const members = pre.team ? (state.teams.find(t => t.name === pre.team)?.members ?? []) : []
+    const agentsBox = h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', { title: a.description }, h('input', { type: 'checkbox', value: a.name, checked: members.includes(a.name) }), a.name, h('span', { class: 'muted', style: 'font-size:11px' }, a.model))))
+    const title = h('input', { placeholder: 'optional' })
+    const mode = h('select', {}, state.meta.chatModes.map(m => h('option', { value: m }, `${m}: ${MODE_HELP[m]}`)))
+    const cwd = h('input', { placeholder: 'blank = each agent works in its own project folder or home folder' })
+    const hops = h('input', { type: 'number', min: 0, max: 12, value: 4 })
+    const first = h('textarea', { placeholder: 'First message (optional). Use @agent-name to address someone.' })
+    $('#detail').replaceChildren(h('div', { style: 'padding:22px 0 56px 32px;overflow:auto;min-height:0' },
+      h('h2', {}, 'New multi-agent chat'),
+      h('p', { class: 'muted' }, 'Each agent replies with its own model, skills, memory and execution environment. Agents can hand off to each other with @name.'),
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Title'), title), h('div', {}, h('label', {}, 'Start from team'), team)),
+      h('label', {}, 'Agents'), agentsBox,
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Reply mode'), mode), h('div', {}, h('label', {}, 'Working directory'), cwd), h('div', {}, h('label', {}, 'Max agent-to-agent hand-offs per message'), hops)),
+      h('label', {}, 'First message'), first,
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => {
+        const agents = [...agentsBox.querySelectorAll('input:checked')].map(i => i.value)
+        const room = await api('POST', 'api/chats', { title: title.value, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value) })
+        if (first.value.trim()) await api('POST', `api/chats/${room.id}/messages`, { text: first.value })
+        state.sel = room.id; await load()
+      }) }, 'Start chat'))))
+  }
+
+  async function showChat(id, keepDraft) {
+    clearTimeout(state.chatPoll)
+    const r = await api('GET', `api/chats/${id}`)
+    if (state.tab !== 'chat' || state.sel !== id) return
+    const prevBox = $('#detail .msgs')
+    const atBottom = !prevBox || prevBox.scrollHeight - prevBox.scrollTop - prevBox.clientHeight < 40
+    const draft = keepDraft ? $('#detail .composer textarea')?.value ?? '' : ''
+    const hadFocus = keepDraft && document.activeElement === $('#detail .composer textarea')
+    const mode = h('select', { onchange: guard(async () => { await api('PUT', `api/chats/${id}`, { mode: mode.value }); toast(`Mode: ${mode.value}`) }) }, state.meta.chatModes.map(m => h('option', { value: m, selected: m === r.mode ? true : false }, m)))
+    const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => {
+      const user = m.from === 'user'
+      return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}` },
+        h('div', { class: 'who' }, user ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? '')], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
+        h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
+        !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null)
+    }) : emptyState('No messages yet', `Say hello to ${r.agents.map(a => '@' + a).join(', ')}`))
+    const ta = h('textarea', { rows: 2, placeholder: r.busy ? 'Agents are replying… you can type your next message' : `Message ${r.agents.map(a => '@' + a).join(' ')}`, value: draft })
+    const sendMsg = guard(async () => { if (!ta.value.trim()) return; await api('POST', `api/chats/${id}/messages`, { text: ta.value }); ta.value = ''; showChat(id) })
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg() } })
+    const insert = name => { ta.value = `${ta.value}${ta.value && !ta.value.endsWith(' ') ? ' ' : ''}@${name} `; ta.focus() }
+    const editAgents = guard(async () => {
+      const v = prompt(`Agents in this chat (comma separated). Available: ${state.agents.filter(a => !a.invalid).map(a => a.name).join(', ')}`, r.agents.join(', '))
+      if (v == null) return
+      await api('PUT', `api/chats/${id}`, { agents: v.split(',').map(s => s.trim()).filter(Boolean) }); showChat(id)
+    })
+    $('#detail').replaceChildren(
+      h('div', { class: 'chat-head' }, h('h2', {}, r.title), mode,
+        h('button', { class: 'b', onclick: editAgents }, 'Agents'),
+        r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
+        h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete')),
+      msgs,
+      h('div', { class: 'composer' },
+        h('div', { class: 'mentions' }, r.agents.map(a => h('button', { onclick: () => insert(a), title: `Mention ${a}` }, avatar(a), ` @${a}`))),
+        h('div', { class: 'composer-box' }, ta,
+          h('div', { class: 'composer-foot' }, h('span', { class: 'hint', title: r.cwd ?? '' }, `${r.mode}: ${MODE_HELP[r.mode]} · Enter to send, Shift+Enter for a new line`),
+            h('button', { class: 'send', title: 'Send', 'aria-label': 'Send', onclick: sendMsg }, icon('send', 16))))))
+    if (atBottom) msgs.scrollTop = msgs.scrollHeight
+    else msgs.scrollTop = prevBox.scrollTop
+    if (hadFocus) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
+    if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500)
+    else if (prevBox && keepDraft) listChatsQuiet()
+  }
+  // refresh the room list badges without re-rendering the detail pane
+  async function listChatsQuiet() {
+    const rooms = await api('GET', 'api/chats')
+    setList(rooms.map(r => item(r.id, r.title, `${r.agents.length} agents · ${r.mode}`, [...(r.busy ? ['replying…'] : []), `${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))),
+      [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
+  }
+
+  // ---------------- MCP servers (shared library)
+  const MCP_TEMPLATES = [
+    { name: 'filesystem', description: 'Read and write files in chosen folders', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '~/Documents'] },
+    { name: 'github', description: 'GitHub repos, issues and pull requests (remote server)', type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${GITHUB_TOKEN}' } },
+    { name: 'playwright', description: 'Drive a real browser', type: 'stdio', command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
+    { name: 'memory-graph', description: 'Knowledge-graph memory server', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'] },
+    { name: 'sequential-thinking', description: 'Structured step-by-step reasoning tool', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },
+    { name: 'context7', description: 'Up-to-date library documentation', type: 'stdio', command: 'npx', args: ['-y', '@upstash/context7-mcp'] },
+  ]
+
+  async function listMcp() {
+    state.mcp = await api('GET', 'api/mcp')
+    setList(state.mcp.map(s => item(s.name, s.name, s.invalid ? `INVALID: ${s.invalid}` : s.description || (s.url ?? `${s.command} ${(s.args ?? []).join(' ')}`), s.invalid ? [] : [s.type, ...(s.usedBy.length ? [`${s.usedBy.length} agents`] : ['unused'])], () => showMcp(s))),
+      [h('button', { class: 'b p', onclick: () => showMcp(null) }, 'Add MCP server')])
+    if (state.sel) { const s = state.mcp.find(x => x.name === state.sel); if (s) showMcp(s) } else showMcp(null)
+  }
+
+  function showMcp(s) {
+    const isNew = !s
+    s = s ?? { name: '', description: '', type: 'stdio', command: '', args: [], env: {}, url: '', headers: {} }
+    const name = h('input', { value: s.name, placeholder: 'lowercase-with-hyphens', disabled: !isNew })
+    const desc = h('input', { value: s.description ?? '' })
+    const type = h('select', { onchange: () => draw() }, state.meta.mcpTypes.map(t => h('option', { value: t, selected: t === s.type ? true : false }, { stdio: 'stdio (local command)', http: 'http (remote, streamable HTTP)', sse: 'sse (remote, legacy SSE)' }[t])))
+    const command = h('input', { value: s.command ?? '', placeholder: 'npx' })
+    const args = h('textarea', { value: (s.args ?? []).join('\n'), placeholder: '-y\n@modelcontextprotocol/server-filesystem\n~/Documents', style: 'min-height:80px' })
+    const env = h('textarea', { value: Object.entries(s.env ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'), placeholder: 'API_KEY=${MY_API_KEY}', style: 'min-height:60px' })
+    const cwd = h('input', { value: s.cwd ?? '', placeholder: 'optional' })
+    const url = h('input', { value: s.url ?? '', placeholder: 'https://example.com/mcp' })
+    const headers = h('textarea', { value: Object.entries(s.headers ?? {}).map(([k, v]) => `${k}: ${v}`).join('\n'), placeholder: 'Authorization: Bearer ${API_TOKEN}', style: 'min-height:60px' })
+    const out = h('div', {})
+    const box = h('div', {})
+    const parse = (text, sep) => Object.fromEntries(text.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf(sep); return i < 0 ? [l, ''] : [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
+    const draw = () => box.replaceChildren(...(type.value === 'stdio'
+      ? [h('label', {}, 'Command'), command, h('label', {}, 'Arguments (one per line)'), args, h('label', {}, 'Environment (KEY=VALUE per line)'), env, h('label', {}, 'Working directory'), cwd]
+      : [h('label', {}, 'URL'), url, h('label', {}, 'Headers (Name: value per line)'), headers]))
+    draw()
+    const body = () => ({ name: name.value.trim(), description: desc.value, type: type.value, ...(type.value === 'stdio' ? { command: command.value.trim(), args: args.value.split('\n').map(x => x.trim()).filter(Boolean), env: parse(env.value, '='), ...(cwd.value.trim() ? { cwd: cwd.value.trim() } : {}) } : { url: url.value.trim(), headers: parse(headers.value, ':') }) })
+    const save = async () => { const b = body(); const r = await api('PUT', `api/mcp/${b.name}`, b); toast('Saved'); state.sel = r.name; return r }
+    $('#detail').replaceChildren(
+      h('h2', {}, isNew ? 'Add MCP server' : `MCP server: ${s.name}`, !isNew && s.usedBy?.length ? h('span', { class: 'chip' }, `used by ${s.usedBy.join(', ')}`) : null),
+      isNew ? h('div', {}, h('label', {}, 'Start from a template'), h('div', { class: 'mentions' }, MCP_TEMPLATES.map(t => h('button', { onclick: () => showMcp({ ...t, usedBy: [], __template: true }), title: t.description }, t.name)))) : '',
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Name (tools appear as mcp__<name>__<tool>)'), name), h('div', {}, h('label', {}, 'Transport'), type)),
+      h('label', {}, 'Description'), desc,
+      box,
+      h('p', { class: 'muted', style: 'font-size:12px' }, `Secrets: write \${VAR} to read a variable from the harness environment when the agent runs (for example \${GITHUB_TOKEN}). Stored literal values show as ${state.meta.mask}; leave them as is to keep them.`),
+      h('div', { class: 'btns' },
+        h('button', { class: 'b p', onclick: guard(async () => { await save(); state.mcp = await api('GET', 'api/mcp'); listMcp() }) }, 'Save'),
+        h('button', { class: 'b', onclick: guard(async () => {
+          const r0 = await save()
+          out.replaceChildren(h('p', { class: 'muted' }, 'Connecting…'))
+          const r = await api('POST', `api/mcp/${r0.name}/test`)
+          out.replaceChildren(r.ok
+            ? h('div', {}, h('p', {}, h('span', { class: 'st completed' }, 'Connected'), ` · ${r.tools.length} tools${r.server?.name ? ` · ${r.server.name} ${r.server.version ?? ''}` : ''}`), h('table', {}, r.tools.map(t => h('tr', {}, h('td', {}, h('code', {}, t.name)), h('td', { class: 'muted' }, t.description)))))
+            : h('p', { class: 'err' }, `Could not connect: ${r.error}`))
+          state.mcp = await api('GET', 'api/mcp'); listMcpQuiet()
+        }) }, 'Save and test connection'),
+        !isNew ? h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete MCP server ${s.name}?${s.usedBy?.length ? ` It is used by ${s.usedBy.join(', ')}.` : ''}`)) return; await api('DELETE', `api/mcp/${s.name}`); state.sel = null; listMcp() }) }, 'Delete') : null),
+      out)
+    if (s.__template) toast('Template loaded: review it, then save')
+  }
+  const listMcpQuiet = () => setList(state.mcp.map(s => item(s.name, s.name, s.invalid ? `INVALID: ${s.invalid}` : s.description, s.invalid ? [] : [s.type, ...(s.usedBy.length ? [`${s.usedBy.length} agents`] : ['unused'])], () => showMcp(s))), [h('button', { class: 'b p', onclick: () => showMcp(null) }, 'Add MCP server')])
+
+  // ---------------- Skills
+  async function listSkills() {
+    setList(state.skills.map(s => item(s.name, s.name, s.description, [s.source === 'local' ? 'local' : 'installed'], () => showSkill(s))),
+      [h('button', { class: 'b p', onclick: () => showInstall() }, 'Install skill')])
+    if (!state.sel) showInstall()
+  }
+  function showSkill(s) {
+    const users = state.agents.filter(a => (a.skills ?? []).includes(s.name)).map(a => a.name)
+    $('#detail').replaceChildren(h('h2', {}, `Skill: ${s.name}`), h('p', {}, s.description), h('p', { class: 'muted' }, `Source: ${s.source}`), h('p', { class: 'muted' }, `Used by: ${users.join(', ') || 'no agents'}`),
+      h('div', { class: 'btns' }, h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Remove skill ${s.name}?`)) return; await api('DELETE', `api/skills/${s.name}`); state.sel = null; load() }) }, 'Remove')))
+  }
+  function showInstall() {
+    const src = h('input', { placeholder: 'github:anthropics/skills/skills/webapp-testing  or  https://github.com/o/r/tree/main/path  or  /local/dir' })
+    const nm = h('input', { placeholder: 'optional name override' })
+    const ow = h('input', { type: 'checkbox' })
+    $('#detail').replaceChildren(h('h2', {}, 'Install a skill'), h('p', { class: 'muted' }, 'Skills are folders with a SKILL.md. Installed skills land in the forge skill library; select them per agent on the Agents tab.'),
+      h('label', {}, 'Source'), src, h('label', {}, 'Name'), nm, h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, ow, 'overwrite if installed')),
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { const r = await api('POST', 'api/skills', { source: src.value.trim(), name: nm.value.trim(), overwrite: ow.checked }); toast(`Installed ${r.name}`); state.sel = r.name; load() }) }, 'Install')))
+  }
+
+  load().then(() => { if (qs.get('newFor') && state.tab === 'orchestrations') showBuilder({ name: '', description: '', team: qs.get('newFor'), args: {}, stages: [] }) }).catch(e => toast(e.message))
+})()
+</script>
+</body>
+</html>

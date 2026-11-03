@@ -1,0 +1,6 @@
+#!/bin/bash
+# Agent Forge CLI (standalone; does not need the harness running).
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$PATH"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+exec node "$ROOT/plugins/agent-forge/bin/forge.js" "$@"

@@ -1,0 +1,7 @@
+# Agent Forge: configurable agents + teams + orchestrations, a web console, and forge_* tools.
+- insert:
+    - id: agent-forge
+      name: '@local/agent-forge'
+      config:
+        port: 3091
+        maxParallel: 4

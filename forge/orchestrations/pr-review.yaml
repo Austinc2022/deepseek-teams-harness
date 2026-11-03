@@ -1,0 +1,33 @@
+# Declarative example (the console's orchestration builder produces this format).
+# Reviews the uncommitted changes of a repo with two reviewers in parallel, then QA.
+name: pr-review
+description: Parallel correctness + security review of a repo's working-tree changes, then a QA pass.
+team: dev-team
+args:
+  repo: Absolute path of the git repository
+stages:
+  - id: review
+    title: Review
+    parallel:
+      - agent: code-reviewer
+        label: correctness
+        cwd: "{{args.repo}}"
+        prompt: "Review the uncommitted changes in {{args.repo}} (git diff/status) for correctness, regressions and test coverage."
+      - agent: security-reviewer
+        label: security
+        cwd: "{{args.repo}}"
+        prompt: "Review the uncommitted changes in {{args.repo}} (git diff/status) for security vulnerabilities."
+  - id: qa
+    title: QA
+    agent: qa-engineer
+    cwd: "{{args.repo}}"
+    prompt: |
+      Verify the uncommitted changes in {{args.repo}} build and pass tests. Reviewer findings to double-check:
+      {{stages.review}}
+    save: qa-report.md
+output: |
+  # PR review {{date}}
+  ## Reviews
+  {{stages.review}}
+  ## QA
+  {{stages.qa}}

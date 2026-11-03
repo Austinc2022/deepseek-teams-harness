@@ -1,0 +1,43 @@
+# Claude Code bridge: harness LLM calls -> local gateway -> genuine Claude Code
+# sessions on the user's Claude subscription login.
+- insert:
+    - id: claude-code-bridge
+      name: '@local/claude-code-bridge'
+      config:
+        port: 3099
+        tokenEnv: CLAUDE_BRIDGE_TOKEN
+        maxSessions: 24
+
+# Register the `claude-code` route on the shipped pi-ai adapter row.
+# (A matching override replaces the row's config wholesale; the Models page
+# can still add more providers on top in the profile patch.)
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      claude-code:
+        displayName: Claude Code (subscription)
+        api: anthropic-messages
+        baseURL: http://127.0.0.1:3099
+        apiKeyEnv: CLAUDE_BRIDGE_TOKEN
+        defaultContextWindow: 200000
+        defaultMaxTokens: 64000
+        defaultInput: [text, image]
+        timeoutMs: 1800000
+        retryPolicy:
+          mode: normal
+          maxRetries: 2
+        models:
+          - id: opus
+            name: Claude Opus (via Claude Code)
+          - id: sonnet
+            name: Claude Sonnet (via Claude Code)
+          - id: haiku
+            name: Claude Haiku (via Claude Code)
+
+# New agents default to Claude through the bridge instead of DeepSeek.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: claude-code
+    model: sonnet
