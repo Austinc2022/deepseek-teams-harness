@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects</title>
+<style>
+:root {
+  color-scheme: light;
+  --dsw-alias-bg-base: #fff; --dsw-alias-bg-layer-1: #fff; --dsw-alias-bg-layer-2: #f6f6f7;
+  --dsw-alias-label-primary: #0f1115; --dsw-alias-label-secondary: #61666b; --dsw-alias-label-tertiary: #81858c;
+  --dsw-alias-border-l2: #0000001a; --dsw-alias-border-l3: #0000001f;
+  --dsw-alias-interactive-bg-hover: #2631480f; --dsw-alias-interactive-bg-active: #2631481a;
+  --dsw-alias-state-error-primary: #ec1313; --dsw-alias-state-success-primary: #22c55e; --dsw-alias-state-business-primary: #4176e6; --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-radius-sm: 8px; --dsw-radius-md: 12px;
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  --dsh-font-family-code-default: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.embedded) {
+    color-scheme: dark;
+    --dsw-alias-bg-base: #151517; --dsw-alias-bg-layer-1: #232324; --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-label-primary: #f9fafb; --dsw-alias-label-secondary: #cfd3d6; --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-border-l2: #ffffff1f; --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-interactive-bg-hover: #ffffff14; --dsw-alias-interactive-bg-active: #ffffff24;
+    --dsw-alias-state-error-primary: #f25a5a; --dsw-alias-state-business-primary: #7aaaff;
+  }
+}
+:root {
+  --bg: var(--dsw-alias-bg-base); --surface: var(--dsw-alias-bg-layer-1); --surface-2: var(--dsw-alias-bg-layer-2);
+  --ink: var(--dsw-alias-label-primary); --ink-2: var(--dsw-alias-label-secondary); --ink-3: var(--dsw-alias-label-tertiary);
+  --line: var(--dsw-alias-border-l2); --line-3: var(--dsw-alias-border-l3);
+  --hover: var(--dsw-alias-interactive-bg-hover); --active: var(--dsw-alias-interactive-bg-active);
+  --ok: var(--dsw-alias-state-success-primary); --bad: var(--dsw-alias-state-error-primary); --info: var(--dsw-alias-state-business-primary); --warn: var(--dsw-alias-state-warn-primary);
+  --r-sm: var(--dsw-radius-sm); --r-md: var(--dsw-radius-md);
+  --mono: var(--dsh-font-family-code-default);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(--dsw-font-family); -webkit-font-smoothing: antialiased; display: flex; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 4px 10px; white-space: nowrap; }
+button:hover { background: var(--hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.primary:hover { opacity: .88; }
+button.danger { color: var(--bad); }
+button.ghost { border-color: transparent; background: transparent; color: var(--ink-2); padding: 2px 7px; }
+button.ghost:hover { background: var(--hover); color: var(--ink); }
+input, select, textarea { border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 5px 8px; min-width: 0; }
+textarea { resize: vertical; min-height: 64px; width: 100%; }
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+label.check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+code { font-family: var(--mono); font-size: 12px; }
+.muted { color: var(--ink-3); font-size: 12px; }
+.err { color: var(--bad); white-space: pre-wrap; font-size: 12px; }
+.err:empty { display: none; }
+.row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.row > .grow { flex: 1 1 200px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 16px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-3); color: var(--ink-2); white-space: nowrap; }
+.cat { color: #fff; border: 0; }
+.st { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.st.running { color: var(--info); } .st.completed { color: var(--ok); } .st.failed { color: var(--bad); } .st.cancelled, .st.unknown, .st.queued { color: var(--ink-3); }
+
+/* projects sidebar */
+#side { width: 230px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+#side header { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+#side header h1 { font-size: 15px; margin: 0; flex: 1; }
+#projList { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.proj { padding: 7px 9px; border-radius: var(--r-sm); cursor: pointer; }
+.proj:hover { background: var(--hover); }
+.proj.sel { background: var(--active); }
+.proj .n { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.proj .n span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.proj .c { color: var(--ink-3); font-size: 12px; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--info); animation: pulse 1.2s infinite; flex: none; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* board */
+#main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+#head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+#head .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#head h2 { font-size: 16px; margin: 0; }
+#head .spacer { flex: 1; }
+#filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.fchip { cursor: pointer; border: 1px solid var(--line-3); background: var(--surface); border-radius: 999px; padding: 1px 9px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
+.fchip[aria-pressed="true"] { background: var(--active); border-color: var(--ink-3); }
+.fchip .sw { width: 9px; height: 9px; border-radius: 50%; }
+#board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 10px; padding: 12px 16px; overflow: auto; }
+.col { display: flex; flex-direction: column; min-height: 0; background: var(--surface-2); border-radius: var(--r-md); padding: 8px; gap: 6px; }
+.col h3 { margin: 0 2px 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); display: flex; justify-content: space-between; }
+.col.drop { outline: 2px dashed var(--info); outline-offset: -2px; }
+.cards { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 40px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; }
+.card:hover { border-color: var(--ink-3); }
+.card.sel { border-color: var(--info); }
+.card .t { font-weight: 600; overflow-wrap: anywhere; }
+.card .m { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.empty { margin: auto; text-align: center; color: var(--ink-2); max-width: 460px; padding: 40px 16px; }
+.empty h2 { color: var(--ink); font-size: 16px; margin: 0 0 6px; }
+
+/* side panels */
+.panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100%); background: var(--surface); border-left: 1px solid var(--line-3); box-shadow: -8px 0 24px #0000001f; display: flex; flex-direction: column; z-index: 20; }
+.panel[hidden] { display: none; }
+.panel > header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel > header h2 { font-size: 15px; margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel .body { flex: 1; overflow-y: auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+.panel section { display: flex; flex-direction: column; gap: 8px; }
+.panel section > h3 { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.panel section > h3 .muted { font-weight: 400; }
+.step { border: 1px solid var(--line-3); border-radius: var(--r-md); padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+.step .sh { display: flex; align-items: center; gap: 6px; }
+.step .num { font-weight: 700; font-size: 12px; background: var(--ink); color: var(--bg); border-radius: 999px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.step .kind { font-size: 12px; color: var(--ink-2); }
+.step .sh input { flex: 1; }
+.agents { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.agents .chip button { border: 0; background: transparent; padding: 0 2px; color: var(--ink-3); }
+.arrow { text-align: center; color: var(--ink-3); font-size: 12px; margin: -4px 0; }
+pre.out { margin: 0; font: 12px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); padding: 10px; border-radius: var(--r-sm); max-height: 420px; overflow: auto; }
+table.agents-t { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.agents-t td, table.agents-t th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.agents-t tr.click { cursor: pointer; }
+table.agents-t tr.click:hover { background: var(--hover); }
+.hist { display: flex; flex-direction: column; gap: 2px; }
+.hist div { display: flex; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.hist div:hover { background: var(--hover); }
+.hist div.sel { background: var(--active); }
+.catrow { display: flex; gap: 6px; align-items: center; }
+.catrow input[type=color] { width: 34px; height: 30px; padding: 2px; }
+.catrow .name { flex: 1; }
+@media (max-width: 760px) { #side { width: 170px; } }
+</style>
+</head>
+<body>
+<aside id="side">
+  <header><h1>Projects</h1><button class="primary" id="newProj" type="button">New</button></header>
+  <div id="projList"></div>
+</aside>
+<div id="main">
+  <div id="head" hidden></div>
+  <div id="board"></div>
+</div>
+<aside class="panel" id="taskPanel" hidden aria-label="Task"></aside>
+<aside class="panel" id="projPanel" hidden aria-label="Project settings"></aside>
+
+<script>
+(() => {
+  if (window.parent !== window) {
+    document.documentElement.classList.add('embedded')
+    const sync = () => {
+      try {
+        const frame = window.frameElement, pd = window.parent.document
+        if (!frame) return
+        const cs = window.parent.getComputedStyle(frame), root = document.documentElement
+        for (const sheet of pd.styleSheets) {
+          let rules; try { rules = sheet.cssRules } catch { continue }
+          const walk = rs => { for (const r of rs) { if (r.style) for (const p of r.style) if (p.startsWith('--dsw-') || p.startsWith('--dsh-font')) { const v = cs.getPropertyValue(p).trim(); if (v) root.style.setProperty(p, v) } if (r.cssRules) walk(r.cssRules) } }
+          walk(rules)
+        }
+        root.style.colorScheme = cs.colorScheme || ''
+      } catch {}
+    }
+    sync()
+    try { new MutationObserver(() => setTimeout(sync, 30)).observe(window.parent.document.documentElement, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-theme', 'data-ds-theme'] }) } catch {}
+  }
+
+  const $ = s => document.querySelector(s)
+  const h = (tag, props = {}, ...kids) => {
+    const el = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+      else if (k === 'class') el.className = v
+      else if (k === 'value') el.value = v
+      else if (k === 'checked') el.checked = !!v
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v)
+      else el.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) el.append(c)
+    return el
+  }
+  const api = async (method, url, body) => {
+    const r = await fetch(url, { method, headers: { 'x-board-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+    return j
+  }
+  const store = { get: k => { try { return localStorage.getItem(`pb.${k}`) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(`pb.${k}`, v) } catch {} } }
+  const ago = iso => { if (!iso) return ''; const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : new Date(iso).toLocaleDateString() }
+  const dur = (a, b) => { if (!a) return ''; const s = Math.round(((b ? new Date(b) : new Date()) - new Date(a)) / 1000); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s` }
+
+  const S = { meta: null, projects: [], project: null, pid: store.get('project'), filter: 'all', search: '', task: null, draft: null, dirty: false, runId: null, poll: null, runPoll: null }
+
+  // ---------- projects ----------
+  async function loadProjects() {
+    S.projects = await api('GET', 'api/projects')
+    renderProjects()
+  }
+  function renderProjects() {
+    $('#projList').replaceChildren(...S.projects.map(p => h('div', { class: 'proj' + (p.id === S.pid ? ' sel' : ''), onclick: () => openProject(p.id) },
+      h('div', { class: 'n' }, h('span', {}, p.name), p.running ? h('span', { class: 'pulse', title: `${p.running} running` }) : null),
+      h('div', { class: 'c' }, `${p.tasks} task${p.tasks === 1 ? '' : 's'}${p.counts.doing ? ` · ${p.counts.doing} in progress` : ''}${p.counts.review ? ` · ${p.counts.review} to review` : ''}`))))
+    if (!S.projects.length) $('#projList').append(h('div', { class: 'muted', style: { padding: '8px' } }, 'No projects yet.'))
+  }
+  async function openProject(id) {
+    if (S.dirty && !(await confirmDiscard())) return
+    S.pid = id; store.set('project', id || '')
+    closeTask()
+    renderProjects()
+    await refreshProject()
+  }
+  async function refreshProject() {
+    if (!S.pid) { S.project = null; renderBoard(); return }
+    try { S.project = await api('GET', `api/projects/${S.pid}`) } catch { S.pid = null; S.project = null }
+    renderBoard()
+    schedulePoll()
+  }
+  function schedulePoll() {
+    clearTimeout(S.poll)
+    const busy = S.project?.tasks.some(t => t.running)
+    S.poll = setTimeout(async () => {
+      if (!S.project) return
+      try { S.project = await api('GET', `api/projects/${S.pid}`); renderBoard(); if (busy) loadProjects() } catch {}
+      schedulePoll()
+    }, busy ? 2500 : 15000)
+  }
+  const cat = id => S.project?.categories.find(c => c.id === id) ?? { name: id, color: '#6b7280' }
+
+  // ---------- board ----------
+  function renderBoard() {
+    const head = $('#head'), board = $('#board')
+    if (!S.project) {
+      head.hidden = true
+      board.style.display = 'flex'
+      board.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, S.projects.length ? 'Pick a project' : 'Create your first project'),
+        'A project groups tasks. Each task has a category and its own orchestration: agents and workflows that run one step after another, each seeing the results before it.',
+        h('div', { style: { marginTop: '12px' } }, h('button', { class: 'primary', type: 'button', onclick: () => openProjectPanel(null) }, 'New project'))))
+      return
+    }
+    const p = S.project
+    head.hidden = false
+    board.style.display = ''
+    const counts = Object.fromEntries(p.categories.map(c => [c.id, p.tasks.filter(t => t.category === c.id).length]))
+    head.replaceChildren(
+      h('div', { class: 'top' },
+        h('h2', {}, p.name),
+        p.folder ? h('code', { class: 'muted', title: 'Project folder' }, p.folder) : h('span', { class: 'muted' }, 'no folder set'),
+        h('span', { class: 'spacer' }),
+        h('input', { type: 'search', placeholder: 'Search tasks', value: S.search, oninput: e => { S.search = e.target.value; renderBoard(); const i = $('#head input[type=search]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length) }, style: { width: '170px' } }),
+        h('button', { type: 'button', onclick: () => openProjectPanel(p) }, 'Project settings'),
+        h('button', { class: 'primary', type: 'button', onclick: () => openTask(null) }, 'New task')),
+      p.description ? h('div', { class: 'muted' }, p.description) : null,
+      h('div', { id: 'filters' },
+        h('button', { class: 'fchip', type: 'button', 'aria-pressed': String(S.filter === 'all'), onclick: () => { S.filter = 'all'; renderBoard() } }, `All ${p.tasks.length}`),
+        ...p.categories.map(c => h('button', { class: 'fchip', type: 'button', 'aria-pressed': String(S.filter === c.id), onclick: () => { S.filter = c.id; renderBoard() } }, h('span', { class: 'sw', style: { background: c.color } }), `${c.name} ${counts[c.id]}`))))
+
+    const q = S.search.trim().toLowerCase()
+    const shown = p.tasks.filter(t => (S.filter === 'all' || t.category === S.filter) && (!q || `${t.title} ${t.description}`.toLowerCase().includes(q)))
+    board.replaceChildren(...S.meta.statuses.map(st => {
+      const tasks = shown.filter(t => t.status === st.id)
+      const cards = h('div', { class: 'cards' }, ...tasks.map(card))
+      const col = h('div', { class: 'col', 'data-status': st.id }, h('h3', {}, h('span', {}, st.label), h('span', {}, String(tasks.length))), cards)
+      col.ondragover = e => { e.preventDefault(); col.classList.add('drop') }
+      col.ondragleave = () => col.classList.remove('drop')
+      col.ondrop = async e => {
+        e.preventDefault(); col.classList.remove('drop')
+        const id = e.dataTransfer.getData('text/task')
+        const t = p.tasks.find(x => x.id === id)
+        if (!t || t.status === st.id) return
+        t.status = st.id; renderBoard()
+        try { await api('PUT', `api/projects/${p.id}/tasks/${id}`, { status: st.id }); if (S.task?.id === id) { S.task.status = st.id; S.draft.status = st.id; renderTask() } } catch (err) { alertIn(err.message) }
+        refreshProject(); loadProjects()
+      }
+      return col
+    }))
+  }
+  function card(t) {
+    const c = cat(t.category)
+    const last = t.runs?.at(-1)
+    const agents = [...new Set(t.stages.flatMap(s => s.kind === 'agents' ? s.agents : [`⚙ ${s.workflow}`]))]
+    const el = h('div', { class: 'card' + (S.task?.id === t.id ? ' sel' : ''), draggable: 'true', onclick: () => openTask(t) },
+      h('div', { class: 't' }, t.title),
+      h('div', { class: 'm' },
+        h('span', { class: 'chip cat', style: { background: c.color } }, c.name),
+        t.running ? h('span', { class: 'st running' }, 'running') : last ? h('span', { class: `st ${last.status}`, title: `last run ${ago(last.endedAt ?? last.startedAt)}` }, last.status) : null,
+        t.worktree ? h('span', { class: 'chip', title: t.branch ?? 'own worktree' }, 'worktree') : null),
+      t.stages.length ? h('div', { class: 'muted' }, `${t.stages.length} step${t.stages.length === 1 ? '' : 's'}: ${agents.slice(0, 4).join(', ')}${agents.length > 4 ? '…' : ''}`) : h('div', { class: 'muted' }, 'no orchestration yet'))
+    el.ondragstart = e => e.dataTransfer.setData('text/task', t.id)
+    return el
+  }
+  function alertIn(msg) {
+    const e = h('div', { class: 'err', style: { padding: '6px 16px' } }, msg)
+    $('#head').append(e); setTimeout(() => e.remove(), 6000)
+  }
+
+  // ---------- task panel ----------
+  const panel = $('#taskPanel')
+  let pendingDiscard = null
+  function confirmDiscard() {
+    return new Promise(res => {
+      const bar = h('div', { class: 'row', style: { padding: '8px 16px', background: 'var(--surface-2)', borderBottom: '1px solid var(--line)' } },
+        h('span', { class: 'grow' }, 'You have unsaved changes to this task.'),
+        h('button', { type: 'button', onclick: async () => { bar.remove(); res(await saveTask()) } }, 'Save'),
+        h('button', { type: 'button', class: 'danger', onclick: () => { bar.remove(); S.dirty = false; res(true) } }, 'Discard'),
+        h('button', { type: 'button', onclick: () => { bar.remove(); res(false) } }, 'Cancel'))
+      pendingDiscard?.remove(); pendingDiscard = bar
+      panel.hidden ? res(true) : panel.insertBefore(bar, panel.children[1])
+    })
+  }
+  async function openTask(t) {
+    if (S.dirty && !(await confirmDiscard())) return
+    const p = S.project
+    S.task = t ? p.tasks.find(x => x.id === t.id) : null
+    const defCat = S.filter !== 'all' ? S.filter : p.categories[0].id
+    S.draft = t ? structuredClone(S.task) : { title: '', description: '', category: defCat, status: 'todo', folder: '', worktree: false, stages: structuredClone(cat(defCat).template ?? []), runs: [] }
+    S.dirty = false
+    S.runId = t?.runs?.at(-1)?.id ?? null
+    panel.hidden = false
+    renderTask()
+    renderBoard()
+    if (S.runId) loadRun(S.runId)
+    if (!t) panel.querySelector('input[name=title]')?.focus()
+  }
+  function closeTask() { panel.hidden = true; S.task = null; S.draft = null; S.dirty = false; S.runId = null; clearTimeout(S.runPoll); renderBoard() }
+  const markDirty = () => { S.dirty = true; const b = panel.querySelector('#saveBtn'); if (b) b.disabled = false }
+
+  function renderTask() {
+    const p = S.project, d = S.draft, isNew = !S.task
+    const running = S.task?.running
+    const err = h('div', { class: 'err', id: 'taskErr' })
+    const set = (k, v) => { d[k] = v; markDirty() }
+
+    const details = h('section', {},
+      h('label', { class: 'field' }, 'Title', h('input', { name: 'title', value: d.title, oninput: e => set('title', e.target.value) })),
+      h('label', { class: 'field' }, 'Description (what should be done; every step sees this)', h('textarea', { value: d.description, rows: 4, oninput: e => set('description', e.target.value) })),
+      h('div', { class: 'row' },
+        h('label', { class: 'field' }, 'Category', h('select', { onchange: e => { const prev = d.category; set('category', e.target.value); if (isNew && !d.stages.length || isNew && JSON.stringify(d.stages) === JSON.stringify(cat(prev).template ?? [])) { d.stages = structuredClone(cat(e.target.value).template ?? []); renderTask() } } }, ...p.categories.map(c => h('option', { value: c.id, selected: c.id === d.category }, c.name)))),
+        h('label', { class: 'field' }, 'Status', h('select', { onchange: e => set('status', e.target.value) }, ...S.meta.statuses.map(s => h('option', { value: s.id, selected: s.id === d.status }, s.label)))),
+        h('label', { class: 'field grow' }, 'Folder (empty = project folder)', h('input', { value: d.folder ?? '', placeholder: p.folder || 'forge/workspaces', oninput: e => set('folder', e.target.value) }))),
+      h('label', { class: 'check', title: 'Runs in a git worktree on branch task/<id>, created on the first run, so this task never touches other tasks\' files.' }, h('input', { type: 'checkbox', checked: !!d.worktree, onchange: e => set('worktree', e.target.checked) }), 'Own git worktree for this task', S.task?.worktreePath ? h('code', { class: 'muted' }, `${S.task.branch} · ${S.task.worktreePath}`) : null))
+
+    const orch = h('section', {},
+      h('h3', {}, 'Orchestration', h('span', { class: 'muted' }, 'steps run top to bottom; agents in one step run in parallel')),
+      ...stepEditors(d),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', onclick: () => { d.stages.push({ kind: 'agents', agents: [], instructions: '' }); markDirty(); renderTask() } }, '+ Agent step'),
+        h('button', { type: 'button', disabled: !S.meta.workflows.length, onclick: () => { const w = S.meta.workflows[0]; d.stages.push({ kind: 'workflow', workflow: w.name, args: defaultArgs(w) }); markDirty(); renderTask() } }, '+ Workflow step'),
+        h('span', { class: 'grow' }),
+        h('button', { type: 'button', class: 'ghost', title: `Replace these steps with the ${cat(d.category).name} template`, onclick: () => { d.stages = structuredClone(cat(d.category).template ?? []); markDirty(); renderTask() } }, 'Use category template'),
+        h('button', { type: 'button', class: 'ghost', title: `New ${cat(d.category).name} tasks will start with these steps`, onclick: () => saveTemplate() }, 'Save as category template')),
+      h('div', { class: 'muted' }, 'In instructions and workflow inputs you can use ', h('code', {}, '{{task.text}}'), ' ', h('code', {}, '{{folder}}'), ' ', h('code', {}, '{{previous}}'), ' (all earlier results) and ', h('code', {}, '{{last}}'), ' (the step before).'))
+
+    const runSec = h('section', { id: 'runSec' })
+    const actions = h('div', { class: 'row' },
+      h('button', { class: 'primary', type: 'button', id: 'runBtn', disabled: running || !d.stages.length, onclick: runTask }, running ? 'Running…' : isNew ? 'Create and run' : 'Save and run'),
+      running ? h('button', { type: 'button', class: 'danger', onclick: async () => { try { await api('POST', `api/projects/${p.id}/tasks/${S.task.id}/cancel`) } catch (e) { $('#taskErr').textContent = e.message } } }, 'Stop') : null,
+      S.meta.workbench && !isNew ? h('button', { type: 'button', title: 'Open an interactive Claude Code session for this task on the CLI workbench page', onclick: openWorkbench }, 'Open in CLI workbench') : null,
+      h('span', { class: 'grow' }),
+      !isNew ? h('button', { type: 'button', class: 'danger ghost', onclick: e => deleteTask(e.currentTarget) }, 'Delete task') : null)
+
+    panel.replaceChildren(
+      h('header', {}, h('h2', {}, isNew ? 'New task' : d.title || 'Task'),
+        h('button', { class: 'primary', type: 'button', id: 'saveBtn', disabled: !isNew && !S.dirty, onclick: () => saveTask() }, isNew ? 'Create' : 'Save'),
+        h('button', { class: 'ghost', type: 'button', title: 'Close', onclick: async () => { if (!S.dirty || await confirmDiscard()) closeTask() } }, '✕')),
+      h('div', { class: 'body' }, details, orch, actions, err, runSec))
+    if (S.runId) renderRun()
+  }
+
+  function defaultArgs(w) { return Object.fromEntries(Object.entries(w.args ?? {}).map(([k, a]) => [k, a.default ?? ''])) }
+
+  function stepEditors(d) {
+    const out = []
+    d.stages.forEach((s, i) => {
+      if (i) out.push(h('div', { class: 'arrow' }, '↓ results passed on'))
+      const move = dir => { const j = i + dir; if (j < 0 || j >= d.stages.length) return; [d.stages[i], d.stages[j]] = [d.stages[j], d.stages[i]]; markDirty(); renderTask() }
+      const head = h('div', { class: 'sh' }, h('span', { class: 'num' }, String(i + 1)), h('span', { class: 'kind' }, s.kind === 'workflow' ? 'Workflow' : s.agents.length > 1 ? 'Agents in parallel' : 'Agent'),
+        h('input', { placeholder: 'step name (optional)', value: s.label ?? '', oninput: e => { s.label = e.target.value; markDirty() } }),
+        h('button', { class: 'ghost', type: 'button', title: 'Move up', disabled: i === 0, onclick: () => move(-1) }, '↑'),
+        h('button', { class: 'ghost', type: 'button', title: 'Move down', disabled: i === d.stages.length - 1, onclick: () => move(1) }, '↓'),
+        h('button', { class: 'ghost', type: 'button', title: 'Remove step', onclick: () => { d.stages.splice(i, 1); markDirty(); renderTask() } }, '✕'))
+      if (s.kind === 'workflow') {
+        const w = S.meta.workflows.find(x => x.name === s.workflow)
+        const argKeys = [...new Set([...Object.keys(w?.args ?? {}), ...Object.keys(s.args ?? {})])]
+        out.push(h('div', { class: 'step' }, head,
+          h('label', { class: 'field' }, 'Workflow', h('select', { onchange: e => { s.workflow = e.target.value; s.args = defaultArgs(S.meta.workflows.find(x => x.name === s.workflow)); markDirty(); renderTask() } },
+            ...S.meta.workflows.map(x => h('option', { value: x.name, selected: x.name === s.workflow }, x.name)))),
+          w?.description ? h('div', { class: 'muted' }, w.description) : null,
+          ...argKeys.map(k => h('label', { class: 'field' }, `${k}${w?.args?.[k]?.description ? ` — ${w.args[k].description}` : ''}`, h('input', { value: s.args?.[k] ?? '', placeholder: w?.args?.[k]?.default || '', oninput: e => { s.args = { ...(s.args ?? {}), [k]: e.target.value }; markDirty() } })))))
+      } else {
+        const add = h('select', { onchange: e => {
+          const v = e.target.value; e.target.value = ''
+          if (!v) return
+          const names = v.startsWith('team:') ? (S.meta.teams.find(t => t.name === v.slice(5))?.members ?? []) : [v]
+          s.agents = [...new Set([...s.agents, ...names])]; markDirty(); renderTask()
+        } },
+          h('option', { value: '' }, s.agents.length ? '+ add agent (parallel)' : '+ pick agent'),
+          h('optgroup', { label: 'Agents' }, ...S.meta.agents.filter(a => !s.agents.includes(a.name)).map(a => h('option', { value: a.name, title: a.description }, `${a.name}${a.backend !== 'claude-code' ? ` (${a.backend})` : ''}`))),
+          S.meta.teams.length ? h('optgroup', { label: 'Whole team' }, ...S.meta.teams.map(t => h('option', { value: `team:${t.name}` }, `${t.name} (${t.members.length})`))) : null)
+        out.push(h('div', { class: 'step' }, head,
+          h('div', { class: 'agents' },
+            ...s.agents.map(a => h('span', { class: 'chip', title: S.meta.agents.find(x => x.name === a)?.description ?? '' }, a, h('button', { type: 'button', title: `Remove ${a}`, onclick: () => { s.agents = s.agents.filter(x => x !== a); markDirty(); renderTask() } }, '×'))),
+            add),
+          h('textarea', { rows: 2, placeholder: i === 0 ? 'Instructions for this step (optional), e.g. "Write an implementation plan"' : 'Instructions for this step (optional), e.g. "Review the changes from the step before"', value: s.instructions ?? '', oninput: e => { s.instructions = e.target.value; markDirty() } }),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!s.optional, onchange: e => { s.optional = e.target.checked; markDirty() } }), 'Keep going if this step fails')))
+      }
+    })
+    if (!d.stages.length) out.push(h('div', { class: 'muted' }, 'No steps yet. Add agent steps and workflow steps to build this task\'s orchestration.'))
+    return out
+  }
+
+  function payload() {
+    const d = S.draft
+    return { title: d.title, description: d.description, category: d.category, status: d.status, folder: d.folder ?? '', worktree: !!d.worktree, stages: d.stages.map(s => s.kind === 'workflow' ? { kind: 'workflow', workflow: s.workflow, args: s.args ?? {}, label: s.label } : { kind: 'agents', agents: s.agents, instructions: s.instructions ?? '', label: s.label, optional: !!s.optional }) }
+  }
+  async function saveTask() {
+    const err = $('#taskErr'); if (err) err.textContent = ''
+    try {
+      const p = S.project
+      const t = S.task ? await api('PUT', `api/projects/${p.id}/tasks/${S.task.id}`, payload()) : await api('POST', `api/projects/${p.id}/tasks`, payload())
+      S.dirty = false
+      await refreshProject(); loadProjects()
+      S.task = S.project.tasks.find(x => x.id === t.id)
+      S.draft = structuredClone(S.task)
+      renderTask(); renderBoard()
+      return true
+    } catch (e) { if ($('#taskErr')) $('#taskErr').textContent = e.message; return false }
+  }
+  async function saveTemplate() {
+    const p = S.project, d = S.draft
+    try {
+      const cats = p.categories.map(c => c.id === d.category ? { ...c, template: payload().stages } : c)
+      S.project = await api('PUT', `api/projects/${p.id}`, { categories: cats })
+      await refreshProject()
+      $('#taskErr').textContent = ''
+      const ok = h('div', { class: 'muted' }, `Saved. New ${cat(d.category).name} tasks start with these ${d.stages.length} steps.`)
+      $('#taskErr').after(ok); setTimeout(() => ok.remove(), 5000)
+    } catch (e) { $('#taskErr').textContent = e.message }
+  }
+  async function runTask() {
+    if ((!S.task || S.dirty) && !(await saveTask())) return
+    try {
+      const r = await api('POST', `api/projects/${S.project.id}/tasks/${S.task.id}/run`)
+      S.runId = r.runId
+      await refreshProject(); loadProjects()
+      S.task = S.project.tasks.find(x => x.id === S.task.id)
+      S.draft = structuredClone(S.task)
+      renderTask(); loadRun(r.runId)
+    } catch (e) { $('#taskErr').textContent = e.message }
+  }
+  async function openWorkbench() {
+    try {
+      await api('POST', `api/projects/${S.project.id}/tasks/${S.task.id}/workbench`, { cli: 'claude', worktree: !!S.draft.worktree || !S.task.worktreePath })
+      const ok = h('div', { class: 'muted' }, 'Started. Open the CLI workbench page in the sidebar to use it.')
+      $('#taskErr').after(ok); setTimeout(() => ok.remove(), 6000)
+    } catch (e) { $('#taskErr').textContent = e.message }
+  }
+  async function deleteTask(btn) {
+    if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Confirm delete'; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete task' }, 4000); return }
+    try {
+      const r = await api('DELETE', `api/projects/${S.project.id}/tasks/${S.task.id}`)
+      S.dirty = false; closeTask(); await refreshProject(); loadProjects()
+      if (r.worktree) alertIn(`Task deleted. Its worktree is still at ${r.worktree} (remove it with git worktree remove when you no longer need it).`)
+    } catch (e) { $('#taskErr').textContent = e.message }
+  }
+
+  // ---------- runs ----------
+  let runState = null, transcript = null
+  async function loadRun(id) {
+    clearTimeout(S.runPoll)
+    S.runId = id
+    try { runState = await api('GET', `api/runs/${id}`) } catch (e) { runState = { id, status: 'unknown', error: e.message, agents: [], phases: [] } }
+    renderRun()
+    if (runState.status === 'running') S.runPoll = setTimeout(() => { if (S.runId === id && !panel.hidden) loadRun(id) }, 1500)
+    else if (S.task?.running) { await refreshProject(); if (S.task) { S.task = S.project.tasks.find(x => x.id === S.task.id); if (!S.dirty) { S.draft = structuredClone(S.task); renderTask() } } }
+  }
+  function renderRun() {
+    const sec = $('#runSec'); if (!sec) return
+    const r = runState && runState.id === S.runId ? runState : null
+    const runs = [...(S.task?.runs ?? [])].reverse()
+    sec.replaceChildren(
+      h('h3', {}, 'Runs', r ? h('span', { class: `st ${r.status}` }, r.status) : null, r ? h('span', { class: 'muted' }, `${r.id} · ${dur(r.startedAt, r.endedAt)}${r.costUsd ? ` · $${r.costUsd}` : ''}`) : null),
+      !runs.length ? h('div', { class: 'muted' }, 'Not run yet. Press Run to start the orchestration; it also appears on the Workflows page under Runs.') : null,
+      r ? h('div', { class: 'muted' }, (r.phases ?? []).map(x => x.title).join('  →  ')) : null,
+      r && r.agents?.length ? h('table', { class: 'agents-t' },
+        h('tr', {}, h('th', {}, 'Agent'), h('th', {}, 'Status'), h('th', {}, 'Time'), h('th', {}, 'Doing')),
+        ...r.agents.map(a => h('tr', { class: 'click', title: 'Show transcript', onclick: () => showTranscript(r.id, a) },
+          h('td', {}, a.label), h('td', {}, h('span', { class: `st ${a.status}` }, a.status)), h('td', {}, dur(a.startedAt, a.endedAt)), h('td', { class: 'muted' }, a.error ?? a.lastTool ?? '')))) : null,
+      transcript && transcript.run === r?.id ? h('div', {}, h('div', { class: 'row' }, h('strong', { class: 'grow' }, `Transcript: ${transcript.label}`), h('button', { class: 'ghost', type: 'button', onclick: () => { transcript = null; renderRun() } }, 'Hide')), h('pre', { class: 'out' }, transcript.text)) : null,
+      r?.result ? h('div', {}, h('strong', {}, 'Result'), h('pre', { class: 'out' }, typeof r.result === 'string' ? r.result : JSON.stringify(r.result, null, 2))) : null,
+      r?.error ? h('pre', { class: 'out err' }, r.error.split('\n').slice(0, 6).join('\n')) : null,
+      runs.length > 1 ? h('div', { class: 'hist' }, ...runs.map(x => h('div', { class: x.id === S.runId ? 'sel' : '', onclick: () => { transcript = null; loadRun(x.id) } }, h('span', { class: `st ${x.status}` }, x.status), h('span', {}, x.id), h('span', { class: 'muted' }, ago(x.startedAt))))) : null)
+  }
+  async function showTranscript(runId, a) {
+    try { transcript = { run: runId, label: a.label, text: (await api('GET', `api/runs/${runId}/file?path=${encodeURIComponent(a.file)}`)).text } } catch (e) { transcript = { run: runId, label: a.label, text: e.message } }
+    renderRun()
+  }
+
+  // ---------- project settings ----------
+  const ppanel = $('#projPanel')
+  function openProjectPanel(p) {
+    const isNew = !p
+    const d = isNew ? { name: '', description: '', folder: '', categories: [] } : structuredClone(p)
+    const err = h('div', { class: 'err' })
+    const catList = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } })
+    const renderCats = () => catList.replaceChildren(...d.categories.map((c, i) => h('div', { class: 'catrow' },
+      h('input', { type: 'color', value: c.color, oninput: e => { c.color = e.target.value } }),
+      h('input', { class: 'name', value: c.name, oninput: e => { c.name = e.target.value } }),
+      h('span', { class: 'muted' }, `${c.template?.length ? `${c.template.length}-step template` : 'no template'} · ${S.project && !isNew ? S.project.tasks.filter(t => t.category === c.id).length : 0} tasks`),
+      h('button', { class: 'ghost', type: 'button', title: 'Remove category (its tasks move to the first category)', disabled: d.categories.length < 2, onclick: () => { d.categories.splice(i, 1); renderCats() } }, '✕'))))
+    renderCats()
+    const save = async () => {
+      err.textContent = ''
+      try {
+        if (isNew) { const np = await api('POST', 'api/projects', { name: d.name, description: d.description, folder: d.folder }); ppanel.hidden = true; await loadProjects(); openProject(np.id) }
+        else { await api('PUT', `api/projects/${p.id}`, { name: d.name, description: d.description, folder: d.folder, categories: d.categories }); ppanel.hidden = true; await loadProjects(); refreshProject() }
+      } catch (e) { err.textContent = e.message }
+    }
+    ppanel.replaceChildren(
+      h('header', {}, h('h2', {}, isNew ? 'New project' : 'Project settings'), h('button', { class: 'primary', type: 'button', onclick: save }, isNew ? 'Create' : 'Save'), h('button', { class: 'ghost', type: 'button', onclick: () => { ppanel.hidden = true } }, '✕')),
+      h('div', { class: 'body' },
+        h('label', { class: 'field' }, 'Name', h('input', { value: d.name, oninput: e => { d.name = e.target.value }, onkeydown: e => { if (e.key === 'Enter') save() } })),
+        h('label', { class: 'field' }, 'Folder (usually a git repo; agents work here)', h('input', { value: d.folder, placeholder: '~/code/my-app', oninput: e => { d.folder = e.target.value } })),
+        h('label', { class: 'field' }, 'Description (shared with every agent as project context)', h('textarea', { value: d.description, rows: 3, oninput: e => { d.description = e.target.value } })),
+        isNew ? h('div', { class: 'muted' }, 'New projects start with the categories Feature, Bug, Research, Docs and Chore. Feature and Bug come with starter orchestrations using your planner, implementer, reviewer and QA agents.') :
+          h('section', {}, h('h3', {}, 'Categories', h('span', { class: 'muted' }, 'each can hold a template orchestration for new tasks')), catList,
+            h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => { d.categories.push({ name: 'New category', color: S.meta.colors[d.categories.length % S.meta.colors.length], template: [] }); renderCats() } }, '+ Category'))),
+        err,
+        !isNew ? h('div', { class: 'row', style: { marginTop: '20px' } }, h('button', { class: 'danger', type: 'button', onclick: async e => {
+          const b = e.currentTarget
+          if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = `Confirm: delete "${p.name}" and its ${p.tasks.length} tasks`; return }
+          try { await api('DELETE', `api/projects/${p.id}`); ppanel.hidden = true; S.pid = null; store.set('project', ''); await loadProjects(); refreshProject() } catch (x) { err.textContent = x.message }
+        } }, 'Delete project')) : null))
+    ppanel.hidden = false
+    ppanel.querySelector('input')?.focus()
+  }
+  $('#newProj').onclick = () => openProjectPanel(null)
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return
+    if (!ppanel.hidden) ppanel.hidden = true
+    else if (!panel.hidden && !S.dirty) closeTask()
+  })
+
+  // ---------- boot ----------
+  ;(async () => {
+    try {
+      S.meta = await api('GET', 'api/meta')
+      await loadProjects()
+      if (S.pid && !S.projects.some(p => p.id === S.pid)) S.pid = null
+      if (!S.pid && S.projects.length === 1) S.pid = S.projects[0].id
+      renderProjects()
+      await refreshProject()
+    } catch (e) {
+      $('#board').replaceChildren(h('div', { class: 'empty' }, h('h2', {}, 'Could not load projects'), e.message))
+    }
+  })()
+})()
+</script>
+</body>
+</html>

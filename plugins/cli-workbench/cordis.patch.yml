@@ -1,0 +1,5 @@
+# CLI workbench inside the DSH web UI: serves the terminal grid under /workbench
+# on DSH's own web server (DSH login required) and adds a sidebar page in the browser.
+- insert:
+    - id: cli-workbench
+      name: '@local/cli-workbench'

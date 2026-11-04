@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI workbench</title>
+<link rel="stylesheet" href="static/xterm.css">
+<style>
+:root {
+  color-scheme: light;
+  --dsw-alias-bg-base: #fff; --dsw-alias-bg-layer-1: #fff; --dsw-alias-bg-layer-2: #f6f6f7;
+  --dsw-alias-label-primary: #0f1115; --dsw-alias-label-secondary: #61666b; --dsw-alias-label-tertiary: #81858c;
+  --dsw-alias-border-l2: #0000001a; --dsw-alias-border-l3: #0000001f;
+  --dsw-alias-interactive-bg-hover: #2631480f; --dsw-alias-interactive-bg-active: #2631481a;
+  --dsw-alias-state-error-primary: #ec1313; --dsw-alias-state-success-primary: #22c55e; --dsw-alias-state-business-primary: #4176e6; --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-radius-sm: 8px; --dsw-radius-md: 12px;
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  --dsh-font-family-code-default: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.embedded) {
+    color-scheme: dark;
+    --dsw-alias-bg-base: #151517; --dsw-alias-bg-layer-1: #232324; --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-label-primary: #f9fafb; --dsw-alias-label-secondary: #cfd3d6; --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-border-l2: #ffffff1f; --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-interactive-bg-hover: #ffffff14; --dsw-alias-interactive-bg-active: #ffffff24;
+    --dsw-alias-state-error-primary: #f25a5a; --dsw-alias-state-business-primary: #7aaaff;
+  }
+}
+:root {
+  --bg: var(--dsw-alias-bg-base); --surface: var(--dsw-alias-bg-layer-1); --surface-2: var(--dsw-alias-bg-layer-2);
+  --ink: var(--dsw-alias-label-primary); --ink-2: var(--dsw-alias-label-secondary); --ink-3: var(--dsw-alias-label-tertiary);
+  --line: var(--dsw-alias-border-l2); --line-3: var(--dsw-alias-border-l3);
+  --hover: var(--dsw-alias-interactive-bg-hover); --active: var(--dsw-alias-interactive-bg-active);
+  --ok: var(--dsw-alias-state-success-primary); --bad: var(--dsw-alias-state-error-primary); --info: var(--dsw-alias-state-business-primary); --warn: var(--dsw-alias-state-warn-primary);
+  --r-sm: var(--dsw-radius-sm); --r-md: var(--dsw-radius-md);
+  --mono: var(--dsh-font-family-code-default);
+  --term-bg: #16161a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(--dsw-font-family); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 4px 10px; }
+button:hover { background: var(--hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.primary:hover { opacity: .88; }
+button.danger { color: var(--bad); }
+button.icon { padding: 2px 7px; border-color: transparent; background: transparent; color: var(--ink-2); }
+button.icon:hover { background: var(--hover); color: var(--ink); }
+input, select { border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 5px 8px; min-width: 0; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
+label.check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+code { font-family: var(--mono); font-size: 12px; }
+
+header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0 6px 0 0; font-weight: 600; }
+header .count { color: var(--ink-3); font-size: 12px; }
+header .spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line-3); border-radius: var(--r-sm); overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 9px; background: transparent; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--active); color: var(--ink); }
+
+.drawer { display: none; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.drawer.open { display: flex; }
+.drawer .folder { flex: 1 1 260px; }
+.drawer .err { flex-basis: 100%; color: var(--bad); white-space: pre-wrap; font-size: 12px; }
+.drawer .err:empty { display: none; }
+.drawer .hint { flex-basis: 100%; color: var(--ink-3); font-size: 12px; }
+#accounts { flex-direction: column; align-items: stretch; }
+#accounts .list { display: flex; flex-direction: column; gap: 4px; }
+#accounts .acct { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+#accounts .acct .name { font-weight: 600; }
+#accounts .acct .meta { color: var(--ink-3); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#accounts .add { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+
+/* tab strip: one tab per session; wraps so 30+ stay visible */
+#tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); max-height: 30vh; overflow-y: auto; }
+#tabs:empty { display: none; }
+.tab { display: inline-flex; align-items: center; gap: 6px; max-width: 240px; padding: 3px 4px 3px 9px; border: 1px solid var(--line-3); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; user-select: none; font-size: 12px; }
+.tab:hover { background: var(--hover); }
+.tab.sel { background: var(--active); border-color: var(--info); }
+.tab .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab .acc { color: var(--ink-3); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.tab .x { border: 0; background: transparent; padding: 0 5px; color: var(--ink-3); border-radius: 4px; }
+.tab .x:hover { background: var(--hover); color: var(--ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.dot.on { background: var(--ok); }
+.tab.unread .t { font-weight: 700; }
+.tab.unread .dot.on { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 35%, transparent); }
+.tab.attn { border-color: var(--warn); }
+.tab.attn .dot { background: var(--warn); }
+
+#grid { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 8px; overflow: auto; grid-auto-rows: minmax(240px, 1fr); }
+#grid.single { grid-template-columns: 1fr !important; grid-auto-rows: 1fr; }
+#grid.single > .pane:not(.shown) { display: none; }
+.empty { margin: auto; text-align: center; color: var(--ink-2); max-width: 480px; padding: 40px 16px; }
+.empty h2 { color: var(--ink); font-size: 16px; margin: 0 0 6px; }
+
+.pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line-3); border-radius: var(--r-md); overflow: hidden; background: var(--term-bg); position: relative; }
+.pane.active { border-color: var(--info); }
+.pane.attn { border-color: var(--warn); }
+.pane .bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
+.pane .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; flex: 0 1 auto; }
+.pane .sub { color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; }
+.chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-3); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; font-family: var(--mono); flex: none; }
+.chip.warn { color: var(--warn); border-color: var(--warn); }
+.pane .term { flex: 1; min-height: 0; padding: 4px 0 0 6px; }
+.pane .term .xterm { height: 100%; }
+.pane .overlay { position: absolute; inset: 33px 0 0 0; background: var(--surface); color: var(--ink); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 10px; z-index: 5; }
+.pane .overlay pre { margin: 0; font: 12px/18px var(--mono); white-space: pre-wrap; background: var(--surface-2); padding: 10px; border-radius: var(--r-sm); }
+.pane .overlay .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pane .overlay .err { color: var(--bad); white-space: pre-wrap; }
+.pane .overlay p { margin: 0; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>CLI workbench</h1>
+  <span class="count" id="count"></span>
+  <span class="spacer"></span>
+  <span class="seg" id="view" role="group" aria-label="View"></span>
+  <span class="seg" id="cols" role="group" aria-label="Columns"></span>
+  <button id="acctBtn" type="button">Accounts</button>
+  <button class="primary" id="newBtn" type="button">New sessions</button>
+</header>
+
+<form id="launcher" class="drawer" autocomplete="off">
+  <label class="field">CLI <select name="cli" id="cli"></select></label>
+  <label class="field">Account <select name="account" id="account"></select></label>
+  <label class="field folder">Project folder (a git repo) <input name="repo" id="repo" placeholder="~/code/my-app" required></label>
+  <label class="field">Base branch <input name="base" placeholder="current" size="9"></label>
+  <label class="field">How many <input name="count" type="number" min="1" max="32" value="1" style="width:64px"></label>
+  <label class="field">Name <input name="title" placeholder="optional" size="11"></label>
+  <label class="field">Extra args <input name="args" placeholder="--model opus" size="13"></label>
+  <label class="check"><input type="checkbox" name="worktree" checked> Own worktree each</label>
+  <label class="check" id="skipWrap"><input type="checkbox" name="skipPermissions"> Skip permission prompts</label>
+  <button class="primary" type="submit" id="startBtn">Start</button>
+  <button type="button" id="cancelBtn">Cancel</button>
+  <div class="hint">Each session gets its own git worktree on a new branch <code>wb/&lt;id&gt;</code> under <code>forge/worktrees/</code>, so sessions never edit the same files. Sessions keep running when you leave this page.</div>
+  <div class="err" id="launchErr"></div>
+</form>
+
+<section id="accounts" class="drawer" aria-label="Accounts">
+  <div class="hint" style="flex-basis:auto">Each account is a separate login (for example a different subscription plan) with its own private config folder. Add one, press <b>Log in</b>, finish the login in the terminal that opens, then close that tab. "My normal login" is the one you use in your own terminal.</div>
+  <div class="list" id="acctList"></div>
+  <form class="add" id="acctForm" autocomplete="off">
+    <label class="field">CLI <select name="cli" id="acctCli"></select></label>
+    <label class="field">Account name <input name="name" placeholder="work-max" size="14" required pattern="[a-z0-9][a-z0-9-]{0,31}" title="lowercase letters, digits and hyphens"></label>
+    <label class="check" id="copyWrap"><input type="checkbox" name="copySettings" checked> Copy my Claude Code settings</label>
+    <button class="primary" type="submit">Add and log in</button>
+    <button type="button" id="acctClose">Done</button>
+  </form>
+  <div class="err" id="acctErr"></div>
+</section>
+
+<nav id="tabs" aria-label="Sessions"></nav>
+<main id="grid"></main>
+
+<script src="static/xterm.js"></script>
+<script src="static/addon-fit.js"></script>
+<script>
+(() => {
+  // ---- theme: adopt DSH's live tokens when embedded (same origin) ----
+  if (window.parent !== window) {
+    document.documentElement.classList.add('embedded')
+    const sync = () => {
+      try {
+        const frame = window.frameElement, pd = window.parent.document
+        if (!frame) return
+        const cs = window.parent.getComputedStyle(frame), root = document.documentElement
+        for (const sheet of pd.styleSheets) {
+          let rules; try { rules = sheet.cssRules } catch { continue }
+          const walk = rs => { for (const r of rs) { if (r.style) for (const p of r.style) if (p.startsWith('--dsw-') || p.startsWith('--dsh-font')) { const v = cs.getPropertyValue(p).trim(); if (v) root.style.setProperty(p, v) } if (r.cssRules) walk(r.cssRules) } }
+          walk(rules)
+        }
+        root.style.colorScheme = cs.colorScheme || ''
+      } catch {}
+    }
+    sync()
+    try { new MutationObserver(() => setTimeout(sync, 30)).observe(window.parent.document.documentElement, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-theme', 'data-ds-theme'] }) } catch {}
+  }
+
+  const $ = s => document.querySelector(s)
+  const h = (tag, props = {}, ...kids) => {
+    const el = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+      else if (k === 'class') el.className = v
+      else el.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) el.append(c)
+    return el
+  }
+  const api = async (method, url, body) => {
+    const r = await fetch(url, { method, headers: { 'x-workbench-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+    return j
+  }
+  const store = { get: k => { try { return localStorage.getItem(`wb.${k}`) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(`wb.${k}`, v) } catch {} } }
+
+  const state = { clis: {}, accounts: [], panes: new Map(), view: store.get('view') || 'grid', cols: store.get('cols') || 'auto', selected: null, max: 32 }
+  const grid = $('#grid'), tabs = $('#tabs')
+  const accountName = id => state.accounts.find(a => a.id === id)?.name
+
+  // ---- view + layout ----
+  for (const [v, label] of [['grid', 'Grid'], ['tabs', 'Tabs']]) $('#view').append(h('button', { type: 'button', 'data-v': v, onclick: () => { state.view = v; store.set('view', v); if (v === 'tabs' && !state.selected) state.selected = [...state.panes.keys()][0] ?? null; layout(); state.panes.get(state.selected)?.term.focus() } }, label))
+  for (const c of ['auto', '1', '2', '3', '4', '5', '6']) $('#cols').append(h('button', { type: 'button', 'data-v': c, onclick: () => { state.cols = c; store.set('cols', c); layout() } }, c === 'auto' ? 'Auto' : c))
+
+  function layout() {
+    for (const b of $('#view').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.view))
+    for (const b of $('#cols').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.cols))
+    $('#cols').style.display = state.view === 'grid' ? '' : 'none'
+    const n = state.panes.size
+    if (state.selected && !state.panes.has(state.selected)) state.selected = [...state.panes.keys()][0] ?? null
+    const single = state.view === 'tabs'
+    const cols = state.cols === 'auto' ? (n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : n <= 16 ? 4 : 5) : Number(state.cols)
+    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`
+    grid.classList.toggle('single', single)
+    for (const p of state.panes.values()) {
+      const sel = p.meta.id === state.selected
+      p.el.classList.toggle('shown', sel)
+      p.tab.classList.toggle('sel', sel)
+    }
+    const running = [...state.panes.values()].filter(p => p.running).length
+    const waiting = [...state.panes.values()].filter(p => p.attn).length
+    $('#count').textContent = n ? `${n} session${n === 1 ? '' : 's'}${running !== n ? `, ${running} running` : ''}${waiting ? `, ${waiting} need${waiting === 1 ? 's' : ''} you` : ''}` : ''
+    if (!n && !grid.querySelector('.empty')) grid.append(h('div', { class: 'empty' }, h('h2', {}, 'No sessions yet'), 'Press New sessions, pick Claude Code, Codex or OpenCode, a git repo and how many. Each runs in its own worktree. To use more than one subscription, add them under Accounts first.'))
+    if (n) grid.querySelector('.empty')?.remove()
+    requestAnimationFrame(() => { for (const p of state.panes.values()) p.fit() })
+  }
+  const visible = p => state.view === 'grid' || p.meta.id === state.selected
+
+  function select(p, { focus = true } = {}) {
+    state.selected = p.meta.id
+    markSeen(p)
+    layout()
+    if (state.view === 'grid') p.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (focus) p.term.focus()
+  }
+  function markSeen(p) {
+    p.unread = false; p.attn = false
+    p.tab.classList.remove('unread', 'attn'); p.el.classList.remove('attn')
+  }
+
+  // ---- launcher ----
+  const form = $('#launcher')
+  const toggle = (el, other) => { other.classList.remove('open'); el.classList.toggle('open') }
+  $('#newBtn').onclick = () => { toggle(form, $('#accounts')); if (form.classList.contains('open')) $('#repo').focus() }
+  $('#cancelBtn').onclick = () => form.classList.remove('open')
+  $('#cli').onchange = () => { $('#skipWrap').style.display = state.clis[$('#cli').value]?.canSkip ? '' : 'none'; store.set('cli', $('#cli').value); fillAccountSelect() }
+  function fillAccountSelect() {
+    const cli = $('#cli').value, sel = $('#account'), prev = sel.value || store.get(`acct.${cli}`) || ''
+    const mine = state.accounts.filter(a => a.cli === cli)
+    sel.replaceChildren(
+      h('option', { value: '' }, 'My normal login'),
+      ...mine.map(a => h('option', { value: a.id }, `${a.name} (${a.sessions} open)`)),
+      mine.length > 1 ? h('option', { value: '*' }, `Spread across all ${mine.length} accounts`) : null)
+    sel.value = [...sel.options].some(o => o.value === prev) ? prev : ''
+  }
+  $('#account').onchange = () => store.set(`acct.${$('#cli').value}`, $('#account').value)
+  form.onsubmit = async ev => {
+    ev.preventDefault()
+    const f = new FormData(form)
+    $('#launchErr').textContent = ''
+    $('#startBtn').disabled = true
+    try {
+      const r = await api('POST', 'api/sessions', { cli: f.get('cli'), account: f.get('account'), repo: f.get('repo'), base: f.get('base') || undefined, count: Number(f.get('count')) || 1, title: f.get('title'), args: f.get('args'), worktree: f.get('worktree') === 'on', skipPermissions: f.get('skipPermissions') === 'on' })
+      await refreshAccounts()
+      for (const s of r.sessions) addPane(s, true)
+      if (r.sessions[0]) state.selected = r.sessions[0].id
+      layout()
+      if (r.error) $('#launchErr').textContent = r.error
+      else { form.classList.remove('open'); form.elements.title.value = '' }
+    } catch (e) { $('#launchErr').textContent = e.message } finally { $('#startBtn').disabled = false }
+  }
+
+  // ---- accounts ----
+  $('#acctBtn').onclick = () => { toggle($('#accounts'), form); renderAccounts() }
+  $('#acctClose').onclick = () => $('#accounts').classList.remove('open')
+  $('#acctCli').onchange = () => { $('#copyWrap').style.display = $('#acctCli').value === 'claude' ? '' : 'none' }
+  async function refreshAccounts() {
+    try { state.accounts = (await api('GET', 'api/state')).accounts } catch {}
+    fillAccountSelect(); renderAccounts()
+  }
+  function renderAccounts() {
+    $('#acctList').replaceChildren(...(state.accounts.length ? state.accounts.map(a => h('div', { class: 'acct' },
+      h('span', { class: 'chip' }, state.clis[a.cli]?.label ?? a.cli), h('span', { class: 'name' }, a.name),
+      h('span', { class: 'meta', title: a.dir }, `${a.sessions} session${a.sessions === 1 ? '' : 's'} · ${a.dir}`),
+      h('button', { type: 'button', onclick: () => loginAccount(a.id) }, 'Log in'),
+      h('button', { type: 'button', class: 'danger', onclick: ev => removeAccount(a, ev.currentTarget) }, 'Remove'))) : [h('div', { class: 'hint' }, 'No extra accounts yet. Sessions use your normal login.')]))
+  }
+  async function loginAccount(id) {
+    $('#acctErr').textContent = ''
+    try { const { session } = await api('POST', `api/accounts/${id}/login`); select(addPane(session, true)); refreshAccounts() } catch (e) { $('#acctErr').textContent = e.message }
+  }
+  async function removeAccount(a, btn) {
+    if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Confirm remove (deletes its login)'; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Remove' }, 4000); return }
+    $('#acctErr').textContent = ''
+    try { await api('DELETE', `api/accounts/${a.id}`); await refreshAccounts() } catch (e) { $('#acctErr').textContent = e.message }
+  }
+  $('#acctForm').onsubmit = async ev => {
+    ev.preventDefault()
+    const f = new FormData(ev.target)
+    $('#acctErr').textContent = ''
+    try {
+      const a = await api('POST', 'api/accounts', { cli: f.get('cli'), name: f.get('name'), copySettings: f.get('copySettings') === 'on' })
+      ev.target.elements.name.value = ''
+      await refreshAccounts()
+      await loginAccount(a.id)
+    } catch (e) { $('#acctErr').textContent = e.message }
+  }
+
+  // ---- panes + tabs ----
+  function addPane(meta, running) {
+    if (state.panes.has(meta.id)) return state.panes.get(meta.id)
+    const term = new Terminal({ fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--mono') || 'Menlo, monospace', fontSize: 12.5, cursorBlink: true, scrollback: 5000, allowProposedApi: true, theme: { background: '#16161a' } })
+    const fit = new FitAddon.FitAddon()
+    term.loadAddon(fit)
+    const p = { meta, term, fit, running, closed: false, abort: null, unread: false, attn: false }
+    const acc = meta.account ? accountName(meta.account) ?? meta.account.replace(/^[a-z]+-/, '') : null
+
+    // tab
+    const tdot = h('span', { class: 'dot' + (running ? ' on' : '') })
+    const tlabel = h('span', { class: 't' }, meta.title)
+    p.tab = h('div', { class: 'tab', role: 'tab', tabindex: '0', title: meta.cwd },
+      tdot, tlabel, acc ? h('span', { class: 'acc' }, acc) : null,
+      h('button', { class: 'x', type: 'button', title: 'Close session', onclick: ev => { ev.stopPropagation(); select(p, { focus: false }); askClose(p) } }, '×'))
+    p.tab.onclick = () => select(p)
+    p.tab.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(p) } }
+    p.tab.ondblclick = () => rename(p)
+    tabs.append(p.tab)
+
+    // pane
+    const dot = h('span', { class: 'dot' + (running ? ' on' : '') })
+    const title = h('span', { class: 'title', title: 'Double-click to rename' }, meta.title)
+    const sub = h('span', { class: 'sub' })
+    const termBox = h('div', { class: 'term' })
+    const pane = h('section', { class: 'pane', 'aria-label': meta.title })
+    p.el = pane
+    const label = state.clis[meta.cli]?.label ?? meta.cli
+    const bar = h('div', { class: 'bar' },
+      dot, title,
+      h('span', { class: 'chip' }, label),
+      acc ? h('span', { class: 'chip', title: 'Account' }, acc) : null,
+      meta.branch ? h('span', { class: 'chip', title: meta.cwd }, meta.branch) : h('span', { class: 'chip', title: meta.cwd }, meta.cwd.split('/').slice(-2).join('/')),
+      meta.skipPermissions ? h('span', { class: 'chip warn', title: 'Permission prompts are skipped' }, 'no prompts') : null,
+      sub,
+      h('button', { class: 'icon', type: 'button', title: 'Switch between showing only this session and the grid', onclick: () => { state.view = state.view === 'tabs' ? 'grid' : 'tabs'; store.set('view', state.view); select(p) } }, '⤢'),
+      meta.worktree ? h('button', { class: 'icon', type: 'button', title: 'Show changes in this worktree', onclick: () => showChanges(p) }, 'Changes') : null,
+      meta.login ? null : h('button', { class: 'icon', type: 'button', title: 'Restart and continue the last conversation', onclick: () => restart(p) }, 'Restart'),
+      h('button', { class: 'icon', type: 'button', title: 'Stop the CLI process', onclick: () => api('POST', `api/sessions/${meta.id}/stop`).catch(() => {}) }, 'Stop'),
+      h('button', { class: 'icon', type: 'button', title: 'Close session', onclick: () => askClose(p) }, '✕'))
+    title.ondblclick = () => rename(p)
+    p.titleEls = [title, tlabel]
+    pane.append(bar, termBox)
+    pane.addEventListener('focusin', () => {
+      for (const q of state.panes.values()) q.el.classList.toggle('active', q === p)
+      if (state.selected !== meta.id || p.unread || p.attn) { state.selected = meta.id; markSeen(p); layout() }
+    })
+    grid.append(pane)
+    term.open(termBox)
+    p.setRunning = on => { p.running = on; dot.classList.toggle('on', on); tdot.classList.toggle('on', on); layout() }
+
+    // what the CLI is doing: Claude Code and others set the terminal title
+    term.onTitleChange(t => { const s = String(t).trim(); sub.textContent = s; sub.title = s; p.tab.title = s ? `${s}\n${meta.cwd}` : meta.cwd })
+    // a bell means the CLI wants you (e.g. Claude Code's terminal_bell notifications)
+    term.onBell(() => { if (document.hasFocus() && pane.contains(document.activeElement)) return; p.attn = true; p.tab.classList.add('attn'); pane.classList.add('attn'); layout() })
+
+    // keystrokes: batch for a few ms so typing and pastes are one request
+    let pending = '', timer = null
+    term.onData(d => {
+      if (!p.running) return
+      pending += d
+      timer ??= setTimeout(() => { const data = pending; pending = ''; timer = null; api('POST', `api/sessions/${meta.id}/input`, { data }).catch(() => {}) }, 8)
+    })
+    let lastSize = ''
+    p.fit = () => {
+      if (!pane.offsetParent) return
+      try { fit.fit() } catch { return }
+      const size = `${term.cols}x${term.rows}`
+      if (size !== lastSize) { lastSize = size; api('POST', `api/sessions/${meta.id}/resize`, { cols: term.cols, rows: term.rows }).catch(() => {}) }
+    }
+    new ResizeObserver(() => { clearTimeout(p.rt); p.rt = setTimeout(p.fit, 60) }).observe(termBox)
+
+    state.panes.set(meta.id, p)
+    connect(p)
+    return p
+  }
+
+  function rename(p) {
+    if (state.view === 'tabs' && state.selected !== p.meta.id) { state.selected = p.meta.id; layout() }
+    const [title, tlabel] = p.titleEls
+    const inp = h('input', { value: p.meta.title, size: 14 })
+    let done = false
+    const finish = async save => {
+      if (done) return; done = true
+      if (save && inp.value.trim() && inp.value.trim() !== p.meta.title) { try { p.meta.title = (await api('POST', `api/sessions/${p.meta.id}/rename`, { title: inp.value })).title } catch {} }
+      title.textContent = p.meta.title; tlabel.textContent = p.meta.title
+      inp.replaceWith(title)
+    }
+    inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false) }
+    inp.onblur = () => finish(true)
+    title.replaceWith(inp); inp.select()
+  }
+
+  /** Stream output (newline-delimited JSON). Reconnects after drops; replay restores the screen. */
+  async function connect(p) {
+    let delay = 500
+    while (!p.closed) {
+      p.abort = new AbortController()
+      try {
+        const r = await fetch(`api/sessions/${p.meta.id}/stream`, { headers: { 'x-workbench-request': '1' }, signal: p.abort.signal })
+        if (r.status === 400 || r.status === 404) { const j = await r.json().catch(() => ({})); if (/unknown session/.test(j.error ?? '')) { removePane(p); return } }
+        if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`)
+        p.term.reset()
+        const reader = r.body.getReader(), dec = new TextDecoder()
+        let buf = '', replayed = false
+        delay = 500
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          let i
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i + 1)
+            if (!line) continue
+            const m = JSON.parse(line)
+            if (m.t === 'o') {
+              p.term.write(m.d)
+              // new output in a session you're not looking at
+              const watching = state.view === 'tabs' ? state.selected === p.meta.id : p.el.contains(document.activeElement)
+              if (replayed && m.d && !watching && !p.unread) { p.unread = true; p.tab.classList.add('unread') }
+            }
+            else if (m.t === 's') { replayed = true; p.setRunning(m.running) }
+            else if (m.t === 'x') p.setRunning(false)
+            else if (m.t === 'closed') { removePane(p); return }
+          }
+        }
+      } catch (e) { if (p.closed) return }
+      await new Promise(r => setTimeout(r, delay))
+      delay = Math.min(delay * 2, 8000)
+    }
+  }
+
+  async function restart(p) {
+    try { await api('POST', `api/sessions/${p.meta.id}/restart`); p.term.focus() }
+    catch (e) { p.term.write(`\r\n\x1b[31m${e.message}\x1b[0m\r\n`) }
+  }
+
+  function overlay(p, ...kids) {
+    p.el.querySelector('.overlay')?.remove()
+    const o = h('div', { class: 'overlay' }, ...kids)
+    p.el.append(o)
+    return o
+  }
+
+  async function showChanges(p) {
+    const o = overlay(p, h('p', {}, 'Loading…'))
+    try {
+      const c = await api('GET', `api/sessions/${p.meta.id}/changes`)
+      o.replaceChildren(
+        h('div', { class: 'row' }, h('strong', {}, `Worktree ${p.meta.branch}`), h('span', { style: 'flex:1' }), h('button', { type: 'button', onclick: () => o.remove() }, 'Back to terminal')),
+        h('p', {}, p.meta.cwd),
+        h('strong', {}, 'Status'), h('pre', {}, c.status || '(clean)'),
+        h('strong', {}, `Commits since ${p.meta.base}`), h('pre', {}, c.ahead || '(none)'),
+        h('p', {}, `To bring this work into your branch, merge or cherry-pick ${p.meta.branch} in ${p.meta.repo}.`))
+    } catch (e) { o.replaceChildren(h('p', { class: 'err' }, e.message), h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => o.remove() }, 'Back'))) }
+  }
+
+  function askClose(p) {
+    const err = h('div', { class: 'err' })
+    const go = async q => {
+      err.textContent = ''
+      try { await api('DELETE', `api/sessions/${p.meta.id}${q}`); removePane(p); refreshAccounts() } catch (e) { err.textContent = e.message }
+    }
+    const o = overlay(p,
+      h('strong', {}, `Close "${p.meta.title}"?`),
+      p.meta.worktree
+        ? h('p', {}, `The CLI process stops. Its branch ${p.meta.branch} is always kept, so no commits are lost.`)
+        : h('p', {}, 'The CLI process stops.'),
+      h('div', { class: 'row' },
+        p.meta.worktree ? h('button', { type: 'button', onclick: () => go('?remove=1') }, 'Close and remove worktree') : null,
+        h('button', { type: 'button', onclick: () => go('') }, p.meta.worktree ? 'Close, keep worktree folder' : 'Close'),
+        p.meta.worktree ? h('button', { type: 'button', class: 'danger', onclick: () => go('?remove=1&force=1') }, 'Remove worktree, discard uncommitted changes') : null,
+        h('button', { type: 'button', onclick: () => o.remove() }, 'Cancel')),
+      err)
+  }
+
+  function removePane(p) {
+    p.closed = true
+    p.abort?.abort()
+    p.term.dispose()
+    p.el.remove()
+    p.tab.remove()
+    state.panes.delete(p.meta.id)
+    layout()
+  }
+
+  // Alt+Left / Alt+Right switch sessions
+  document.addEventListener('keydown', ev => {
+    if (!ev.altKey || !['ArrowLeft', 'ArrowRight'].includes(ev.key) || !state.panes.size) return
+    const ids = [...state.panes.keys()], i = ids.indexOf(state.selected)
+    const next = ids[(i + (ev.key === 'ArrowRight' ? 1 : ids.length - 1)) % ids.length]
+    ev.preventDefault(); ev.stopPropagation(); select(state.panes.get(next))
+  }, true)
+
+  // ---- boot ----
+  ;(async () => {
+    try {
+      const s = await api('GET', 'api/state')
+      state.clis = s.clis
+      state.accounts = s.accounts
+      state.max = s.max
+      for (const [k, c] of Object.entries(s.clis)) {
+        $('#cli').append(h('option', { value: k, disabled: !c.installed }, `${c.label}${c.installed ? '' : ' (not installed)'}`))
+        $('#acctCli').append(h('option', { value: k, disabled: !c.installed }, c.label))
+      }
+      $('#cli').value = store.get('cli') && s.clis[store.get('cli')]?.installed ? store.get('cli') : 'claude'
+      $('#acctCli').value = 'claude'
+      $('#cli').onchange()
+      $('#acctCli').onchange()
+      $('#repo').value = s.lastRepo || ''
+      for (const m of s.sessions) addPane(m, m.running)
+      state.selected = s.sessions[0]?.id ?? null
+      layout()
+    } catch (e) {
+      grid.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, 'Could not load the workbench'), e.message))
+    }
+  })()
+})()
+</script>
+</body>
+</html>

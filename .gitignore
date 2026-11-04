@@ -29,3 +29,9 @@ forge/mcp/
 
 # Personal chat history
 forge/chats/
+
+# CLI workbench worktrees (your working copies)
+forge/worktrees/
+
+# Project board data (your projects, tasks and run links)
+forge/projects/

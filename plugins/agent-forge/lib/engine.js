@@ -75,12 +75,30 @@ export class Engine {
 
   /** Start an orchestration; returns { id, done } where done resolves to the final run state. */
   start(name, args = {}, { cwd } = {}) {
-    const { file, format } = this.registry.orchestrationFile(name)
+    const { format } = this.registry.orchestrationFile(name)
+    return this.#launch(name, format, args, cwd, async (api, state) => {
+      const r = await runNamed(this.registry, name, api, args)
+      state.team = r.team
+      return r.result
+    })
+  }
+
+  /**
+   * Start a run whose body is a function instead of a saved orchestration
+   * (used by the Projects page to run a task's own sequence of agents and
+   * workflows). It gets the same run folder, transcripts, live state and
+   * Runs-tab entry as any orchestration. fn(api, state) returns the result.
+   */
+  startCustom(label, fn, args = {}, { cwd, meta } = {}) {
+    return this.#launch(label, 'custom', args, cwd, fn, meta)
+  }
+
+  #launch(name, format, args, cwd, body, meta) {
     const id = runIdNow()
     const dir = path.join(this.registry.d.runs, id)
     fs.mkdirSync(path.join(dir, 'agents'), { recursive: true })
     fs.mkdirSync(path.join(dir, 'artifacts'), { recursive: true })
-    const state = { id, orchestration: name, format, args, cwd: cwd ?? null, status: 'running', startedAt: new Date().toISOString(), endedAt: null, phase: null, phases: [], log: [], agents: [], result: null, error: null, costUsd: 0 }
+    const state = { id, orchestration: name, format, ...(meta ? { meta } : {}), args, cwd: cwd ?? null, status: 'running', startedAt: new Date().toISOString(), endedAt: null, phase: null, phases: [], log: [], agents: [], result: null, error: null, costUsd: 0 }
     const abort = new AbortController()
     const live = { state, abort, dir }
     this.active.set(id, live)
@@ -91,19 +109,7 @@ export class Engine {
     const done = (async () => {
       try {
         const api = this.#api(live, cwd)
-        let result
-        if (format === 'js') {
-          const mtime = fs.statSync(file).mtimeMs
-          const mod = await import(`${pathToFileURL(file).href}?v=${mtime}`)
-          const fn = mod.default ?? mod.run
-          if (typeof fn !== 'function') throw new Error(`${name}.js must export a default async function`)
-          state.team = mod.meta?.team
-          result = await fn(api)
-        } else {
-          const spec = YAML.parse(fs.readFileSync(file, 'utf8'))
-          state.team = spec.team
-          result = await runYaml(spec, api)
-        }
+        const result = await body(api, state)
         state.result = result ?? null
         state.status = abort.signal.aborted ? 'cancelled' : 'completed'
       } catch (e) {
@@ -192,6 +198,23 @@ export class Engine {
       signal: abort.signal,
     }
   }
+}
+
+/**
+ * Run a saved orchestration (YAML or JS) on an existing run api with its own
+ * args, so one run can contain several workflows. Returns { result, team }.
+ */
+export async function runNamed(registry, name, api, args = {}) {
+  const { file, format } = registry.orchestrationFile(name)
+  const sub = { ...api, args }
+  if (format === 'js') {
+    const mod = await import(`${pathToFileURL(file).href}?v=${fs.statSync(file).mtimeMs}`)
+    const fn = mod.default ?? mod.run
+    if (typeof fn !== 'function') throw new Error(`${name}.js must export a default async function`)
+    return { result: await fn(sub), team: mod.meta?.team }
+  }
+  const spec = YAML.parse(fs.readFileSync(file, 'utf8'))
+  return { result: await runYaml(spec, sub), team: spec.team }
 }
 
 function tryJson(t) {

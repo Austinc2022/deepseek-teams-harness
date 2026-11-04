@@ -1,0 +1,5 @@
+# Projects inside the DSH web UI: serves the project board under /project-board
+# on DSH's own web server (DSH login required) and adds a sidebar page in the browser.
+- insert:
+    - id: project-board
+      name: '@local/project-board'

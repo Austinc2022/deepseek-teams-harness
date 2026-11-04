@@ -8,6 +8,8 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/claude-code-bridge` | Serves every harness model call through **genuine Claude Code sessions** on your local Claude Code login (your subscription). It adds the `claude-code` provider (opus / sonnet / haiku) and makes it the default model. |
 | `plugins/agent-forge` | **Configurable agents, teams, orchestrations and multi-agent chat**, with `forge_*` tools for the harness lead agent, a standalone console and a CLI. |
 | `plugins/agent-forge-web` | Puts Agent Forge **inside the DSH web UI**: four sidebar pages (Agent chat, Agents, Agent teams, Workflows) served from `/forge/` on the DSH web server, behind the DSH login. |
+| `plugins/project-board` | A **Projects** page: projects with categorized tasks; each task runs its own orchestration of agents and workflows. |
+| `plugins/cli-workbench` | A **CLI workbench** page in the web UI: many interactive Claude Code, Codex and OpenCode terminals side by side, each in its own git worktree. |
 
 DSH's own **Agent Teams** bundle is also enabled in the `web` profile (`spawn_teammate`, a shared task board, and a team UI).
 
@@ -136,6 +138,44 @@ How agent settings map to each CLI:
 - **memory.mode: session** resumes the CLI's own session.
 - **Other settings**: role, memory context and the folder list go into the system prompt. Claude also gets `--add-dir`, MCP servers and tool lists. Forge memory tools (`memory_save` and similar) and skills only apply to the `claude-code` backend.
 - **Custom binary**: set `cliPath` on an agent, or `FORGE_CLAUDE_BIN` / `FORGE_CODEX_BIN` / `FORGE_OPENCODE_BIN`.
+
+## Projects: tasks with their own orchestration
+
+The **Projects** sidebar page organizes work as projects, each with many tasks on a board (Backlog, To do, In progress, Review, Done; drag cards between columns).
+
+- **Project:** a name, a folder (usually a git repo) and a description that every agent gets as context. Each project has its own **categories** (it starts with Feature, Bug, Research, Docs and Chore; rename, recolor, add or remove them under Project settings). Filter the board by category, or search it.
+- **Task:** a title, a description, a category, a status, an optional folder, and its own **orchestration**: a list of steps that run top to bottom.
+  - **Agent step:** one agent, or several agents (or a whole team) that run in parallel.
+  - **Workflow step:** any saved workflow from the Workflows page, with its inputs filled from the task.
+  - Every step sees the task and the results of the steps before it. In instructions and workflow inputs you can use `{{task.text}}`, `{{folder}}`, `{{previous}}` (all earlier results) and `{{last}}` (the step before).
+  - A step fails the run if all its agents fail, unless **Keep going if this step fails** is ticked.
+- **Category templates:** a category can hold a template orchestration. New tasks in that category start with it, and **Save as category template** stores a task's steps as the new template. New projects come with starter templates for Feature (planner, then implementer, then code and security review in parallel) and Bug (implementer, then QA), using whichever of those agents you have.
+- **Running:** **Save and run** starts the orchestration as an Agent Forge run. The task moves to In progress, then to Review when the run completes. The panel shows live progress per agent, each agent's transcript, the result and the run history. Runs also appear on the Workflows page under Runs, and each step's result is saved in the run's `artifacts/` folder.
+- **Own git worktree:** tick it on a task to run it in its own worktree on branch `task/<id>` (under `forge/worktrees/`), so parallel tasks never touch each other's files.
+- **Open in CLI workbench:** starts an interactive Claude Code session for the task on the CLI workbench page.
+
+Every agent keeps its own settings (model, backend such as `claude-cli` or `codex`, skills, memory, execution mode). Projects are saved in `forge/projects/` (excluded from git).
+
+## CLI workbench: many Claude Code terminals on one page
+
+The **CLI workbench** sidebar page runs the real, interactive `claude`, `codex` or `opencode` in terminals on one page, as many as you like (default limit 32, set `WORKBENCH_MAX_SESSIONS` to change it).
+
+1. Press **New sessions**, pick the CLI, enter a git repo folder, and choose **How many**.
+2. Each session gets **its own git worktree** on a new branch `wb/<id>` under `forge/worktrees/<repo>/`, so parallel sessions never edit the same files. Untick **Own worktree each** to run in the folder itself.
+3. Work in each terminal as usual.
+
+**Tabs and views.** A tab strip lists every session by name (double-click to rename), with its account, a green dot while it runs, **bold** when it has new output you haven't seen, and an orange outline when the CLI rings the terminal bell (it needs you). Hover a tab to see what the CLI says it is working on (its terminal title). Switch between **Grid** (up to 6 columns) and **Tabs** (one full-size terminal at a time); **Alt+Left/Right** moves between sessions.
+
+**Several subscriptions (accounts).** Press **Accounts**, add a named account (for example `work-max`, `personal-pro`) for Claude Code, Codex or OpenCode, and finish the login in the terminal that opens. Each account has its own private config folder under `forge/.cache/accounts/` (mode 700), so its login is separate from your normal one (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or OpenCode's data folder). New Claude accounts copy your `~/.claude/settings.json` and `CLAUDE.md`, never credentials. When starting sessions, pick an account, your normal login, or **Spread across all accounts** to share the usage limits of several plans. Claude sessions never use an `ANTHROPIC_API_KEY` from the environment, so they always bill the chosen subscription.
+
+Per pane:
+- **Changes** shows the worktree's `git status` and its commits since the base branch. To use the work, merge or cherry-pick `wb/<id>` in your repo.
+- **Restart** restarts the CLI and continues its last conversation.
+- **Stop** ends the CLI process.
+- **✕** closes the session, with three choices: keep the worktree folder, remove it (refused if it has uncommitted changes), or remove it and discard changes. The `wb/<id>` branch is always kept, so commits are never lost.
+
+Sessions keep running when you leave the page or reload it; reopening the page reattaches with the recent screen. They stop when the web server stops, and come back as "not running" with a Restart button.
+**Skip permission prompts** (off by default) starts Claude with `--dangerously-skip-permissions` or Codex with `--dangerously-bypass-approvals-and-sandbox`; panes started this way show a "no prompts" tag.
 
 ## The three use cases
 
