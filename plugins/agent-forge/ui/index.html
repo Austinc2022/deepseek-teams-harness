@@ -75,6 +75,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(
 .list-empty { color: var(--ink-3); padding: 14px 8px; }
 
 /* list rows: icon tile + title + meta */
+[hidden] { display: none !important; }
 .item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 2px 12px; align-items: center; padding: 8px; border-radius: var(--r-md); cursor: pointer; }
 .item .tile { grid-row: span 3; align-self: start; }
 .item .t { font-size: 13.5px; font-weight: 500; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -182,6 +183,10 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
 .chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 0 14px 32px; border-bottom: .5px solid var(--line); }
 .chat-head h2 { flex: 1 1 auto; margin: 0; font-size: 16px; }
 .chat-head select { width: auto; height: 32px; min-height: 32px; }
+.chat-opts { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.chat-opt { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--muted, #666); }
+.chat-opt input, .chat-opt select { height: 30px; min-height: 30px; }
+.chat-args { flex: 1 1 100%; }
 .msgs { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 22px; padding: 24px 8px 24px 32px; }
 .msg { max-width: 760px; width: 100%; }
 .msg .who { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--ink-3); font-size: 12px; }
@@ -723,7 +728,11 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
   }
 
   // ---------------- Agent chat (multi-agent group chat)
-  const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply' }
+  const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply', handoff: 'the lead replies first, then only @mentioned agents take over', workflow: 'each message runs the chosen workflow and posts its progress' }
+  const MODE_LABEL = { sequential: 'Group chat: everyone in turn', parallel: 'Group chat: everyone at once', mention: 'Mention only', handoff: 'Handoff: lead starts, @mentions pass it on', workflow: 'Workflow: run a saved workflow' }
+  const MAX_HOPS = 50
+  const parseArgs = t => Object.fromEntries(String(t).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.includes('=')).map(l => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]))
+  const argsText = o => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join('\n')
   const hue = name => [...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
   const avatar = name => h('span', { class: 'av', style: `background:hsl(${hue(name)} 45% 45%)` }, name[0].toUpperCase())
   // Minimal, safe Markdown: fenced code, inline code, bold. Everything is text nodes.
@@ -749,27 +758,31 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     else $('#detail').replaceChildren(emptyState('No chat selected', 'Pick a chat from the list, or start a new one.'))
   }
 
-  function newChatForm(pre) {
+  async function newChatForm(pre) {
     clearTimeout(state.chatPoll)
     const team = h('select', { onchange: () => { const t = state.teams.find(x => x.name === team.value); if (t) agentsBox.querySelectorAll('input').forEach(i => { i.checked = t.members.includes(i.value) }) } },
       h('option', { value: '' }, '(pick agents below)'), state.teams.map(t => h('option', { value: t.name, selected: t.name === pre.team ? true : false }, t.name)))
     const members = pre.team ? (state.teams.find(t => t.name === pre.team)?.members ?? []) : []
     const agentsBox = h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', { title: a.description }, h('input', { type: 'checkbox', value: a.name, checked: members.includes(a.name) }), a.name, h('span', { class: 'muted', style: 'font-size:11px' }, a.model))))
     const title = h('input', { placeholder: 'optional' })
-    const mode = h('select', {}, state.meta.chatModes.map(m => h('option', { value: m }, `${m}: ${MODE_HELP[m]}`)))
+    state.orchs ??= await api('GET', 'api/orchestrations')
+    const wf = h('select', {}, h('option', { value: '' }, '(pick a workflow)'), state.orchs.filter(o => !o.invalid).map(o => h('option', { value: o.name, title: o.description }, o.name)))
+    const wfBox = h('div', { hidden: true }, h('label', {}, 'Workflow (each message runs it; team and message are passed automatically)'), wf)
+    const mode = h('select', { onchange: () => { wfBox.hidden = mode.value !== 'workflow' } }, state.meta.chatModes.map(m => h('option', { value: m }, MODE_LABEL[m] ?? m)))
     const cwd = h('input', { placeholder: 'blank = each agent works in its own project folder or home folder' })
-    const hops = h('input', { type: 'number', min: 0, max: 12, value: 4 })
+    const hops = h('input', { type: 'number', min: 0, max: MAX_HOPS, value: 4 })
     const first = h('textarea', { placeholder: 'First message (optional). Use @agent-name to address someone.' })
     $('#detail').replaceChildren(h('div', { style: 'padding:22px 0 56px 32px;overflow:auto;min-height:0' },
       h('h2', {}, 'New multi-agent chat'),
       h('p', { class: 'muted' }, 'Each agent replies with its own model, skills, memory and execution environment. Agents can hand off to each other with @name.'),
       h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Title'), title), h('div', {}, h('label', {}, 'Start from team'), team)),
       h('label', {}, 'Agents'), agentsBox,
-      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Reply mode'), mode), h('div', {}, h('label', {}, 'Working directory'), cwd), h('div', {}, h('label', {}, 'Max agent-to-agent hand-offs per message'), hops)),
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Reply mode'), mode), h('div', {}, h('label', {}, 'Working directory'), cwd), h('div', {}, h('label', {}, `Max agent-to-agent hand-offs per message (0-${MAX_HOPS})`), hops)),
+      wfBox,
       h('label', {}, 'First message'), first,
       h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => {
         const agents = [...agentsBox.querySelectorAll('input:checked')].map(i => i.value)
-        const room = await api('POST', 'api/chats', { title: title.value, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value) })
+        const room = await api('POST', 'api/chats', { title: title.value, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value), workflow: wf.value || undefined })
         if (first.value.trim()) await api('POST', `api/chats/${room.id}/messages`, { text: first.value })
         state.sel = room.id; await load()
       }) }, 'Start chat'))))
@@ -783,7 +796,29 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const atBottom = !prevBox || prevBox.scrollHeight - prevBox.scrollTop - prevBox.clientHeight < 40
     const draft = keepDraft ? $('#detail .composer textarea')?.value ?? '' : ''
     const hadFocus = keepDraft && document.activeElement === $('#detail .composer textarea')
-    const mode = h('select', { onchange: guard(async () => { await api('PUT', `api/chats/${id}`, { mode: mode.value }); toast(`Mode: ${mode.value}`) }) }, state.meta.chatModes.map(m => h('option', { value: m, selected: m === r.mode ? true : false }, m)))
+    state.orchs ??= await api('GET', 'api/orchestrations')
+    const put = async (patch, msg) => { await api('PUT', `api/chats/${id}`, patch); if (msg) toast(msg) }
+    const mode = h('select', { title: 'How agents reply to your messages', onchange: guard(async () => { await put({ mode: mode.value }, `Mode: ${MODE_LABEL[mode.value] ?? mode.value}`); showChat(id); listChatsQuiet() }) },
+      state.meta.chatModes.map(m => h('option', { value: m, selected: m === r.mode ? true : false }, MODE_LABEL[m] ?? m)))
+    const opt = (label, el, title) => h('label', { class: 'chat-opt', title }, h('span', {}, label), el)
+    const hopsIn = h('input', { type: 'number', min: 0, max: MAX_HOPS, value: r.maxHops ?? 4, style: 'width:70px', onchange: guard(async () => { await put({ maxHops: Number(hopsIn.value) }, `Max hand-offs: ${Math.max(0, Math.min(MAX_HOPS, Number(hopsIn.value) || 0))}`) }) })
+    const leadSel = h('select', { onchange: guard(async () => { await put({ lead: leadSel.value }, `Lead: ${leadSel.value || 'team default'}`) }) },
+      h('option', { value: '' }, '(team lead / first agent)'), r.agents.map(a => h('option', { value: a, selected: a === r.lead ? true : false }, a)))
+    const wfSel = h('select', { onchange: guard(async () => { await put({ workflow: wfSel.value }, `Workflow: ${wfSel.value || 'none'}`); showChat(id) }) },
+      h('option', { value: '' }, '(pick a workflow)'), state.orchs.filter(o => !o.invalid).map(o => h('option', { value: o.name, title: o.description, selected: o.name === r.workflow ? true : false }, o.name)))
+    const wfMeta = state.orchs.find(o => o.name === r.workflow)
+    const argsTa = h('textarea', { rows: 3, style: 'min-height:0;font-family:var(--mono, monospace);font-size:12px', value: argsText(r.workflowArgs),
+      placeholder: wfMeta ? Object.entries(wfMeta.args ?? {}).filter(([k]) => k !== 'team').map(([k, v]) => `${k}=   # ${v}`).join('\n') || 'key=value, one per line' : 'key=value, one per line' })
+    const argsBox = h('div', { class: 'chat-args', hidden: true },
+      h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:4px' }, `Workflow settings, one key=value per line.${r.team ? ` team=${r.team} is added automatically.` : ''} Your chat message is passed as message=.`),
+      argsTa, h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await put({ workflowArgs: parseArgs(argsTa.value) }, 'Workflow settings saved'); argsBox.hidden = true; showChat(id) }) }, 'Save settings')))
+    const argCount = Object.keys(r.workflowArgs ?? {}).length
+    const opts = h('div', { class: 'chat-opts' },
+      r.mode === 'workflow'
+        ? [opt('Workflow', wfSel, 'Each message you send starts this workflow'), h('button', { class: 'b', onclick: () => { argsBox.hidden = !argsBox.hidden; if (!argsBox.hidden) argsTa.focus() } }, `Settings${argCount ? ` (${argCount})` : ''}`), wfMeta ? h('span', { class: 'muted', style: 'font-size:12px' }, wfMeta.description) : null]
+        : [opt('Max hand-offs', hopsIn, `How many times agents may pass the floor to each other per message (0-${MAX_HOPS})`),
+           r.mode === 'handoff' ? opt('Lead', leadSel, 'Who answers your message first') : null],
+      argsBox)
     const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => {
       const user = m.from === 'user'
       return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}` },
@@ -800,11 +835,53 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       if (v == null) return
       await api('PUT', `api/chats/${id}`, { agents: v.split(',').map(s => s.trim()).filter(Boolean) }); showChat(id)
     })
-    $('#detail').replaceChildren(
-      h('div', { class: 'chat-head' }, h('h2', {}, r.title), mode,
+    // inline title editor (no window.prompt: blocked in some embedded webviews)
+    const titleEl = h('h2', { title: 'Double-click to rename', style: 'cursor:text' }, r.title)
+    const rename = () => {
+      if (titleEl.querySelector('input')) return
+      clearTimeout(state.chatPoll)
+      const inp = h('input', { value: r.title, style: 'width:100%;font:inherit;height:32px' })
+      let done = false
+      const finish = guard(async save => {
+        if (done) return; done = true
+        const v = inp.value.trim()
+        if (save && v && v !== r.title) { await api('PUT', `api/chats/${id}`, { title: v }); toast('Renamed'); r.title = v; listChatsQuiet() }
+        titleEl.replaceChildren(r.title)
+        if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500)
+      })
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true) } else if (e.key === 'Escape') finish(false) })
+      inp.addEventListener('blur', () => finish(true))
+      titleEl.replaceChildren(inp); inp.focus(); inp.select()
+    }
+    titleEl.addEventListener('dblclick', rename)
+    const head = h('div', { class: 'chat-head' }, titleEl, mode,
+        h('button', { class: 'b', onclick: rename }, 'Rename'),
         h('button', { class: 'b', onclick: editAgents }, 'Agents'),
         r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
-        h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete')),
+        h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete'))
+    const poll = () => { if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500); else listChatsQuiet() }
+    // Live refresh while agents work: patch the existing message list in place so the scroll position,
+    // an in-progress scrollbar drag, text selection and opened "tool calls" sections survive.
+    if (keepDraft && prevBox?.isConnected) {
+      const sel = window.getSelection()
+      const selecting = sel && !sel.isCollapsed && prevBox.contains(sel.anchorNode)
+      if (state.msgsPointerDown || selecting) { state.chatPoll = setTimeout(() => showChat(id, true), 1500); return }
+      const open = [...prevBox.querySelectorAll('details')].map(d => d.open)
+      const top = prevBox.scrollTop
+      prevBox.replaceChildren(...msgs.childNodes)
+      prevBox.querySelectorAll('details').forEach((d, i) => { if (open[i]) d.open = true })
+      prevBox.scrollTop = atBottom ? prevBox.scrollHeight : top
+      const oldHead = $('#detail .chat-head')
+      // keep the header while the user is editing it (rename box, an option field, or open workflow settings)
+      if (oldHead && !oldHead.querySelector('h2 input') && !oldHead.contains(document.activeElement) && oldHead.querySelector('.chat-args')?.hidden !== false) oldHead.replaceWith(head)
+      const oldTa = $('#detail .composer textarea')
+      if (oldTa) oldTa.placeholder = ta.placeholder
+      return poll()
+    }
+    msgs.addEventListener('pointerdown', () => { state.msgsPointerDown = true })
+    head.append(opts)
+    $('#detail').replaceChildren(
+      head,
       msgs,
       h('div', { class: 'composer' },
         h('div', { class: 'mentions' }, r.agents.map(a => h('button', { onclick: () => insert(a), title: `Mention ${a}` }, avatar(a), ` @${a}`))),
@@ -817,6 +894,8 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500)
     else if (prevBox && keepDraft) listChatsQuiet()
   }
+  window.addEventListener('pointerup', () => { state.msgsPointerDown = false })
+  window.addEventListener('blur', () => { state.msgsPointerDown = false })
   // refresh the room list badges without re-rendering the detail pane
   async function listChatsQuiet() {
     const rooms = await api('GET', 'api/chats')

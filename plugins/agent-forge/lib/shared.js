@@ -15,7 +15,8 @@ export function shared({ maxParallel, log } = {}) {
   let s = all.get(home)
   if (!s) {
     const registry = new Registry(home)
-    s = { registry, engine: new Engine(registry, { ...(maxParallel != null ? { maxParallel } : {}), log: log ?? (() => {}) }), chats: new ChatStore(registry, { log: log ?? (() => {}) }) }
+    const engine = new Engine(registry, { ...(maxParallel != null ? { maxParallel } : {}), log: log ?? (() => {}) })
+    s = { registry, engine, chats: new ChatStore(registry, { log: log ?? (() => {}), engine }) }
     all.set(home, s)
   }
   return s
