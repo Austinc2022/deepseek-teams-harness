@@ -35,3 +35,10 @@ forge/worktrees/
 
 # Project board data (your projects, tasks and run links)
 forge/projects/
+
+# r.OS client project setup (private: WhatsApp IDs, client rules) - kept local, never published
+forge/agents/ros-*.yaml
+forge/teams/t[0-9][0-9]-*.yaml
+forge/orchestrations/ros-*.js
+forge/orchestrations/lib/
+forge/skills/ros-*/
