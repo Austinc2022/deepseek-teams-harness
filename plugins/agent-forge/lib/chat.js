@@ -30,6 +30,65 @@ const TRANSCRIPT_CHARS = 60000
 const now = () => new Date().toISOString()
 const newId = () => `${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`
 
+const mentionsIn = (text, agents, self) => {
+  const out = []
+  for (const m of String(text ?? '').matchAll(/@([a-z][a-z0-9-]*)/g)) if (agents.includes(m[1]) && m[1] !== self && !out.includes(m[1])) out.push(m[1])
+  return out
+}
+
+/**
+ * Split a room into tasks (one per user message) and describe each: who replied, what caused each reply
+ * (the user's message or an earlier agent's @mention), and where the task stands:
+ *   working     agents are replying right now
+ *   waiting     the last reply hands work to @agents but nobody took it (hand-off limit reached or cut short)
+ *   done        the last reply finished without handing off
+ *   failed / stopped / interrupted / no-reply
+ * progress = finished replies / (finished + running + still-waiting agents).
+ */
+export function summarizeTasks(room, live = false) {
+  const tasks = []
+  room.messages.forEach((m, i) => {
+    if (m.from === 'user') tasks.push({ n: tasks.length + 1, index: i, text: m.text, ts: m.ts, replies: [] })
+    else if (tasks.length) tasks.at(-1).replies.push({ m, i })
+  })
+  return tasks.map((t, k) => {
+    const isLast = k === tasks.length - 1
+    const replies = t.replies.map(({ m, i }, j) => {
+      let cause = 'user'
+      for (let q = j - 1; q >= 0; q--) { const prev = t.replies[q].m; if (prev.status === 'done' && mentionsIn(prev.text, room.agents, prev.from).includes(m.from)) { cause = t.replies[q].i; break } }
+      return {
+        index: i, from: m.from, status: m.status ?? 'done', ts: m.ts, durationMs: m.durationMs ?? null, tools: (m.tools ?? []).length,
+        lastTool: (m.tools ?? []).at(-1) ?? null, runId: m.runId, cause, mentions: m.status === 'done' ? mentionsIn(m.text, room.agents, m.from) : [],
+        preview: String(m.text ?? '').replace(/\s+/g, ' ').slice(0, 160),
+      }
+    })
+    const last = replies.at(-1)
+    const running = replies.filter(r => r.status === 'pending')
+    let status, waitingOn = []
+    if (isLast && live) status = 'working'
+    else if (!last) status = 'no-reply'
+    else if (last.status === 'failed') status = 'failed'
+    else if (last.status === 'cancelled') status = 'stopped'
+    else if (last.status === 'pending') status = 'interrupted'
+    else {
+      // the last reply is the newest word in the task: whoever it hands to has not answered yet
+      waitingOn = last.mentions
+      status = room.mode !== 'workflow' && waitingOn.length ? 'waiting' : 'done'
+    }
+    const done = replies.filter(r => r.status === 'done').length
+    const denom = done + running.length + waitingOn.length + (status === 'working' && !running.length ? 1 : 0)
+    const endTs = last?.ts ?? t.ts
+    return {
+      n: t.n, index: t.index, text: t.text, ts: t.ts, status, waitingOn, current: running.map(r => r.from),
+      agents: [...new Set(replies.map(r => r.from))], replies, done,
+      progress: status === 'done' ? 1 : denom ? done / denom : 0,
+      tools: replies.reduce((a, r) => a + r.tools, 0),
+      durationMs: replies.reduce((a, r) => a + (r.durationMs ?? 0), 0),
+      startedAt: t.ts, lastActivity: endTs,
+    }
+  })
+}
+
 export class ChatStore {
   constructor(registry, { log = () => {}, engine } = {}) {
     this.registry = registry
@@ -62,9 +121,18 @@ export class ChatStore {
     return fs.readdirSync(this.dir).filter(f => f.endsWith('.json')).map(f => {
       try {
         const r = JSON.parse(fs.readFileSync(path.join(this.dir, f), 'utf8'))
-        return { id: r.id, title: r.title, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy: this.live.has(r.id), messages: r.messages.length, updatedAt: r.updatedAt }
+        const tasks = summarizeTasks(r, this.live.has(r.id))
+        const t = tasks.at(-1)
+        const task = t ? { n: t.n, status: t.status, progress: t.progress, current: t.current, waitingOn: t.waitingOn, done: t.done } : null
+        return { id: r.id, title: r.title, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy: this.live.has(r.id), messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task }
       } catch { return null }
     }).filter(Boolean).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+  }
+
+  /** The room as the UI shows it: the stored room plus its task summaries. */
+  view(id) {
+    const room = this.get(id)
+    return { ...room, tasks: summarizeTasks(room, room.busy) }
   }
 
   get(id) {

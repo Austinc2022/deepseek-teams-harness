@@ -105,7 +105,7 @@ export function createForgeHandler({ registry, engine, chats }) {
     ['DELETE', /^\/api\/skills\/([\w-]+)$/, (_, [n]) => (removeSkill(registry.d.skills, n), { ok: true })],
     ['GET', /^\/api\/chats$/, () => chats.list()],
     ['POST', /^\/api\/chats$/, b => chats.create(b)],
-    ['GET', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => chats.get(id)],
+    ['GET', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => chats.view(id)],
     ['PUT', /^\/api\/chats\/([\w-]+)$/, (b, [id]) => chats.update(id, b)],
     ['DELETE', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => (chats.delete(id), { ok: true })],
     ['POST', /^\/api\/chats\/([\w-]+)\/messages$/, (b, [id]) => chats.post(id, b.text)],

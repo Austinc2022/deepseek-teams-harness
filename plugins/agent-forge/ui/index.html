@@ -82,6 +82,45 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(
 .item .s { color: var(--ink-3); font-size: 12px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .chips { margin-top: 2px; }
 .item.on { background: var(--active); }
+/* chat task status: tag + progress bar (list rows, task rows) */
+.tstat { grid-column: 2; display: flex; align-items: center; gap: 8px; margin-top: 3px; min-width: 0; }
+.ctag { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; background: var(--hover); color: var(--ink-2); }
+.ctag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.ctag.working { color: var(--info); background: var(--info-bg); }
+.ctag.working::before { animation: pulse 1.4s ease-in-out infinite; }
+.ctag.waiting, .ctag.interrupted { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.ctag.done { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.ctag.failed, .ctag.stopped { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+.cbar { flex: 1 1 40px; min-width: 30px; max-width: 120px; height: 4px; border-radius: 2px; background: var(--hover); overflow: hidden; }
+.cbar > i { display: block; height: 100%; border-radius: 2px; background: var(--ink-3); }
+.cbar.working > i { background: var(--info); } .cbar.waiting > i, .cbar.interrupted > i { background: var(--warn); }
+.cbar.done > i { background: var(--ok); } .cbar.failed > i, .cbar.stopped > i { background: var(--bad); }
+/* chat tabs + tasks view */
+.chat-tabs { flex: 1 1 100%; display: flex; gap: 18px; margin-top: 4px; }
+.chat-tabs button { border: 0; background: none; padding: 6px 0; font: inherit; font-size: 13px; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; }
+.chat-tabs button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+.tasks-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.task-list { flex: 0 0 auto; max-height: 34%; overflow: auto; padding: 10px 8px 10px 32px; border-bottom: .5px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.task-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-md); cursor: pointer; }
+.task-row:hover { background: var(--hover); } .task-row.on { background: var(--active); }
+.task-row .num { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.task-row .tx { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-row .meta { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.task-row .tstat { grid-column: 2 / 4; margin-top: 0; }
+.tasks-on .composer .mentions { display: none; }
+.tasks-on .composer textarea { min-height: 0; }
+.task-flow { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 8px 24px 32px; }
+.task-flow .fhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.task-flow .fhead .muted { font-size: 12px; }
+.flow-wrap { overflow-x: auto; border: .5px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.flow-wrap svg { display: block; }
+.flow-wrap .node { cursor: pointer; }
+.flow-wrap .node:hover rect { stroke-width: 2; }
+.flow-wrap .node.sel rect { stroke: var(--ink); stroke-width: 2; }
+.node-detail { margin-top: 14px; border: .5px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; max-width: 900px; }
+.node-detail .who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--ink-3); }
+.node-detail .who b { color: var(--ink); font-size: 13px; }
+.node-detail pre.tl { max-height: 160px; overflow: auto; font-size: 11.5px; background: var(--hover); padding: 8px; border-radius: var(--r-sm); white-space: pre-wrap; }
 @media (hover: hover) { .item:hover:not(.on) { background: var(--hover); } }
 .tile { display: grid; place-items: center; width: 36px; height: 36px; border: .5px solid var(--line-3); border-radius: var(--r-sm); background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 500; }
 .tile.lg { width: 48px; height: 48px; border-radius: var(--r-lg); font-size: 18px; }
@@ -749,9 +788,98 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     return out
   }
 
+  // ---------------- Chat task status (tag + progress bar), tasks tab and flow graph
+  const short = a => String(a ?? '').replace(/^ros-/, '')
+  const fmtDur = ms => !ms ? '' : ms < 60000 ? `${Math.round(ms / 1000)}s` : ms < 3600000 ? `${Math.round(ms / 60000)}m` : `${(ms / 3600000).toFixed(1)}h`
+  const TASK_LABEL = t => !t ? 'no messages yet'
+    : t.status === 'working' ? `working${t.current?.length ? `: ${t.current.map(short).join(', ')}` : ''}`
+    : t.status === 'waiting' ? `waiting on ${t.waitingOn.map(a => '@' + short(a)).join(', ')}`
+    : t.status === 'no-reply' ? 'no reply' : t.status
+  const TASK_HELP = { working: 'Agents are replying now', waiting: 'The last reply handed work to these agents but they did not get a turn (hand-off limit reached or stopped). Reply "continue" or raise Max hand-offs.', done: 'The last reply finished without handing work on', failed: 'The last reply failed', stopped: 'Stopped (Stop pressed or the harness restarted)', interrupted: 'A reply was cut off (the harness restarted mid-reply)', 'no-reply': 'No agent has replied yet' }
+  const taskStat = (t, extra) => h('div', { class: 'tstat', title: t ? `${TASK_HELP[t.status] ?? ''}\n${t.done} finished step(s), progress ${Math.round((t.progress ?? 0) * 100)}%` : '' },
+    h('span', { class: `ctag ${t?.status ?? ''}` }, TASK_LABEL(t)),
+    t ? h('span', { class: `cbar ${t.status}` }, h('i', { style: `width:${Math.max(4, Math.round((t.progress ?? 0) * 100))}%` })) : null, extra ?? null)
+  const chatItem = r => {
+    const el = item(r.id, r.title, `${r.agents.length} agents · ${MODE_LABEL[r.mode]?.split(':')[0] ?? r.mode}${r.tasks ? ` · ${r.tasks} task${r.tasks > 1 ? 's' : ''}` : ''}`, [`${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))
+    el.append(taskStat(r.task ? { ...r.task, status: r.busy ? 'working' : r.task.status } : null))
+    return el
+  }
+  const svg = (tag, attrs = {}, ...kids) => {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', tag)
+    for (const [k, v] of Object.entries(attrs)) { if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v != null && v !== false) e.setAttribute(k, v) }
+    for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)))
+    return e
+  }
+  const NODE_COLORS = { done: 'var(--ok)', pending: 'var(--info)', failed: 'var(--bad)', cancelled: 'var(--bad)', waiting: 'var(--warn)', user: 'var(--ink-2)' }
+  function flowGraph(r, t, onPick) {
+    const lanes = ['user', ...t.agents, ...t.waitingOn.filter(a => !t.agents.includes(a))]
+    const LW = 118, W = 148, H = 42, CX = 176, RY = 52, TOP = 8
+    const cols = t.replies.length + 1 + (t.waitingOn.length ? 1 : 0)
+    const width = LW + 16 + cols * CX, height = TOP * 2 + lanes.length * RY
+    const pos = (lane, col) => ({ x: LW + 16 + col * CX, y: TOP + lanes.indexOf(lane) * RY + (RY - H) / 2 })
+    const nodes = new Map()
+    nodes.set('user', { ...pos('user', 0), key: 'user', lane: 'user', status: 'user', l1: 'You', l2: `task #${t.n}`, index: t.index })
+    t.replies.forEach((rp, j) => nodes.set(rp.index, { ...pos(rp.from, j + 1), key: rp.index, lane: rp.from, status: rp.status, l1: short(rp.from),
+      l2: `${rp.status === 'pending' ? 'working…' : rp.status}${rp.durationMs ? ' · ' + fmtDur(rp.durationMs) : ''}${rp.tools ? ` · ${rp.tools} tools` : ''}`, index: rp.index, tip: rp.preview }))
+    t.waitingOn.forEach(a => nodes.set('w:' + a, { ...pos(a, cols - 1), key: 'w:' + a, lane: a, status: 'waiting', l1: short(a), l2: 'asked, not started', dashed: true }))
+    const edges = []
+    t.replies.forEach(rp => edges.push([rp.cause === 'user' ? 'user' : rp.cause, rp.index]))
+    const lastDone = t.replies.at(-1)
+    t.waitingOn.forEach(a => lastDone && edges.push([lastDone.index, 'w:' + a]))
+    const edgeEls = edges.filter(([a, b]) => nodes.has(a) && nodes.has(b)).map(([a, b]) => {
+      const s = nodes.get(a), d = nodes.get(b)
+      const sx = s.x + W, sy = s.y + H / 2, dx = d.x, dy = d.y + H / 2, k = Math.max(30, (dx - sx) / 2)
+      return svg('path', { d: `M${sx},${sy} C${sx + k},${sy} ${dx - k},${dy} ${dx - 3},${dy}`, fill: 'none', stroke: d.dashed ? 'var(--warn)' : 'var(--line-3, #bbb)', 'stroke-width': 1.4, 'stroke-dasharray': d.dashed ? '4 3' : null, 'marker-end': 'url(#arr)' })
+    })
+    const laneEls = lanes.map((l, i) => [
+      i % 2 ? svg('rect', { x: 0, y: TOP + i * RY, width, height: RY, fill: 'var(--hover)', opacity: 0.45 }) : null,
+      svg('text', { x: 12, y: TOP + i * RY + RY / 2 + 4, 'font-size': 12, fill: 'var(--ink-2)', 'font-weight': 500 }, l === 'user' ? 'You' : short(l))])
+    const sel = state.taskNode
+    const nodeEls = [...nodes.values()].map(n => svg('g', { class: `node${sel === n.key ? ' sel' : ''}`, onclick: () => onPick(n.key) },
+      svg('title', {}, n.tip ?? n.l2),
+      svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 8, fill: 'var(--surface, #fff)', stroke: NODE_COLORS[n.status] ?? 'var(--ink-3)', 'stroke-width': 1.4, 'stroke-dasharray': n.dashed ? '5 3' : null }),
+      svg('rect', { x: n.x, y: n.y, width: 4, height: H, rx: 2, fill: NODE_COLORS[n.status] ?? 'var(--ink-3)' }),
+      svg('text', { x: n.x + 12, y: n.y + 19, 'font-size': 12.5, 'font-weight': 600, fill: 'var(--ink)' }, n.l1.length > 18 ? n.l1.slice(0, 17) + '…' : n.l1),
+      svg('text', { x: n.x + 12, y: n.y + 35, 'font-size': 11, fill: 'var(--ink-3)' }, n.l2.length > 24 ? n.l2.slice(0, 23) + '…' : n.l2),
+      n.status === 'pending' ? svg('circle', { cx: n.x + W - 12, cy: n.y + 12, r: 4, fill: 'var(--info)' }, svg('animate', { attributeName: 'opacity', values: '1;0.2;1', dur: '1.4s', repeatCount: 'indefinite' })) : null))
+    return h('div', { class: 'flow-wrap' }, svg('svg', { width, height, viewBox: `0 0 ${width} ${height}` },
+      svg('defs', {}, svg('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, svg('path', { d: 'M0,0 L10,5 L0,10 z', fill: 'var(--ink-3)' }))),
+      laneEls, edgeEls, nodeEls))
+  }
+  function tasksView(r) {
+    const tasks = r.tasks ?? []
+    if (!tasks.length) return h('div', { class: 'tasks-view' }, emptyState('No tasks yet', 'Each message you send starts a task. Send one from the box below.'))
+    state.taskSel ??= {}
+    const selN = state.taskSel[r.id] ?? tasks.at(-1).n
+    const t = tasks.find(x => x.n === selN) ?? tasks.at(-1)
+    const rerender = () => { const v = $('#detail .tasks-view'); if (v) v.replaceWith(tasksView(r)) }
+    const rows = [...tasks].reverse().map(x => h('div', { class: `task-row${x.n === t.n ? ' on' : ''}`, onclick: () => { state.taskSel[r.id] = x.n; state.taskNode = null; rerender() } },
+      h('span', { class: 'num' }, `#${x.n}`), h('span', { class: 'tx', title: x.text }, x.text.replace(/\s+/g, ' ')),
+      h('span', { class: 'meta' }, `${x.agents.length} agents · ${x.replies.length} steps${x.durationMs ? ' · ' + fmtDur(x.durationMs) : ''}`),
+      taskStat(r.busy && x.n === tasks.at(-1).n ? { ...x, status: 'working' } : x)))
+    let detail = null
+    if (state.taskNode != null) {
+      const m = state.taskNode === 'user' ? r.messages[t.index] : typeof state.taskNode === 'number' ? r.messages[state.taskNode] : null
+      if (m) detail = h('div', { class: 'node-detail' },
+        h('div', { class: 'who' }, m.from === 'user' ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? '')],
+          m.status ? h('span', { class: `ctag ${m.status === 'pending' ? 'working' : m.status === 'cancelled' ? 'stopped' : m.status}` }, m.status === 'pending' ? 'working' : m.status) : null,
+          m.durationMs ? h('span', {}, fmtDur(m.durationMs)) : null, m.ts ? h('span', {}, new Date(m.ts).toLocaleString()) : null,
+          h('button', { class: 'b', style: 'margin-left:auto', onclick: () => { state.taskNode = null; rerender() } }, 'Close')),
+        m.tools?.length ? h('details', {}, h('summary', { class: 'muted', style: 'font-size:12px;cursor:pointer' }, `${m.tools.length} tool calls`), h('pre', { class: 'tl' }, m.tools.join('\n'))) : null,
+        h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? 'working…' : md(m.text)))
+      else if (String(state.taskNode).startsWith('w:')) detail = h('div', { class: 'node-detail' }, h('div', { class: 'who' }, avatar(state.taskNode.slice(2)), h('b', {}, state.taskNode.slice(2)), h('span', { class: 'ctag waiting' }, 'not started')),
+        h('p', {}, 'The last reply asked this agent to take over, but it never got a turn (the hand-off limit was reached, or the chat was stopped). Send "continue" or @mention it to give it the floor.'))
+    }
+    const head = h('div', { class: 'fhead' }, h('b', {}, `Task #${t.n}`), taskStat(r.busy && t.n === tasks.at(-1).n ? { ...t, status: 'working' } : t),
+      h('span', { class: 'muted' }, `${t.replies.length} steps by ${t.agents.length} agents${t.tools ? ` · ${t.tools} tool calls` : ''}${t.durationMs ? ` · ${fmtDur(t.durationMs)} of agent time` : ''} · started ${new Date(t.startedAt).toLocaleString()}`),
+      h('span', { class: 'muted' }, 'Arrows show who handed work to whom. Click a box to see that step.'))
+    return h('div', { class: 'tasks-view' }, h('div', { class: 'task-list' }, rows),
+      h('div', { class: 'task-flow' }, head, flowGraph(r, t, key => { state.taskNode = state.taskNode === key ? null : key; rerender(); requestAnimationFrame(() => $('#detail .node-detail')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })) }), detail))
+  }
   async function listChats() {
+    $('#detail').classList.remove('tasks-on')
     const rooms = await api('GET', 'api/chats')
-    setList(rooms.map(r => item(r.id, r.title, `${r.agents.length} agents · ${r.mode}`, [...(r.busy ? ['replying…'] : []), `${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))),
+    setList(rooms.map(chatItem),
       [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
     if (state.sel) showChat(state.sel)
     else if (!rooms.length) newChatForm({})
@@ -860,9 +988,28 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
         r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
         h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete'))
     const poll = () => { if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500); else listChatsQuiet() }
+    state.chatTab ??= 'chat'
+    const tabBtn = (key, label) => h('button', { class: state.chatTab === key ? 'on' : '', onclick: () => { if (state.chatTab === key) return; state.chatTab = key; state.taskNode = null; showChat(id) } }, label)
+    const tabs = h('div', { class: 'chat-tabs' }, tabBtn('chat', 'Chat'), tabBtn('tasks', `Tasks (${(r.tasks ?? []).length})`))
+    const keepHead = oldHead => oldHead && !oldHead.querySelector('h2 input') && !oldHead.contains(document.activeElement) && oldHead.querySelector('.chat-args')?.hidden !== false
+    if (state.chatTab === 'tasks' && keepDraft) {
+      const prevView = $('#detail .tasks-view')
+      if (prevView?.isConnected) {
+        const keep = sel => { const e = prevView.querySelector(sel); return e ? [e.scrollTop, e.scrollLeft] : [0, 0] }
+        const [lt] = keep('.task-list'), [ft] = keep('.task-flow'), [, gl] = keep('.flow-wrap')
+        const next = tasksView(r)
+        prevView.replaceWith(next)
+        const set = (sel, top, left) => { const e = next.querySelector(sel); if (e) { if (top != null) e.scrollTop = top; if (left != null) e.scrollLeft = left } }
+        set('.task-list', lt); set('.task-flow', ft); set('.flow-wrap', null, gl)
+        head.append(opts, tabs)
+        const oldHead = $('#detail .chat-head')
+        if (keepHead(oldHead)) oldHead.replaceWith(head)
+        return poll()
+      }
+    }
     // Live refresh while agents work: patch the existing message list in place so the scroll position,
     // an in-progress scrollbar drag, text selection and opened "tool calls" sections survive.
-    if (keepDraft && prevBox?.isConnected) {
+    if (state.chatTab !== 'tasks' && keepDraft && prevBox?.isConnected) {
       const sel = window.getSelection()
       const selecting = sel && !sel.isCollapsed && prevBox.contains(sel.anchorNode)
       if (state.msgsPointerDown || selecting) { state.chatPoll = setTimeout(() => showChat(id, true), 1500); return }
@@ -873,16 +1020,18 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       prevBox.scrollTop = atBottom ? prevBox.scrollHeight : top
       const oldHead = $('#detail .chat-head')
       // keep the header while the user is editing it (rename box, an option field, or open workflow settings)
-      if (oldHead && !oldHead.querySelector('h2 input') && !oldHead.contains(document.activeElement) && oldHead.querySelector('.chat-args')?.hidden !== false) oldHead.replaceWith(head)
+      head.append(opts, tabs)
+      if (keepHead(oldHead)) oldHead.replaceWith(head)
       const oldTa = $('#detail .composer textarea')
       if (oldTa) oldTa.placeholder = ta.placeholder
       return poll()
     }
     msgs.addEventListener('pointerdown', () => { state.msgsPointerDown = true })
-    head.append(opts)
+    head.append(opts, tabs)
+    $('#detail').classList.toggle('tasks-on', state.chatTab === 'tasks')
     $('#detail').replaceChildren(
       head,
-      msgs,
+      state.chatTab === 'tasks' ? tasksView(r) : msgs,
       h('div', { class: 'composer' },
         h('div', { class: 'mentions' }, r.agents.map(a => h('button', { onclick: () => insert(a), title: `Mention ${a}` }, avatar(a), ` @${a}`))),
         h('div', { class: 'composer-box' }, ta,
@@ -899,7 +1048,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
   // refresh the room list badges without re-rendering the detail pane
   async function listChatsQuiet() {
     const rooms = await api('GET', 'api/chats')
-    setList(rooms.map(r => item(r.id, r.title, `${r.agents.length} agents · ${r.mode}`, [...(r.busy ? ['replying…'] : []), `${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))),
+    setList(rooms.map(chatItem),
       [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
   }
 
