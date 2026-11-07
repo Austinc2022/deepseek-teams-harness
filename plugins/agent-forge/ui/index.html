@@ -65,6 +65,19 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(
 .tabs button { position: relative; flex: none; padding: 0 0 10px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
 .tabs button.on { color: var(--ink); font-weight: 500; }
 .tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -.5px; height: 2px; border-radius: 2px; background: var(--ink); }
+/* project tabs (Agent chat): each project holds its own agent-team chats */
+.ptabs { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-bottom: 10px; border-bottom: .5px solid var(--line-3); overflow-x: auto; scrollbar-width: none; }
+.tabs:empty + .ptabs { margin-top: 18px; }
+.tabs:empty + .ptabs[hidden] + .split { margin-top: 18px; border-top: .5px solid var(--line-3); }
+.ptab { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 30px; padding: 0 12px; border: .5px solid var(--line); border-radius: 15px; background: none; color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; }
+.ptab:hover { background: var(--hover); color: var(--ink); }
+.ptab.on { background: var(--ink); border-color: var(--ink); color: var(--ink-inv); font-weight: 500; }
+.ptab .n { font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
+.ptab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.ptab.add { border-style: dashed; color: var(--ink-3); }
+.ptab-input { flex: none; width: 180px; height: 30px; min-height: 30px; border-radius: 15px; padding: 0 12px; }
+.ptabs .pacts { margin-left: auto; display: flex; gap: 6px; flex: none; padding-left: 12px; }
+.ptabs .pacts button { height: 28px; min-height: 28px; font-size: 12px; }
 .split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 0; padding: 0; }
 .master { display: flex; flex-direction: column; min-height: 0; padding: 16px 16px 16px 0; border-right: .5px solid var(--line); }
 .detail { min-width: 0; min-height: 0; overflow: auto; padding: 22px 0 64px 32px; }
@@ -275,6 +288,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     <div class="head-actions" id="listBtns"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
+  <nav class="ptabs" id="ptabs" aria-label="Projects" hidden></nav>
   <main class="split">
     <aside class="master">
       <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="filter" placeholder="Search" autocomplete="off"></div>
@@ -376,6 +390,8 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     state.tab = tab; state.sel = sel; return load()
   }
   if (qs.get('sel')) state.sel = qs.get('sel')
+  // current chat project tab ('' = General); remembered per browser
+  try { state.project = qs.get('project') ?? localStorage.getItem('forgeChatProject') ?? '' } catch { state.project = qs.get('project') ?? '' }
 
   function renderTabs() {
     $('#tabs').replaceChildren(...(TABS.length > 1 ? TABS : []).map(([id, name]) => h('button', { role: 'tab', 'aria-selected': state.tab === id ? 'true' : 'false', class: state.tab === id ? 'on' : '', onclick: () => { if (state.tab === id) return; state.tab = id; state.sel = null; $('#filter').value = ''; $('#detail').replaceChildren(spinner()); load() } }, name)))
@@ -385,6 +401,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     clearInterval(state.poll)
     clearTimeout(state.chatPoll)
     renderTabs()
+    $('#ptabs').hidden = state.tab !== 'chat'
     document.body.dataset.tab = state.tab
     $('#intro').textContent = INTROS[state.tab] ?? ''
     $('#filter').placeholder = `Search ${SINGULAR[state.tab] ?? ''}s`.replace('chats', 'chats').replace('MCP servers', 'MCP servers')
@@ -876,14 +893,81 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     return h('div', { class: 'tasks-view' }, h('div', { class: 'task-list' }, rows),
       h('div', { class: 'task-flow' }, head, flowGraph(r, t, key => { state.taskNode = state.taskNode === key ? null : key; rerender(); requestAnimationFrame(() => $('#detail .node-detail')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })) }), detail))
   }
+  // ---------------- Chat projects: a tab per project, each holding its own agent-team chats
+  const projName = id => !id ? 'General' : state.projects?.find(p => p.id === id)?.name ?? 'General'
+  const setProject = id => { state.project = id; try { localStorage.setItem('forgeChatProject', id) } catch {} }
+  const inProject = r => (r.project ?? '') === state.project
+  async function loadProjects() {
+    const pj = await api('GET', 'api/chat-projects')
+    state.projects = pj.projects
+    state.generalStats = pj.general
+    if (state.project && !state.projects.some(p => p.id === state.project)) setProject('')
+    renderProjectTabs()
+  }
+  function renderProjectTabs(editing) {
+    const bar = $('#ptabs')
+    if (state.tab !== 'chat') { bar.hidden = true; return }
+    bar.hidden = false
+    const open = id => { if (state.project === id && !editing) return; setProject(id); state.sel = null; $('#filter').value = ''; listChats() }
+    const tab = (id, name, st, title) => h('button', { class: `ptab${state.project === id ? ' on' : ''}`, role: 'tab', 'aria-selected': state.project === id ? 'true' : 'false', title: title ?? name, onclick: () => open(id), ondblclick: () => { if (id) renderProjectTabs({ id }) } },
+      st?.busy ? h('span', { class: 'dot', title: `${st.busy} chat(s) working` }) : null, name, h('span', { class: 'n' }, String(st?.chats ?? 0)))
+    // inline name box for a new project or a rename (window.prompt is blocked in some embedded webviews)
+    const nameBox = (initial, onSave) => {
+      const inp = h('input', { class: 'ptab-input', value: initial, placeholder: 'Project name', maxlength: 80 })
+      let done = false
+      const finish = guard(async save => { if (done) return; done = true; const v = inp.value.trim(); if (save && v && v !== initial) await onSave(v); await loadProjects() })
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true) } else if (e.key === 'Escape') finish(false) })
+      inp.addEventListener('blur', () => finish(true))
+      requestAnimationFrame(() => { inp.focus(); inp.select() })
+      return inp
+    }
+    const tabs = [tab('', 'General', state.generalStats, 'Chats that are not in a project')]
+    for (const p of state.projects ?? []) {
+      tabs.push(editing?.id === p.id
+        ? nameBox(p.name, async v => { await api('PUT', `api/chat-projects/${p.id}`, { name: v }); toast('Project renamed') })
+        : tab(p.id, p.name, p, `${p.name}${p.cwd ? `\nDefault folder: ${p.cwd}` : ''}\nDouble-click to rename`))
+    }
+    tabs.push(editing?.id === 'new'
+      ? nameBox('', async v => { const p = await api('POST', 'api/chat-projects', { name: v }); toast(`Project "${p.name}" created`); setProject(p.id); state.sel = null; await listChats(); newChatForm({}) })
+      : h('button', { class: 'ptab add', title: 'Create a project tab to group its own agent-team chats', onclick: () => renderProjectTabs({ id: 'new' }) }, '+ New project'))
+    const cur = state.projects?.find(p => p.id === state.project)
+    const acts = cur ? h('div', { class: 'pacts' },
+      h('button', { class: 'b', onclick: () => renderProjectTabs({ id: cur.id }) }, 'Rename'),
+      h('button', { class: 'b', title: 'Default working directory for new chats in this project', onclick: () => projectFolder(cur) }, 'Folder'),
+      h('button', { class: 'b d', onclick: guard(async () => {
+        if (!confirm(`Delete project "${cur.name}"? Its ${cur.chats} chat(s) move to General.`)) return
+        const r = await api('DELETE', `api/chat-projects/${cur.id}`)
+        toast(r.moved ? `Project deleted; ${r.moved} chat(s) moved to General` : 'Project deleted')
+        setProject(''); state.sel = null; await listChats()
+      }) }, 'Delete project')) : null
+    bar.replaceChildren(...tabs, acts ?? '')
+  }
+  function projectFolder(p) {
+    const inp = h('input', { value: p.cwd ?? '', placeholder: '/path/to/project (blank = none)' })
+    $('#detail').classList.remove('tasks-on')
+    clearTimeout(state.chatPoll)
+    $('#detail').replaceChildren(h('div', { style: 'padding:22px 0 56px 32px;overflow:auto;min-height:0' },
+      h('h2', {}, `Project "${p.name}"`),
+      h('p', { class: 'muted' }, 'New chats in this project start in this folder unless the chat sets its own working directory. Existing chats keep their folder.'),
+      h('label', {}, 'Default working directory'), inp,
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await api('PUT', `api/chat-projects/${p.id}`, { cwd: inp.value }); toast('Project folder saved'); await listChats() }) }, 'Save'))))
+  }
+
   async function listChats() {
     $('#detail').classList.remove('tasks-on')
-    const rooms = await api('GET', 'api/chats')
-    setList(rooms.map(chatItem),
+    const [rooms] = await Promise.all([api('GET', 'api/chats'), loadProjects()])
+    const mine = rooms.filter(inProject)
+    if (state.sel && !mine.some(r => r.id === state.sel)) {
+      // opened by link or from another tab: switch to the chat's project
+      const r = rooms.find(x => x.id === state.sel)
+      if (r) { setProject(r.project ?? ''); return listChats() }
+      state.sel = null
+    }
+    setList(mine.map(chatItem),
       [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
     if (state.sel) showChat(state.sel)
-    else if (!rooms.length) newChatForm({})
-    else $('#detail').replaceChildren(emptyState('No chat selected', 'Pick a chat from the list, or start a new one.'))
+    else if (!mine.length) newChatForm({})
+    else $('#detail').replaceChildren(emptyState('No chat selected', `Pick a chat in ${projName(state.project)}, or start a new one.`))
   }
 
   async function newChatForm(pre) {
@@ -900,19 +984,24 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const cwd = h('input', { placeholder: 'blank = each agent works in its own project folder or home folder' })
     const hops = h('input', { type: 'number', min: 0, max: MAX_HOPS, value: 4 })
     const first = h('textarea', { placeholder: 'First message (optional). Use @agent-name to address someone.' })
+    const project = h('select', { onchange: () => { cwd.placeholder = cwdHint() } }, h('option', { value: '' }, 'General'),
+      (state.projects ?? []).map(p => h('option', { value: p.id, selected: p.id === (pre.project ?? state.project) ? true : false }, p.name)))
+    const cwdHint = () => { const p = state.projects?.find(x => x.id === project.value); return p?.cwd ? `blank = project folder ${p.cwd}` : 'blank = each agent works in its own project folder or home folder' }
+    cwd.placeholder = cwdHint()
+    $('#detail').classList.remove('tasks-on')
     $('#detail').replaceChildren(h('div', { style: 'padding:22px 0 56px 32px;overflow:auto;min-height:0' },
       h('h2', {}, 'New multi-agent chat'),
       h('p', { class: 'muted' }, 'Each agent replies with its own model, skills, memory and execution environment. Agents can hand off to each other with @name.'),
-      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Title'), title), h('div', {}, h('label', {}, 'Start from team'), team)),
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Title'), title), h('div', {}, h('label', {}, 'Project'), project), h('div', {}, h('label', {}, 'Start from team'), team)),
       h('label', {}, 'Agents'), agentsBox,
       h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Reply mode'), mode), h('div', {}, h('label', {}, 'Working directory'), cwd), h('div', {}, h('label', {}, `Max agent-to-agent hand-offs per message (0-${MAX_HOPS})`), hops)),
       wfBox,
       h('label', {}, 'First message'), first,
       h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => {
         const agents = [...agentsBox.querySelectorAll('input:checked')].map(i => i.value)
-        const room = await api('POST', 'api/chats', { title: title.value, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value), workflow: wf.value || undefined })
+        const room = await api('POST', 'api/chats', { title: title.value, project: project.value || undefined, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value), workflow: wf.value || undefined })
         if (first.value.trim()) await api('POST', `api/chats/${room.id}/messages`, { text: first.value })
-        state.sel = room.id; await load()
+        setProject(room.project ?? ''); state.sel = room.id; await load()
       }) }, 'Start chat'))))
   }
 
@@ -941,7 +1030,10 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:4px' }, `Workflow settings, one key=value per line.${r.team ? ` team=${r.team} is added automatically.` : ''} Your chat message is passed as message=.`),
       argsTa, h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await put({ workflowArgs: parseArgs(argsTa.value) }, 'Workflow settings saved'); argsBox.hidden = true; showChat(id) }) }, 'Save settings')))
     const argCount = Object.keys(r.workflowArgs ?? {}).length
+    const projSel = h('select', { onchange: guard(async () => { await put({ project: projSel.value }, `Moved to ${projName(projSel.value)}`); setProject(projSel.value); await listChats() }) },
+      h('option', { value: '' }, 'General'), (state.projects ?? []).map(p => h('option', { value: p.id, selected: p.id === r.project ? true : false }, p.name)))
     const opts = h('div', { class: 'chat-opts' },
+      opt('Project', projSel, 'Move this chat to another project tab'),
       r.mode === 'workflow'
         ? [opt('Workflow', wfSel, 'Each message you send starts this workflow'), h('button', { class: 'b', onclick: () => { argsBox.hidden = !argsBox.hidden; if (!argsBox.hidden) argsTa.focus() } }, `Settings${argCount ? ` (${argCount})` : ''}`), wfMeta ? h('span', { class: 'muted', style: 'font-size:12px' }, wfMeta.description) : null]
         : [opt('Max hand-offs', hopsIn, `How many times agents may pass the floor to each other per message (0-${MAX_HOPS})`),
@@ -1048,7 +1140,14 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
   // refresh the room list badges without re-rendering the detail pane
   async function listChatsQuiet() {
     const rooms = await api('GET', 'api/chats')
-    setList(rooms.map(chatItem),
+    // refresh the per-project counts and busy dots unless a project name is being edited
+    if (!$('#ptabs .ptab-input')) {
+      const stats = id => { const rs = rooms.filter(r => (r.project ?? '') === id); return { chats: rs.length, busy: rs.filter(r => r.busy).length } }
+      state.generalStats = stats('')
+      for (const p of state.projects ?? []) Object.assign(p, stats(p.id))
+      renderProjectTabs()
+    }
+    setList(rooms.filter(inProject).map(chatItem),
       [h('button', { class: 'b p', onclick: () => newChatForm({}) }, 'New chat')])
   }
 

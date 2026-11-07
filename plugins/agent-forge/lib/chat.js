@@ -15,6 +15,10 @@
  *
  * Each reply is one runAgent call, so agents keep their own model, skills,
  * memory, sub-agents and execution environment. Rooms persist as JSON in forge/chats.
+ *
+ * Projects group rooms: each project is a tab in the UI holding its own agent-team chats. Projects persist in
+ * forge/chat-projects.json; a room's `project` field names its project (no field = the General tab). A project
+ * may set a default working directory that new chats in it inherit.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -97,6 +101,73 @@ export class ChatStore {
     fs.mkdirSync(this.dir, { recursive: true })
     this.log = log
     this.live = new Map() // id -> { abort: AbortController }
+    this.projectsFile = path.join(path.dirname(this.dir), 'chat-projects.json')
+  }
+
+  // ---------------- projects (tabs that group chats)
+  #readProjects() {
+    try { const p = JSON.parse(fs.readFileSync(this.projectsFile, 'utf8')); return Array.isArray(p) ? p : [] } catch { return [] }
+  }
+
+  #writeProjects(list) {
+    fs.writeFileSync(`${this.projectsFile}.tmp`, JSON.stringify(list, null, 2))
+    fs.renameSync(`${this.projectsFile}.tmp`, this.projectsFile)
+  }
+
+  #assertProject(id) {
+    if (!id) return undefined
+    if (!this.#readProjects().some(p => p.id === id)) throw new Error(`unknown project ${id}`)
+    return id
+  }
+
+  /** Projects in creation order, each with its chat count and how many chats are busy. */
+  listProjects() {
+    const rooms = this.list()
+    const stats = id => { const rs = rooms.filter(r => (r.project ?? '') === id); return { chats: rs.length, busy: rs.filter(r => r.busy).length } }
+    return { general: stats(''), projects: this.#readProjects().map(p => ({ ...p, ...stats(p.id) })) }
+  }
+
+  createProject({ name, cwd, description } = {}) {
+    name = String(name ?? '').trim()
+    if (!name) throw new Error('project name is required')
+    if (name.length > 80) throw new Error('project name is too long (80 characters max)')
+    const list = this.#readProjects()
+    if (list.some(p => p.name.toLowerCase() === name.toLowerCase())) throw new Error(`a project named "${name}" already exists`)
+    const p = { id: newId(), name, createdAt: now() }
+    if (cwd?.trim()) p.cwd = cwd.trim()
+    if (description?.trim()) p.description = description.trim()
+    list.push(p)
+    this.#writeProjects(list)
+    return p
+  }
+
+  updateProject(id, patch = {}) {
+    const list = this.#readProjects()
+    const p = list.find(x => x.id === id)
+    if (!p) throw new Error(`unknown project ${id}`)
+    if (patch.name !== undefined) {
+      const name = String(patch.name).trim()
+      if (!name) throw new Error('project name is required')
+      if (list.some(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) throw new Error(`a project named "${name}" already exists`)
+      p.name = name
+    }
+    if (patch.cwd !== undefined) { if (patch.cwd?.trim()) p.cwd = patch.cwd.trim(); else delete p.cwd }
+    if (patch.description !== undefined) { if (patch.description?.trim()) p.description = patch.description.trim(); else delete p.description }
+    this.#writeProjects(list)
+    return p
+  }
+
+  /** Delete a project. Its chats are deleted too when deleteChats is set; otherwise they move to General. */
+  deleteProject(id, { deleteChats = false } = {}) {
+    const list = this.#readProjects()
+    if (!list.some(p => p.id === id)) throw new Error(`unknown project ${id}`)
+    let moved = 0, deleted = 0
+    for (const r of this.list().filter(r => r.project === id)) {
+      if (deleteChats) { this.delete(r.id); deleted++ }
+      else { const room = this.get(r.id); delete room.busy; delete room.project; this.#save(room); moved++ }
+    }
+    this.#writeProjects(list.filter(p => p.id !== id))
+    return { ok: true, moved, deleted }
   }
 
   #file(id) {
@@ -124,7 +195,7 @@ export class ChatStore {
         const tasks = summarizeTasks(r, this.live.has(r.id))
         const t = tasks.at(-1)
         const task = t ? { n: t.n, status: t.status, progress: t.progress, current: t.current, waitingOn: t.waitingOn, done: t.done } : null
-        return { id: r.id, title: r.title, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy: this.live.has(r.id), messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task }
+        return { id: r.id, title: r.title, project: r.project, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy: this.live.has(r.id), messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task }
       } catch { return null }
     }).filter(Boolean).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
   }
@@ -141,7 +212,9 @@ export class ChatStore {
     return room
   }
 
-  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs }) {
+  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, project }) {
+    project = this.#assertProject(project)
+    if (!cwd && project) cwd = this.#readProjects().find(p => p.id === project)?.cwd
     if (team && (!agents || agents.length === 0)) agents = this.registry.getTeam(team).members
     if (!CHAT_MODES.includes(mode)) throw new Error(`mode must be one of ${CHAT_MODES.join(', ')}`)
     const room = {
@@ -149,6 +222,7 @@ export class ChatStore {
       agents: this.#validate(agents), team: team || undefined, mode, cwd: cwd || undefined,
       maxHops: clampHops(maxHops), createdAt: now(), messages: [],
     }
+    if (project) room.project = project
     if (lead) room.lead = lead
     if (workflow) room.workflow = workflow
     if (workflowArgs) room.workflowArgs = this.#args(workflowArgs)
@@ -162,6 +236,7 @@ export class ChatStore {
     if (patch.agents !== undefined) room.agents = this.#validate(patch.agents)
     if (patch.mode !== undefined) { if (!CHAT_MODES.includes(patch.mode)) throw new Error('bad mode'); room.mode = patch.mode }
     if (patch.cwd !== undefined) room.cwd = patch.cwd || undefined
+    if (patch.project !== undefined) room.project = this.#assertProject(patch.project || undefined)
     if (patch.maxHops !== undefined) room.maxHops = clampHops(patch.maxHops)
     if (patch.lead !== undefined) { if (patch.lead && !room.agents.includes(patch.lead)) throw new Error("lead must be one of this chat's agents"); room.lead = patch.lead || undefined }
     if (patch.workflow !== undefined) { if (patch.workflow) this.registry.orchestrationFile(patch.workflow); room.workflow = patch.workflow || undefined }
