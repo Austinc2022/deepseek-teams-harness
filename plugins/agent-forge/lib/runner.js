@@ -30,17 +30,45 @@ const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits'
 /** Default sandbox network allowlist; agents extend it with execution.allowedDomains. */
 const DEFAULT_DOMAINS = ['github.com', '*.github.com', '*.githubusercontent.com', 'codeload.github.com', 'registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org', 'crates.io', 'static.crates.io', 'proxy.golang.org']
 
-function memoryMcp(mem) {
-  const mcp = new McpServer({ name: 'forge-memory', version: '1.0.0' }, { capabilities: { tools: {} } })
-  mcp.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: mem.toolDefs }))
+/** An in-process MCP server from tool definitions and a (possibly async) handler. */
+export function toolsMcp(name, toolDefs, handle) {
+  const mcp = new McpServer({ name: name.replace(/_/g, '-'), version: '1.0.0' }, { capabilities: { tools: {} } })
+  mcp.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolDefs }))
   mcp.server.setRequestHandler(CallToolRequestSchema, async req => {
     try {
-      return { content: [{ type: 'text', text: String(mem.handle(req.params.name, req.params.arguments ?? {})) }] }
+      return { content: [{ type: 'text', text: String(await handle(req.params.name, req.params.arguments ?? {})) }] }
     } catch (e) {
-      return { content: [{ type: 'text', text: `memory error: ${e.message}` }], isError: true }
+      return { content: [{ type: 'text', text: `${name} error: ${e.message}` }], isError: true }
     }
   })
-  return { type: 'sdk', name: 'forge_memory', instance: mcp }
+  return { type: 'sdk', name, instance: mcp }
+}
+
+const memoryMcp = mem => toolsMcp('forge_memory', mem.toolDefs, (n, a) => mem.handle(n, a))
+
+/** The folder an agent run works in: explicit run/chat folder, else the agent's project folder, else its own home folder. */
+export function resolveCwd(registry, def, cwd) {
+  const folders = registry.agentFolders(def)
+  return path.resolve(cwd ?? folders.project ?? (def.cwd ? registry.resolveFolder(def.cwd) : folders.home))
+}
+
+/** A one-shot, tool-less Claude call (e.g. summaries). Returns the structured output with a schema, else the text. */
+export async function quickQuery({ prompt, system, schema, model = 'haiku', signal }) {
+  const abort = new AbortController()
+  if (signal) signal.addEventListener('abort', () => abort.abort(), { once: true })
+  const env = { ...cleanEnv(), CLAUDE_AGENT_SDK_CLIENT_APP: 'agent-forge/0.1.0' }
+  delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL
+  const options = {
+    model, cwd: os.tmpdir(), abortController: abort, env, tools: [], persistSession: false, maxTurns: 3,
+    systemPrompt: system ?? 'You summarize multi-agent project activity accurately and concisely.',
+    settingSources: [], strictMcpConfig: true, settings: { autoMemoryEnabled: false, disableClaudeAiConnectors: true },
+  }
+  if (schema) options.outputFormat = { type: 'json_schema', schema }
+  let result
+  for await (const m of query({ prompt, options })) if (m.type === 'result') result = m
+  if (!result || result.subtype !== 'success' || result.is_error) throw new Error(result?.errors?.join('; ') || result?.result || 'summary failed')
+  if (schema) return result.structured_output ?? JSON.parse(result.result)
+  return result.result
 }
 
 /** Parent env minus session variables of any Claude Code process that launched the forge. */
@@ -88,6 +116,7 @@ function remoteSpawner(def, cwd, extraDirs = []) {
  * @param {import('./registry.js').Registry} p.registry
  * @param {string} p.prompt
  * @param {string} [p.cwd]
+ * @param {Record<string, object>} [p.extraMcp] extra in-process MCP servers (claude-code backend only), e.g. from toolsMcp()
  * @param {object} [p.schema]       JSON schema for structured output
  * @param {string} [p.team]         team name (for team-scoped memory)
  * @param {string} [p.runId]
@@ -100,9 +129,8 @@ export async function runAgent(p) {
   const { def, registry } = p
   const t0 = Date.now()
   // working folder: explicit run/chat folder, else the agent's project folder, else its own home folder
-  const folders = registry.agentFolders(def)
-  p.folders = folders
-  const cwd = path.resolve(p.cwd ?? folders.project ?? (def.cwd ? registry.resolveFolder(def.cwd) : folders.home))
+  p.folders = registry.agentFolders(def)
+  const cwd = resolveCwd(registry, def, p.cwd)
   fs.mkdirSync(cwd, { recursive: true })
   const mem = openMemory(registry.home, def, { team: p.team })
   const write = line => { if (p.transcriptFile) fs.appendFileSync(p.transcriptFile, line) }
@@ -185,6 +213,11 @@ async function runClaudeCode(p, mem, cwd, write) {
     options.mcpServers.forge_memory = memoryMcp(mem)
     options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_memory']
   }
+  // extra in-process tool servers from the caller (e.g. the chat supervisor's worker tools)
+  for (const [name, server] of Object.entries(p.extraMcp ?? {})) {
+    options.mcpServers[name] = server
+    options.allowedTools = [...(options.allowedTools ?? []), `mcp__${name}`]
+  }
   if (mem.mode === 'session' && mem.sessionId) options.resume = mem.sessionId
   options.persistSession = mem.mode === 'session'
 
@@ -236,7 +269,7 @@ async function runClaudeCode(p, mem, cwd, write) {
         else if (b.type === 'tool_use') {
           const brief = summarizeTool(b)
           write(`> tool: ${brief}\n\n`)
-          p.onEvent?.({ type: 'tool', name: b.name, brief })
+          p.onEvent?.({ type: 'tool', name: b.name, brief, input: b.input })
         }
       }
     } else if (m.type === 'result') {

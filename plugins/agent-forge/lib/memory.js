@@ -151,3 +151,32 @@ export function openMemory(home, def, { team } = {}) {
     },
   }
 }
+
+/** Everything stored in one agent's memory folder, for the chat Memory tab. Null when the agent has no memory. */
+export function listMemory(home, def, { team } = {}) {
+  const m = def.memory
+  if (m.mode === 'none') return null
+  const dir = memoryDir(home, def, team)
+  const notes = markdown.entries(dir).map(e => {
+    const [, fm = '', body = ''] = e.text.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/) ?? [null, '', e.text]
+    const get = k => { const v = fm.match(new RegExp(`^${k}: (.*)$`, 'm'))?.[1]; try { return v ? JSON.parse(v) : undefined } catch { return v } }
+    return { id: e.id, title: get('title') ?? e.id, tags: get('tags') ?? [], updated: get('updated') ?? null, body: body.trim() }
+  }).sort((a, b) => String(b.updated ?? '').localeCompare(String(a.updated ?? '')))
+  const jf = path.join(dir, 'journal.jsonl')
+  const journalRows = fs.existsSync(jf) ? fs.readFileSync(jf, 'utf8').trim().split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)] } catch { return [] } }) : []
+  const sf = path.join(dir, 'session.json')
+  let session = null
+  try { if (fs.existsSync(sf)) session = JSON.parse(fs.readFileSync(sf, 'utf8')) } catch {}
+  return {
+    dir, mode: m.mode, scope: m.namespace ? 'namespace' : m.scope, namespace: m.namespace,
+    notes, journal: journalRows.slice(-60).reverse().map(r => ({ ts: r.ts, label: r.label, ok: r.ok, task: String(r.task ?? '').slice(0, 600), outcome: String(r.outcome ?? '').slice(0, 1500) })),
+    journalCount: journalRows.length, session,
+  }
+}
+
+/** Save or delete a markdown note in a memory folder (the caller checks the folder belongs to the chat). */
+export function saveNote(dir, note) { return markdown.save(dir, note) }
+export function deleteNote(dir, id) {
+  fs.rmSync(path.join(dir, 'notes', `${slug(id)}.md`), { force: true })
+  reindex(dir)
+}
