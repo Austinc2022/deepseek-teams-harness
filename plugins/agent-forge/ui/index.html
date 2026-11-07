@@ -78,6 +78,10 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(
 .ptab-input { flex: none; width: 180px; height: 30px; min-height: 30px; border-radius: 15px; padding: 0 12px; }
 .ptabs .pacts { margin-left: auto; display: flex; gap: 6px; flex: none; padding-left: 12px; }
 .ptabs .pacts button { height: 28px; min-height: 28px; font-size: 12px; }
+.pa-wrap { padding: 22px 0 56px 32px; overflow: auto; min-height: 0; }
+.pa-agent > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.pa-agent > summary .muted { font-size: 12px; font-weight: 400; }
+.pa-agent .row { margin-top: 2px; }
 .split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 0; padding: 0; }
 .master { display: flex; flex-direction: column; min-height: 0; padding: 16px 16px 16px 0; border-right: .5px solid var(--line); }
 .detail { min-width: 0; min-height: 0; overflow: auto; padding: 22px 0 64px 32px; }
@@ -499,6 +503,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
           field('Model', inp('model', d.model, 'opus', { list: 'models' }), 'opus, sonnet, haiku, default, or a full model id'),
           field('Effort', sel('effort', [['', 'default'], ...M.efforts], d.effort ?? '')),
           field('Fallback model', inp('fallbackModel', d.fallbackModel, 'optional', { list: 'models' }), 'Used if the main model is overloaded.')),
+        field('Backup models (one per line, tried in order)', area('fallbacks', fallbacksText(d.fallbacks), 'codex gpt-5.5\nopencode deepseek/deepseek-chat\nhaiku', 2), BACKUP_HELP),
         h('div', { class: 'row' },
           field('Max turns', inp('maxTurns', d.maxTurns, 'unlimited', { type: 'number', min: 1 })),
           field('Max budget per run (USD)', inp('maxBudgetUsd', d.maxBudgetUsd, 'unlimited', { type: 'number', min: 0, step: '0.5' }), 'Stops the run when estimated cost passes this.'))),
@@ -545,6 +550,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       const opt = (key, v) => { if (v === '' || v == null || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) delete def[key]; else def[key] = v }
       opt('effort', f.effort.value)
       opt('fallbackModel', f.fallbackModel.value.trim())
+      def.fallbacks = parseFallbacks(f.fallbacks.value); if (!def.fallbacks.length) delete def.fallbacks
       opt('maxTurns', f.maxTurns.value ? Number(f.maxTurns.value) : '')
       opt('maxBudgetUsd', f.maxBudgetUsd.value ? Number(f.maxBudgetUsd.value) : '')
       opt('tags', f.tags.value.split(',').map(s => s.trim()).filter(Boolean))
@@ -783,6 +789,16 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       r.result != null ? [h('label', {}, 'Result'), h('pre', {}, typeof r.result === 'string' ? r.result : JSON.stringify(r.result, null, 2))] : '')
   }
 
+  // ---------------- Backup models: "[backend] model [provider=x] [effort=y]" per line
+  const BACKUP_HELP = 'If a reply fails (error, rate limit, outage), comes back empty, or the model declines the request, the same message is sent to the next backup. Start a line with a backend (claude-code, claude-cli, codex, opencode, dsh) to switch backend; otherwise the agent\'s own backend is used.'
+  const fallbacksText = list => (list ?? []).map(f => [f.backend, f.model, f.provider ? `provider=${f.provider}` : '', f.effort ? `effort=${f.effort}` : ''].filter(Boolean).join(' ')).join('\n')
+  const parseFallbacks = text => String(text ?? '').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
+    const parts = l.split(/\s+/), o = {}
+    if (state.meta.backends.includes(parts[0]) && parts.length > 1) o.backend = parts.shift()
+    for (const t of parts) { const m = t.match(/^(provider|effort)=(.+)$/); if (m) o[m[1]] = m[2]; else if (!o.model) o.model = t }
+    return o
+  })
+
   // ---------------- Agent chat (multi-agent group chat)
   const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply', handoff: 'the lead replies first, then only @mentioned agents take over', workflow: 'each message runs the chosen workflow and posts its progress' }
   const MODE_LABEL = { sequential: 'Group chat: everyone in turn', parallel: 'Group chat: everyone at once', mention: 'Mention only', handoff: 'Handoff: lead starts, @mentions pass it on', workflow: 'Workflow: run a saved workflow' }
@@ -931,7 +947,8 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       ? nameBox('', async v => { const p = await api('POST', 'api/chat-projects', { name: v }); toast(`Project "${p.name}" created`); setProject(p.id); state.sel = null; await listChats(); newChatForm({}) })
       : h('button', { class: 'ptab add', title: 'Create a project tab to group its own agent-team chats', onclick: () => renderProjectTabs({ id: 'new' }) }, '+ New project'))
     const cur = state.projects?.find(p => p.id === state.project)
-    const acts = cur ? h('div', { class: 'pacts' },
+    const agentBtn = h('button', { class: 'b', title: 'Configure each agent for the chats in this project: model, memory, skills, backup models and more', onclick: () => projectAgentsView(state.project) }, 'Agent settings')
+    const acts = !cur ? h('div', { class: 'pacts' }, agentBtn) : h('div', { class: 'pacts' }, agentBtn,
       h('button', { class: 'b', onclick: () => renderProjectTabs({ id: cur.id }) }, 'Rename'),
       h('button', { class: 'b', title: 'Default working directory for new chats in this project', onclick: () => projectFolder(cur) }, 'Folder'),
       h('button', { class: 'b d', onclick: guard(async () => {
@@ -939,8 +956,8 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
         const r = await api('DELETE', `api/chat-projects/${cur.id}`)
         toast(r.moved ? `Project deleted; ${r.moved} chat(s) moved to General` : 'Project deleted')
         setProject(''); state.sel = null; await listChats()
-      }) }, 'Delete project')) : null
-    bar.replaceChildren(...tabs, acts ?? '')
+      }) }, 'Delete project'))
+    bar.replaceChildren(...tabs, acts)
   }
   function projectFolder(p) {
     const inp = h('input', { value: p.cwd ?? '', placeholder: '/path/to/project (blank = none)' })
@@ -951,6 +968,84 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       h('p', { class: 'muted' }, 'New chats in this project start in this folder unless the chat sets its own working directory. Existing chats keep their folder.'),
       h('label', {}, 'Default working directory'), inp,
       h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await api('PUT', `api/chat-projects/${p.id}`, { cwd: inp.value }); toast('Project folder saved'); await listChats() }) }, 'Save'))))
+  }
+
+  // Per-project agent settings: override an agent's model, memory, skills, backups... for this project's chats only
+  const MEM_LABEL = { none: 'Stateless (no memory)', markdown: 'Stateful: saved notes', journal: 'Stateful: work journal', hybrid: 'Stateful: notes + journal', session: 'Stateful: resume last conversation' }
+  const agentSummary = e => !e ? '' : [`${e.backend} / ${e.model}${e.effort ? ` (${e.effort})` : ''}`, e.memory?.mode === 'none' ? 'stateless' : `stateful: ${e.memory?.mode}`, e.skills?.length ? `${e.skills.length} skills` : null, e.fallbacks?.length ? `${e.fallbacks.length} backup${e.fallbacks.length > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')
+  async function projectAgentsView(projectId, only) {
+    clearTimeout(state.chatPoll)
+    $('#detail').classList.remove('tasks-on')
+    const key = projectId || '_general'
+    const list = await api('GET', `api/chat-projects/${key}/agents`)
+    const M = state.meta
+    const pname = projName(projectId)
+    const form = a => {
+      const o = a.overrides ?? {}, b = a.base, f = {}
+      const inh = v => `inherit (${v ?? 'default'})`
+      const sel = (k, opts, val, base) => (f[k] = h('select', {}, h('option', { value: '' }, inh(base)), opts.map(x => { const [v, l] = Array.isArray(x) ? x : [x, x]; return h('option', { value: v, selected: v === val ? true : false }, l) })))
+      const inp = (k, val, ph, attrs = {}) => (f[k] = h('input', { value: val ?? '', placeholder: ph, ...attrs }))
+      const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint ? h('div', { class: 'muted', style: 'font-size:11.5px;margin-top:3px' }, hint) : null)
+      const ownSkills = Array.isArray(o.skills)
+      f.skillsOn = h('input', { type: 'checkbox', checked: ownSkills, style: 'width:auto', onchange: () => { skillBox.hidden = !f.skillsOn.checked } })
+      const skillBox = h('div', { class: 'checks', hidden: !ownSkills }, state.skills.map(sk => h('label', { title: sk.description }, h('input', { type: 'checkbox', value: sk.name, checked: (ownSkills ? o.skills : b.skills ?? []).includes(sk.name) }), sk.name)))
+      f.projectMemory = h('input', { type: 'checkbox', checked: o.projectMemory ?? true, style: 'width:auto' })
+      f.builtinSkills = h('input', { type: 'checkbox', checked: o.builtinSkills ?? b.builtinSkills, style: 'width:auto' })
+      f.instructions = h('textarea', { value: o.instructions ?? '', placeholder: 'Extra instructions for this agent in this project only (added to its role)', style: 'min-height:60px' })
+      f.fallbacks = h('textarea', { value: fallbacksText(o.fallbacks), placeholder: b.fallbacks?.length ? `inherit:\n${fallbacksText(b.fallbacks)}` : 'codex gpt-5.5\nopencode deepseek/deepseek-chat\nhaiku', style: 'min-height:60px' })
+      const collect = () => {
+        const out = {}
+        for (const k of ['backend', 'model', 'effort', 'provider', 'permission', 'fallbackModel', 'instructions']) if (f[k].value.trim()) out[k] = f[k].value.trim()
+        for (const k of ['maxTurns', 'maxBudgetUsd']) if (f[k].value) out[k] = Number(f[k].value)
+        if (f.memMode.value || f.memScope.value) out.memory = { ...(f.memMode.value ? { mode: f.memMode.value } : {}), ...(f.memScope.value ? { scope: f.memScope.value } : {}) }
+        out.projectMemory = f.projectMemory.checked
+        if (f.exec.value) out.execution = { mode: f.exec.value }
+        if (f.skillsOn.checked) { out.skills = [...skillBox.querySelectorAll('input:checked')].map(i => i.value); out.builtinSkills = f.builtinSkills.checked }
+        const fb = parseFallbacks(f.fallbacks.value); if (fb.length) out.fallbacks = fb
+        return out
+      }
+      const save = guard(async () => { await api('PUT', `api/chat-projects/${key}/agents/${a.name}`, collect()); toast(`${a.name}: settings saved for ${pname}`); projectAgentsView(projectId, only) })
+      const reset = guard(async () => { if (!confirm(`Reset ${a.name} to its own settings in ${pname}?`)) return; await api('PUT', `api/chat-projects/${key}/agents/${a.name}`, {}); toast(`${a.name}: reset`); projectAgentsView(projectId, only) })
+      return h('div', {},
+        h('div', { class: 'row' },
+          field('Backend', sel('backend', M.backends, o.backend, b.backend)),
+          field('Model', inp('model', o.model, inh(b.model), { list: 'pa-models' }), 'opus, sonnet, haiku, default, or a model id'),
+          field('Effort', sel('effort', M.efforts, o.effort, b.effort)),
+          field('Provider (dsh backend)', inp('provider', o.provider, inh(b.provider ?? 'claude-code')))),
+        h('div', { class: 'row' },
+          field('Memory', sel('memMode', M.memoryModes.map(m => [m, MEM_LABEL[m] ?? m]), o.memory?.mode, MEM_LABEL[b.memory?.mode] ?? b.memory?.mode)),
+          field('Memory scope', sel('memScope', M.memoryScopes, o.memory?.scope, b.memory?.scope)),
+          h('div', {}, h('label', { class: 'checks', style: 'margin-top:22px' }, h('span', { style: 'display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px' }, f.projectMemory, 'Separate memory for this project'), h('span', { class: 'muted', style: 'font-size:12px' }, 'When stateful, notes, journal and resumed sessions stay inside this project.')))),
+        h('div', { class: 'row' },
+          field('Permission', sel('permission', M.permissions, o.permission, b.permission)),
+          field('Runs in', sel('exec', M.execModes, o.execution?.mode, b.execution?.mode)),
+          field('Max turns', inp('maxTurns', o.maxTurns, inh(b.maxTurns ?? 'unlimited'), { type: 'number', min: 1 })),
+          field('Max budget per reply (USD)', inp('maxBudgetUsd', o.maxBudgetUsd, inh(b.maxBudgetUsd ?? 'unlimited'), { type: 'number', min: 0, step: '0.5' }))),
+        h('label', { class: 'checks', style: 'margin:10px 0 0' }, h('span', { style: 'display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px' }, f.skillsOn, `Use different skills in this project (agent's own: ${(b.skills ?? []).join(', ') || 'none'})`)),
+        skillBox,
+        h('div', { hidden: false }, h('label', { class: 'checks', style: 'margin:6px 0 0' }, h('span', { style: 'display:flex;gap:6px;align-items:center;font-size:12px' }, f.builtinSkills, 'Also allow Claude Code\'s bundled and personal skills (applies with project skills)'))),
+        h('div', { class: 'row' },
+          field('Overload fallback model', inp('fallbackModel', o.fallbackModel, inh(b.fallbackModel ?? 'none'), { list: 'pa-models' }), 'Claude Code backend only: used when the main model is overloaded.')),
+        field('Backup models (one per line, tried in order; blank = inherit)', f.fallbacks, BACKUP_HELP),
+        field('Project instructions', f.instructions),
+        a.error ? h('p', { class: 'err' }, a.error) : null,
+        h('div', { class: 'btns' },
+          h('button', { class: 'b p', onclick: save }, 'Save for this project'),
+          a.overrides ? h('button', { class: 'b', onclick: reset }, 'Reset to agent defaults') : null,
+          h('button', { class: 'b', onclick: () => goto('agents', a.name) }, 'Edit the agent itself')))
+    }
+    const card = (a, open) => h('details', { class: 'sec pa-agent', open: open ? true : false },
+      h('summary', {}, avatar(a.name), h('b', {}, a.name), a.overrides ? h('span', { class: 'chip' }, 'customized') : null, h('span', { class: 'muted' }, agentSummary(a.effective))),
+      h('div', { class: 'sec-body' }, form(a)))
+    const pick = only?.length ? list.filter(a => only.includes(a.name)) : list
+    const used = pick.filter(a => a.inChats || a.overrides), rest = pick.filter(a => !a.inChats && !a.overrides)
+    $('#detail').replaceChildren(h('div', { class: 'pa-wrap' },
+      h('datalist', { id: 'pa-models' }, ['opus', 'sonnet', 'haiku', 'default', ...M.models].filter((v, i, x) => x.indexOf(v) === i).map(m => h('option', { value: m }))),
+      h('h2', {}, `Agent settings: ${pname}`),
+      h('p', { class: 'muted' }, `Change how each agent works in the chats of ${pname} only. Blank fields inherit the agent's own settings (Agents tab). Applies to agent replies in group, mention and handoff chats; workflow-mode chats use the workflow's own agent settings.`),
+      only?.length ? h('p', {}, h('a', { onclick: () => projectAgentsView(projectId) }, 'Show all agents')) : null,
+      used.length ? used.map(a => card(a, used.length === 1 || only?.length === 1)) : h('p', { class: 'muted' }, 'No agents are used in this project\'s chats yet.'),
+      rest.length ? h('details', { class: 'sec' }, h('summary', {}, `Other agents (${rest.length})`), h('div', { class: 'sec-body' }, rest.map(a => card(a, false)))) : null))
   }
 
   async function listChats() {
@@ -1042,7 +1137,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => {
       const user = m.from === 'user'
       return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}` },
-        h('div', { class: 'who' }, user ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? '')], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
+        h('div', { class: 'who' }, user ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
         h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
         !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null)
     }) : emptyState('No messages yet', `Say hello to ${r.agents.map(a => '@' + a).join(', ')}`))
@@ -1077,6 +1172,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const head = h('div', { class: 'chat-head' }, titleEl, mode,
         h('button', { class: 'b', onclick: rename }, 'Rename'),
         h('button', { class: 'b', onclick: editAgents }, 'Agents'),
+        h('button', { class: 'b', title: `Model, memory, skills and backup models for these agents in ${projName(r.project)}`, onclick: () => projectAgentsView(r.project ?? '', r.agents) }, 'Agent settings'),
         r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
         h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete'))
     const poll = () => { if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500); else listChatsQuiet() }

@@ -107,6 +107,8 @@ export function createForgeHandler({ registry, engine, chats }) {
     ['POST', /^\/api\/chat-projects$/, b => chats.createProject(b)],
     ['PUT', /^\/api\/chat-projects\/([\w-]+)$/, (b, [id]) => chats.updateProject(id, b)],
     ['DELETE', /^\/api\/chat-projects\/([\w-]+)$/, (_, [id], q) => chats.deleteProject(id, { deleteChats: q.get('deleteChats') === '1' })],
+    ['GET', /^\/api\/chat-projects\/([\w-]+)\/agents$/, (_, [id]) => chats.projectAgents(id)],
+    ['PUT', /^\/api\/chat-projects\/([\w-]+)\/agents\/([\w-]+)$/, (b, [id, name]) => chats.setProjectAgent(id, name, b)],
     ['GET', /^\/api\/chats$/, () => chats.list()],
     ['POST', /^\/api\/chats$/, b => chats.create(b)],
     ['GET', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => chats.view(id)],

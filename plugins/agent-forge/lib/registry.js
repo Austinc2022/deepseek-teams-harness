@@ -85,7 +85,37 @@ export function normalizeAgent(def) {
   if (d.effort !== undefined && !EFFORTS.includes(d.effort)) throw new Error(`agent ${d.name}: effort must be one of ${EFFORTS.join(', ')}`)
   for (const s of d.skills) assertName(s, 'skill name')
   for (const s of d.subagents) assertName(s, 'subagent name')
+  d.fallbacks = normalizeFallbacks(d.fallbacks, d.name)
   return d
+}
+
+/**
+ * Backup models: tried in order when a run fails, returns nothing, or the model declines the request.
+ * Each entry: { model, backend?, provider?, effort? } (backend defaults to the agent's own backend).
+ * Text form (console): one per line, "[backend] model [provider=x] [effort=y]", e.g. "codex gpt-5.5".
+ */
+export function normalizeFallbacks(list, agent = 'agent') {
+  if (list == null) return []
+  if (!Array.isArray(list)) throw new Error(`agent ${agent}: fallbacks must be a list`)
+  if (list.length > 5) throw new Error(`agent ${agent}: at most 5 backup models`)
+  return list.map(f => {
+    if (typeof f === 'string') f = parseFallback(f)
+    if (!f || typeof f !== 'object' || !String(f.model ?? '').trim()) throw new Error(`agent ${agent}: every backup model needs a model`)
+    const o = { model: String(f.model).trim() }
+    if (f.backend) { if (!BACKENDS.includes(f.backend)) throw new Error(`agent ${agent}: backup backend must be one of ${BACKENDS.join(', ')}`); o.backend = f.backend }
+    if (f.provider) o.provider = String(f.provider)
+    if (f.effort) { if (!EFFORTS.includes(f.effort)) throw new Error(`agent ${agent}: backup effort must be one of ${EFFORTS.join(', ')}`); o.effort = f.effort }
+    return o
+  })
+}
+
+export function parseFallback(line) {
+  const parts = String(line).trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return null
+  const o = {}
+  if (BACKENDS.includes(parts[0]) && parts.length > 1) o.backend = parts.shift()
+  for (const t of parts) { const m = t.match(/^(provider|effort)=(.+)$/); if (m) o[m[1]] = m[2]; else if (!o.model) o.model = t }
+  return o
 }
 
 export class Registry {

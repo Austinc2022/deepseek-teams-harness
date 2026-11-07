@@ -19,15 +19,21 @@
  * Projects group rooms: each project is a tab in the UI holding its own agent-team chats. Projects persist in
  * forge/chat-projects.json; a room's `project` field names its project (no field = the General tab). A project
  * may set a default working directory that new chats in it inherit.
+ *
+ * Project agent settings: inside a project (or General) each agent can be re-configured for that project's chats
+ * only: backend, model, effort, stateless/stateful memory (optionally kept separate per project), skills,
+ * permission, execution, limits, extra instructions and backup models. Stored in forge/chat-project-agents.json
+ * as { "<project id | _general>": { "<agent>": overrides } } and merged over the agent's own definition.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { assertName } from './registry.js'
+import { assertName, deepMerge, normalizeAgent } from './registry.js'
 import { runAgent } from './runner.js'
 
 export const CHAT_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'workflow']
 export const MAX_HOPS = 50
+const GENERAL = '_general'
 const clampHops = v => Math.max(0, Math.min(MAX_HOPS, Number(v) || 0))
 const TRANSCRIPT_CHARS = 60000
 
@@ -102,6 +108,78 @@ export class ChatStore {
     this.log = log
     this.live = new Map() // id -> { abort: AbortController }
     this.projectsFile = path.join(path.dirname(this.dir), 'chat-projects.json')
+    this.overridesFile = path.join(path.dirname(this.dir), 'chat-project-agents.json')
+  }
+
+  // ---------------- per-project agent settings
+  #readOverrides() { try { const o = JSON.parse(fs.readFileSync(this.overridesFile, 'utf8')); return o && typeof o === 'object' ? o : {} } catch { return {} } }
+  #writeOverrides(o) { fs.writeFileSync(`${this.overridesFile}.tmp`, JSON.stringify(o, null, 2)); fs.renameSync(`${this.overridesFile}.tmp`, this.overridesFile) }
+  #projectKey(id) { if (!id || id === GENERAL) return GENERAL; this.#assertProject(id); return id }
+
+  /** Clean an overrides object down to the supported fields. */
+  #cleanOverride(o) {
+    const out = {}
+    if (!o || typeof o !== 'object') return out
+    for (const k of ['backend', 'model', 'effort', 'provider', 'permission', 'fallbackModel', 'instructions']) if (typeof o[k] === 'string' && o[k].trim()) out[k] = o[k].trim()
+    for (const k of ['maxTurns', 'maxBudgetUsd']) if (o[k] !== undefined && o[k] !== null && o[k] !== '') { const n = Number(o[k]); if (!(n > 0)) throw new Error(`${k} must be a positive number`); out[k] = n }
+    for (const k of ['skills', 'mcp']) if (Array.isArray(o[k])) out[k] = [...new Set(o[k].map(String))]
+    for (const k of ['builtinSkills', 'projectMemory']) if (typeof o[k] === 'boolean') out[k] = o[k]
+    if (Array.isArray(o.fallbacks)) out.fallbacks = o.fallbacks
+    if (o.memory && typeof o.memory === 'object') { const m = {}; for (const k of ['mode', 'scope']) if (o.memory[k]) m[k] = String(o.memory[k]); if (Object.keys(m).length) out.memory = m }
+    if (o.execution?.mode) out.execution = { mode: String(o.execution.mode) }
+    return out
+  }
+
+  /** The agent definition used in a project's chats: its own definition plus the project's overrides. */
+  agentDef(projectId, agentName) {
+    const base = this.registry.getAgent(agentName)
+    let key
+    try { key = this.#projectKey(projectId) } catch { key = GENERAL }
+    const o = this.#readOverrides()[key]?.[agentName]
+    if (!o) return base
+    const { instructions, projectMemory, ...patch } = o
+    if (instructions) patch.role = `${base.role ? `${base.role.trim()}\n\n` : ''}# Instructions for this project\n${instructions}`
+    const def = deepMerge(base, patch)
+    // stateful agents can keep a memory (and resumable session) of their own for this project
+    if (projectMemory && (def.memory?.mode ?? 'none') !== 'none') def.memory = { ...def.memory, namespace: `project-${key}-${agentName}` }
+    return normalizeAgent(def)
+  }
+
+  /** Agents with per-project settings: the overrides plus the agent's own and effective settings. */
+  projectAgents(projectId) {
+    const key = this.#projectKey(projectId)
+    const all = this.#readOverrides()[key] ?? {}
+    const used = new Set(this.list().filter(r => (r.project ?? GENERAL) === key || (key === GENERAL && !r.project)).flatMap(r => r.agents))
+    const brief = d => ({ backend: d.backend, model: d.model, effort: d.effort, provider: d.provider, permission: d.permission, memory: d.memory, skills: d.skills, execution: { mode: d.execution.mode }, maxTurns: d.maxTurns, maxBudgetUsd: d.maxBudgetUsd, fallbackModel: d.fallbackModel, fallbacks: d.fallbacks, builtinSkills: d.builtinSkills === true, mcp: d.mcp })
+    const out = []
+    for (const a of this.registry.listAgents()) {
+      if (a.invalid) continue
+      let effective, error
+      try { effective = brief(this.agentDef(key, a.name)) } catch (e) { error = e.message }
+      out.push({ name: a.name, description: a.description, inChats: used.has(a.name), overrides: all[a.name] ?? null, base: brief(a), effective, error })
+    }
+    return out
+  }
+
+  /** Save (or with an empty object / null, clear) one agent's settings for a project. */
+  setProjectAgent(projectId, agentName, patch) {
+    const key = this.#projectKey(projectId)
+    assertName(agentName, 'agent name')
+    this.registry.getAgent(agentName)
+    const clean = this.#cleanOverride(patch)
+    const all = this.#readOverrides()
+    all[key] ??= {}
+    const prev = all[key][agentName]
+    if (Object.keys(clean).length) all[key][agentName] = clean; else delete all[key][agentName]
+    if (!Object.keys(all[key]).length) delete all[key]
+    this.#writeOverrides(all)
+    try { this.agentDef(key, agentName) } catch (e) {
+      // invalid combination: put the previous settings back
+      if (prev) { all[key] ??= {}; all[key][agentName] = prev } else if (all[key]) delete all[key][agentName]
+      this.#writeOverrides(all)
+      throw e
+    }
+    return { ok: true, overrides: clean }
   }
 
   // ---------------- projects (tabs that group chats)
@@ -167,6 +245,8 @@ export class ChatStore {
       else { const room = this.get(r.id); delete room.busy; delete room.project; this.#save(room); moved++ }
     }
     this.#writeProjects(list.filter(p => p.id !== id))
+    const ov = this.#readOverrides()
+    if (ov[id]) { delete ov[id]; this.#writeOverrides(ov) }
     return { ok: true, moved, deleted }
   }
 
@@ -389,7 +469,7 @@ export class ChatStore {
 
   async #reply(id, agentName, signal, cutoff) {
     let room = this.get(id)
-    const def = this.registry.getAgent(agentName)
+    const def = this.agentDef(room.project, agentName)
     const transcript = this.#transcript(room, cutoff ?? room.messages.length)
     const msg = { id: newId(), from: agentName, model: def.model, text: '', status: 'pending', tools: [], ts: now() }
     room.messages.push(msg)
@@ -404,7 +484,8 @@ export class ChatStore {
     const res = await runAgent({
       def, registry: this.registry, prompt, cwd: room.cwd, team: room.team, label: `chat:${agentName}`, contextNote, signal,
       onEvent: e => {
-        if (e.type !== 'tool') return
+        if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
+        if (e.type !== 'tool' && e.type !== 'fallback') return
         msg.tools.push(e.brief ?? e.name)
         if (Date.now() - lastFlush > 800) { lastFlush = Date.now(); const t = [...msg.tools]; patch(m => { m.tools = t }) }
       },
@@ -412,6 +493,7 @@ export class ChatStore {
     patch(m => {
       m.tools = msg.tools
       m.durationMs = res.durationMs
+      if (res.attempts) m.attempts = res.attempts
       if (res.ok) { m.status = 'done'; m.text = (res.text ?? JSON.stringify(res.structured, null, 2)).replace(new RegExp(`^\\s*\\**@?${agentName}\\**\\s*:\\s*`, 'i'), '') }
       else { m.status = signal.aborted ? 'cancelled' : 'failed'; m.text = signal.aborted ? 'Stopped.' : res.error }
     })

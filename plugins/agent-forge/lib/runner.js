@@ -9,6 +9,9 @@
  * backend dsh: the task runs through `dsh headless` with the agent's
  *   provider/model, e.g. a DeepSeek model; memory context is injected into the
  *   prompt (no skills/subagents/sandbox options on this backend).
+ *
+ * Backup models (def.fallbacks): when the primary run fails, returns an empty reply or the
+ * model declines (stop_reason "refusal"), the same prompt runs on the next backup model.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -23,6 +26,7 @@ import { buildSkillPlugin } from './skills.js'
 import { filesSummary } from './agent-files.js'
 import { McpLibrary } from './mcp.js'
 import { runCli, CLI_BACKENDS } from './cli-backends.js'
+import { deepMerge, normalizeAgent } from './registry.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits', auto: 'auto', plan: 'plan', deny: 'dontAsk' }
@@ -108,14 +112,40 @@ export async function runAgent(p) {
   const write = line => { if (p.transcriptFile) fs.appendFileSync(p.transcriptFile, line) }
   write(`# ${p.label ?? def.name} (${def.name})\n\n- model: ${def.model}${def.effort ? ` / effort ${def.effort}` : ''}\n- backend: ${def.backend}\n- execution: ${def.execution.mode}\n- memory: ${def.memory.mode}\n- cwd: ${cwd}\n\n## Task\n\n${p.prompt}\n\n## Transcript\n\n`)
 
-  let res
-  try {
-    res = def.backend === 'dsh' ? await runDsh(p, mem, cwd)
-      : CLI_BACKENDS.includes(def.backend) ? await runCli(p, mem, cwd, write, systemAppend(def, mem, p, cwd))
-      : await runClaudeCode(p, mem, cwd, write)
-  } catch (e) {
-    res = { ok: false, error: e?.message ?? String(e) }
+  // primary model, then each backup model in order (see normalizeFallbacks)
+  const backup = f => {
+    const d = deepMerge(def, { ...f, fallbacks: [] })
+    delete d.fallbackModel
+    if (f.backend && f.backend !== def.backend && !f.provider) delete d.provider
+    return normalizeAgent(d)
   }
+  const plan = [def, ...(def.fallbacks ?? []).map(backup)]
+  const attempts = []
+  let res
+  for (let i = 0; i < plan.length; i++) {
+    const d = plan[i]
+    // a backup does not resume or overwrite the primary model's saved session
+    const m = i === 0 ? mem : { ...mem, sessionId: null, saveSession() {} }
+    if (i > 0) {
+      const why = attempts.at(-1).reason
+      write(`\n## Switching to backup model ${i}: ${d.backend} / ${d.model} (${why})\n\n`)
+      p.onEvent?.({ type: 'fallback', backend: d.backend, model: d.model, reason: why, brief: `backup model ${d.backend}/${d.model} after: ${why}` })
+    }
+    try {
+      const q = { ...p, def: d }
+      res = d.backend === 'dsh' ? await runDsh(q, m, cwd)
+        : CLI_BACKENDS.includes(d.backend) ? await runCli(q, m, cwd, write, systemAppend(d, m, q, cwd))
+        : await runClaudeCode(q, m, cwd, write)
+    } catch (e) {
+      res = { ok: false, error: e?.message ?? String(e) }
+    }
+    if (res.ok && !res.refused && (res.structured !== undefined || String(res.text ?? '').trim())) { attempts.push({ backend: d.backend, model: d.model, ok: true }); break }
+    const reason = res.refused ? 'the model declined the request' : !res.ok ? String(res.error ?? 'failed').replace(/\s+/g, ' ').slice(0, 200) : 'empty reply'
+    if (res.ok) res = { ...res, ok: false, error: res.refused ? `${d.model} declined the request${res.text ? `: ${res.text}` : ''}` : `${d.model} returned an empty reply` }
+    attempts.push({ backend: d.backend, model: d.model, ok: false, reason })
+    if (p.signal?.aborted) break
+  }
+  if (attempts.length > 1) { res.attempts = attempts; if (res.ok) res.usedModel = `${attempts.at(-1).backend}/${attempts.at(-1).model}` }
   res.durationMs = Date.now() - t0
   write(`\n## Result (${res.ok ? 'ok' : 'failed'}, ${Math.round(res.durationMs / 1000)}s${res.turns ? `, ${res.turns} turns` : ''})\n\n${res.ok ? (res.structured !== undefined ? '```json\n' + JSON.stringify(res.structured, null, 2) + '\n```' : res.text) : res.error}\n`)
   try { mem.afterRun({ task: p.prompt, outcome: res.ok ? (res.text ?? JSON.stringify(res.structured)) : `FAILED: ${res.error}`, label: p.label, runId: p.runId, ok: res.ok }) } catch {}
@@ -248,6 +278,7 @@ async function runClaudeCode(p, mem, cwd, write) {
   const ok = result.subtype === 'success' && !result.is_error
   return {
     ok,
+    refused: result.stop_reason === 'refusal',
     text: ok ? (result.result || text) : undefined,
     structured: result.structured_output,
     error: ok ? undefined : (result.errors?.join('; ') || result.result || result.subtype),
