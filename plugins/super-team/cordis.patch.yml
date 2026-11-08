@@ -1,0 +1,5 @@
+# Super team inside the DSH web UI: serves the page under /super-team on DSH's own
+# web server (DSH login required) and adds a sidebar page in the browser.
+- insert:
+    - id: super-team
+      name: '@local/super-team'

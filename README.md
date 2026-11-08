@@ -10,6 +10,7 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/agent-forge-web` | Puts Agent Forge **inside the DSH web UI**: four sidebar pages (Agent chat, Agents, Agent teams, Workflows) served from `/forge/` on the DSH web server, behind the DSH login. |
 | `plugins/project-board` | A **Projects** page: projects with categorized tasks; each task runs its own orchestration of agents and workflows. |
 | `plugins/cli-workbench` | A **CLI workbench** page in the web UI: many interactive Claude Code, Codex and OpenCode terminals side by side, each in its own git worktree. |
+| `plugins/super-team` | A **Super team** page: one supervisor agent orchestrates many agent teams, in parallel or in sequence depending on the task, with every Agent chat mode at both levels. |
 
 DSH's own **Agent Teams** bundle is also enabled in the `web` profile (`spawn_teammate`, a shared task board, and a team UI).
 
@@ -155,6 +156,27 @@ The **Projects** sidebar page organizes work as projects, each with many tasks o
 - **Open in CLI workbench:** starts an interactive Claude Code session for the task on the CLI workbench page.
 
 Every agent keeps its own settings (model, backend such as `claude-cli` or `codex`, skills, memory, execution mode). Projects are saved in `forge/projects/` (excluded from git).
+
+## Super team: one supervisor, many agent teams
+
+The **Super team** sidebar page is a chat with a *super team*: one supervisor agent (default `super-orchestrator`, Opus) that runs whole Agent Forge teams as its workers.
+
+**Super-team modes** (how the supervisor runs its teams):
+
+| Mode | What happens |
+|---|---|
+| `auto` (default) | The supervisor plans **waves**: teams in one wave run **in parallel**, waves run **in sequence**, and later waves see earlier results. After each round it reviews the results and can add follow-up waves (up to *Max rounds*). |
+| `sequential` | Every team works in turn (in the listed order) and sees the earlier teams' results. |
+| `parallel` | Every team works on the request at the same time. |
+| `mention` | Only teams you `@mention` (e.g. `@dev-team`) work, in that order. |
+| `handoff` | The supervisor delegates one round at a time, reads the results, then picks the next team(s) or finishes. |
+| `workflow` | Each message runs a saved workflow with your args plus `message` and `teams`. |
+
+In `sequential`, `parallel` and `mention` mode, a team whose result `@mentions` another team hands the work on to it (up to *Max team hand-offs*). Unless you untick it, the supervisor writes one final answer from all the team results.
+
+**Team modes:** inside the super team, each team keeps the Agent chat modes: `sequential`, `parallel`, `mention`, `handoff` (with a lead) and `workflow`, plus `@agent` hand-offs between members. Per team you can also choose which members take part and give the team a role. Supervisor briefs can `@mention` individual members.
+
+Each message is one Agent Forge run, so it also shows on Workflows → Runs. Click any agent in the timeline to open its transcript. Follow-up messages see the earlier requests and answers. `FORGE_MAX_PARALLEL` (default 4) caps how many agents run at once across all teams. Chats are saved in `forge/super-teams/` (excluded from git).
 
 ## CLI workbench: many Claude Code terminals on one page
 

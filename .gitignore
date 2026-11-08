@@ -42,3 +42,7 @@ forge/teams/t[0-9][0-9]-*.yaml
 forge/orchestrations/ros-*.js
 forge/orchestrations/lib/
 forge/skills/ros-*/
+
+# Super team chats (your conversations and their configuration)
+forge/super-teams/
+forge/super-team-projects.json

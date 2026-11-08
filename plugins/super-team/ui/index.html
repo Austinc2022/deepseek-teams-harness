@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super team</title>
+<style>
+:root {
+  color-scheme: light;
+  --dsw-alias-bg-base: #fff; --dsw-alias-bg-layer-1: #fff; --dsw-alias-bg-layer-2: #f6f6f7;
+  --dsw-alias-label-primary: #0f1115; --dsw-alias-label-secondary: #61666b; --dsw-alias-label-tertiary: #81858c;
+  --dsw-alias-border-l2: #0000001a; --dsw-alias-border-l3: #0000001f;
+  --dsw-alias-interactive-bg-hover: #2631480f; --dsw-alias-interactive-bg-active: #2631481a;
+  --dsw-alias-state-error-primary: #ec1313; --dsw-alias-state-success-primary: #22c55e; --dsw-alias-state-business-primary: #4176e6; --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-radius-sm: 8px; --dsw-radius-md: 12px;
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  --dsh-font-family-code-default: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.embedded) {
+    color-scheme: dark;
+    --dsw-alias-bg-base: #151517; --dsw-alias-bg-layer-1: #232324; --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-label-primary: #f9fafb; --dsw-alias-label-secondary: #cfd3d6; --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-border-l2: #ffffff1f; --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-interactive-bg-hover: #ffffff14; --dsw-alias-interactive-bg-active: #ffffff24;
+    --dsw-alias-state-error-primary: #f25a5a; --dsw-alias-state-business-primary: #7aaaff;
+  }
+}
+:root {
+  --bg: var(--dsw-alias-bg-base); --surface: var(--dsw-alias-bg-layer-1); --surface-2: var(--dsw-alias-bg-layer-2);
+  --ink: var(--dsw-alias-label-primary); --ink-2: var(--dsw-alias-label-secondary); --ink-3: var(--dsw-alias-label-tertiary);
+  --line: var(--dsw-alias-border-l2); --line-3: var(--dsw-alias-border-l3);
+  --hover: var(--dsw-alias-interactive-bg-hover); --active: var(--dsw-alias-interactive-bg-active);
+  --ok: var(--dsw-alias-state-success-primary); --bad: var(--dsw-alias-state-error-primary); --info: var(--dsw-alias-state-business-primary); --warn: var(--dsw-alias-state-warn-primary);
+  --r-sm: var(--dsw-radius-sm); --r-md: var(--dsw-radius-md);
+  --mono: var(--dsh-font-family-code-default);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(--dsw-font-family); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; overflow: hidden; }
+#app { flex: 1; min-height: 0; display: flex; }
+
+/* project tabs */
+#tabs { display: flex; align-items: flex-end; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
+.tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-bottom: 0; border-radius: var(--r-sm) var(--r-sm) 0 0; background: transparent; padding: 5px 12px; color: var(--ink-2); margin-bottom: -1px; }
+.tab:hover { background: var(--hover); color: var(--ink); }
+.tab.sel { background: var(--bg); border-color: var(--line); color: var(--ink); font-weight: 600; }
+.tab .cnt { font-size: 11px; color: var(--ink-3); font-weight: 400; }
+.tab .sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tab .edit { color: var(--ink-3); padding: 0 2px; border-radius: 4px; }
+.tab .edit:hover { color: var(--ink); background: var(--active); }
+#tabs .add { margin-left: 4px; margin-bottom: 3px; }
+.pchip { border: 0; color: #fff; }
+#projInfo { padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-2); white-space: pre-wrap; max-height: 64px; overflow: auto; }
+#projInfo:empty { display: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 4px 10px; white-space: nowrap; }
+button:hover { background: var(--hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.primary:hover { opacity: .88; }
+button.danger { color: var(--bad); }
+button.ghost { border-color: transparent; background: transparent; color: var(--ink-2); padding: 2px 7px; }
+button.ghost:hover { background: var(--hover); color: var(--ink); }
+input, select, textarea { border: 1px solid var(--line-3); background: var(--surface); border-radius: var(--r-sm); padding: 5px 8px; min-width: 0; }
+textarea { resize: vertical; min-height: 56px; width: 100%; }
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+label.check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
+pre { font-family: var(--mono); font-size: 12px; line-height: 18px; background: var(--surface-2); padding: 8px 10px; border-radius: var(--r-sm); overflow-x: auto; white-space: pre; margin: 6px 0; }
+.muted { color: var(--ink-3); font-size: 12px; }
+.err { color: var(--bad); white-space: pre-wrap; font-size: 12px; }
+.err:empty { display: none; }
+.row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.row > .grow { flex: 1 1 180px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 16px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-3); color: var(--ink-2); white-space: nowrap; }
+.st { font-size: 11px; line-height: 16px; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.st.running, .st.queued { color: var(--info); } .st.done, .st.completed { color: var(--ok); } .st.failed { color: var(--bad); } .st.cancelled, .st.interrupted, .st.unknown { color: var(--ink-3); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--info); animation: pulse 1.2s infinite; flex: none; display: inline-block; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* sidebar */
+#side { width: 240px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+#side header { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+#side header h1 { font-size: 15px; margin: 0; flex: 1; }
+#chatList { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.item { padding: 7px 9px; border-radius: var(--r-sm); cursor: pointer; }
+.item:hover { background: var(--hover); }
+.item.sel { background: var(--active); }
+.item .n { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.item .n span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.item .c { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* main */
+#main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+#head { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+#head .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#head h2 { font-size: 16px; margin: 0; cursor: text; }
+#head .spacer { flex: 1; }
+.teamstrip { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.teamstrip .chip b { color: var(--ink); font-weight: 600; }
+#msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.empty { margin: auto; max-width: 560px; text-align: center; color: var(--ink-2); }
+.empty h3 { color: var(--ink); }
+.msg { display: flex; gap: 10px; max-width: 1100px; }
+.av { width: 28px; height: 28px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; flex: none; }
+.bubble { flex: 1; min-width: 0; }
+.bubble .who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; margin-bottom: 4px; }
+.bubble .who .muted { font-weight: 400; }
+.user .body { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; white-space: pre-wrap; word-wrap: break-word; }
+.md p { margin: 4px 0; white-space: pre-wrap; word-wrap: break-word; }
+.md h1, .md h2, .md h3, .md h4 { margin: 10px 0 4px; font-size: 14px; }
+.md h1 { font-size: 16px; } .md h2 { font-size: 15px; }
+.md ul { margin: 4px 0; padding-left: 20px; }
+.answer { border: 1px solid var(--line-3); border-radius: var(--r-md); padding: 8px 12px; margin-top: 8px; background: var(--surface); }
+
+/* orchestration timeline */
+.timeline { display: flex; flex-direction: column; gap: 6px; }
+.group { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); position: relative; }
+.group.par { padding: 18px 6px 6px; border: 1px dashed var(--line-3); border-radius: var(--r-md); }
+.group.par::before { content: attr(data-label); position: absolute; top: 2px; left: 10px; font-size: 11px; color: var(--ink-3); }
+.step { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 9px; background: var(--surface); min-width: 0; }
+.step.sup { background: var(--surface-2); }
+.step .sh { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.step .sh .t { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step details { margin-top: 4px; }
+.step summary { cursor: pointer; color: var(--ink-2); font-size: 12px; }
+.step .out { max-height: 420px; overflow: auto; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.agents { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.ag { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; border-radius: 6px; padding: 1px 4px; }
+.ag:hover { background: var(--hover); }
+.ag .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ink-3); }
+.ag .dot.running { background: var(--info); animation: pulse 1.2s infinite; } .ag .dot.completed { background: var(--ok); } .ag .dot.failed { background: var(--bad); }
+.ag .tool { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+
+/* composer */
+#composer { border-top: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 8px; align-items: flex-end; }
+#composer textarea { min-height: 44px; max-height: 240px; flex: 1; }
+#composer .side { display: flex; flex-direction: column; gap: 6px; }
+#hint { padding: 0 16px 8px; }
+
+/* settings drawer + dialogs */
+.panel { width: 460px; max-width: 100vw; flex: none; border-left: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 40px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.panel h3 { margin: 4px 0 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.panel h3 .spacer { flex: 1; }
+.panel .help { font-size: 12px; color: var(--ink-3); margin-top: -4px; }
+.tcard { border: 1px solid var(--line-3); border-radius: var(--r-sm); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.tcard .th { display: flex; align-items: center; gap: 6px; }
+.tcard .th b { flex: 1; }
+.members { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.mode { border: 1px solid var(--line-3); border-radius: var(--r-sm); padding: 6px 8px; cursor: pointer; text-align: left; white-space: normal; display: flex; flex-direction: column; gap: 2px; }
+.mode b { font-size: 12px; } .mode span { font-size: 11px; color: var(--ink-3); line-height: 15px; }
+.mode[aria-pressed="true"] { border-color: var(--info); background: var(--active); }
+dialog { border: 1px solid var(--line-3); border-radius: var(--r-md); background: var(--bg); color: var(--ink); padding: 0; width: min(900px, 94vw); max-height: 86vh; }
+dialog::backdrop { background: #0006; }
+dialog .dh { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+dialog .dh b { flex: 1; }
+dialog .db { padding: 10px 14px; overflow: auto; max-height: calc(86vh - 50px); }
+@media (max-width: 760px) { #side { display: none; } .panel { position: fixed; inset: 0; width: auto; z-index: 5; } }
+</style>
+</head>
+<body>
+<nav id="tabs" aria-label="Projects"></nav>
+<div id="app">
+<aside id="side">
+  <header><h1 id="sideTitle">Super team</h1><button class="primary" id="newBtn" title="New super team in this project">+ New</button></header>
+  <div id="projInfo"></div>
+  <div id="chatList"></div>
+</aside>
+<div id="main">
+  <div id="head" hidden></div>
+  <div id="msgs"></div>
+  <div id="composer" hidden>
+    <textarea id="input" placeholder="Give the super team a task… (Enter to send, Shift+Enter for a new line)"></textarea>
+    <div class="side"><button class="primary" id="sendBtn">Send</button><button id="stopBtn" class="danger" hidden>Stop</button></div>
+  </div>
+  <div id="hint" class="muted" hidden></div>
+</div>
+<aside class="panel" id="settings" hidden aria-label="Super team settings"></aside>
+</div>
+<dialog id="dlg"><div class="dh"><b id="dlgTitle"></b><button class="ghost" id="dlgClose">✕</button></div><div class="db" id="dlgBody"></div></dialog>
+
+<script>
+(() => {
+  if (window.parent !== window) {
+    document.documentElement.classList.add('embedded')
+    const sync = () => {
+      try {
+        const frame = window.frameElement, pd = window.parent.document
+        if (!frame) return
+        const cs = window.parent.getComputedStyle(frame), root = document.documentElement
+        for (const sheet of pd.styleSheets) {
+          let rules; try { rules = sheet.cssRules } catch { continue }
+          const walk = rs => { for (const r of rs) { if (r.style) for (const p of r.style) if (p.startsWith('--dsw-') || p.startsWith('--dsh-font')) { const v = cs.getPropertyValue(p).trim(); if (v) root.style.setProperty(p, v) } if (r.cssRules) walk(r.cssRules) } }
+          walk(rules)
+        }
+        root.style.colorScheme = cs.colorScheme || ''
+      } catch {}
+    }
+    sync()
+    try { new MutationObserver(() => setTimeout(sync, 30)).observe(window.parent.document.documentElement, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-theme', 'data-ds-theme'] }) } catch {}
+  }
+
+  const $ = s => document.querySelector(s)
+  const h = (tag, props = {}, ...kids) => {
+    const el = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+      else if (k === 'class') el.className = v
+      else if (k === 'value') el.value = v
+      else if (k === 'checked') el.checked = !!v
+      else if (k === 'selected') el.selected = !!v
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v)
+      else el.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) el.append(c)
+    return el
+  }
+  const api = async (method, url, body) => {
+    const r = await fetch(url, { method, headers: { 'x-super-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+    return j
+  }
+  const store = { get: k => { try { return localStorage.getItem(`st.${k}`) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(`st.${k}`, v) } catch {} } }
+  const ago = iso => { if (!iso) return ''; const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : new Date(iso).toLocaleDateString() }
+  const dur = ms => !ms ? '' : ms < 60000 ? `${Math.round(ms / 1000)}s` : ms < 3600000 ? `${Math.floor(ms / 60000)}m ${Math.round(ms / 1000) % 60}s` : `${(ms / 3600000).toFixed(1)}h`
+  const since = (a, b) => a ? dur((b ? new Date(b) : new Date()) - new Date(a)) : ''
+  const hue = name => [...String(name)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
+  const flash = (msg) => { const el = h('div', { class: 'err', style: { position: 'fixed', bottom: '12px', right: '12px', background: 'var(--bg)', border: '1px solid var(--bad)', padding: '8px 12px', borderRadius: '8px', zIndex: 9 } }, msg); document.body.append(el); setTimeout(() => el.remove(), 5000) }
+
+  // Small, safe Markdown: fenced code, headings, bullets, inline code, bold. Text nodes only.
+  const inline = s => {
+    const out = []
+    for (const seg of String(s).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/)) {
+      if (/^`[^`]+`$/.test(seg)) out.push(h('code', {}, seg.slice(1, -1)))
+      else if (/^\*\*[^*]+\*\*$/.test(seg)) out.push(h('b', {}, seg.slice(2, -2)))
+      else if (seg) out.push(seg)
+    }
+    return out
+  }
+  const md = text => {
+    const root = h('div', { class: 'md' })
+    String(text ?? '').split(/```[\w-]*\n?/).forEach((part, i) => {
+      if (i % 2) { root.append(h('pre', {}, part.replace(/\n$/, ''))); return }
+      let ul = null, para = []
+      const flush = () => { if (para.length) { root.append(h('p', {}, inline(para.join('\n')))); para = [] } }
+      for (const line of part.split('\n')) {
+        const hd = line.match(/^(#{1,4})\s+(.*)$/), li = line.match(/^\s*[-*]\s+(.*)$/)
+        if (hd) { flush(); ul = null; root.append(h(`h${hd[1].length}`, {}, inline(hd[2]))) }
+        else if (li) { flush(); if (!ul) { ul = h('ul'); root.append(ul) } ul.append(h('li', {}, inline(li[1]))) }
+        else if (!line.trim()) { flush(); ul = null }
+        else { ul = null; para.push(line) }
+      }
+      flush()
+    })
+    return root
+  }
+
+  const SUPER_MODE = {
+    auto: ['Auto (supervisor plans)', 'The supervisor picks teams and plans waves: teams in a wave run in parallel, waves run in sequence. It reviews results and may add follow-up rounds.'],
+    sequential: ['Sequential', 'Every team works in turn and sees the earlier teams\' results. The supervisor writes the final answer.'],
+    parallel: ['Parallel', 'Every team works on the request at the same time. The supervisor merges the results.'],
+    mention: ['Mention only', 'Only teams you @mention (e.g. @dev-team) work, in that order. Falls back to the first team.'],
+    handoff: ['Handoff (step by step)', 'The supervisor delegates one round at a time, looks at the results, then decides who goes next or finishes.'],
+    workflow: ['Workflow', 'Each message runs a saved workflow with your args plus message and teams.'],
+  }
+  const TEAM_MODE = {
+    sequential: 'Everyone in turn: members reply in order and see earlier replies',
+    parallel: 'Everyone at once: members reply in parallel',
+    mention: 'Mention only: only @mentioned members reply (else the first)',
+    handoff: 'Handoff: the lead starts, @mentions pass it on',
+    workflow: 'Workflow: run one of the saved workflows for this team',
+  }
+  const parseArgs = t => Object.fromEntries(String(t).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.includes('=')).map(l => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]))
+  const argsText = o => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join('\n')
+
+  const PCOLORS = ['#4176e6', '#e5484d', '#8e4ec6', '#30a46c', '#f59e0b', '#0ea5a4', '#d6409f', '#6b7280']
+  const S = { meta: null, projects: [], general: { chats: 0, busy: 0 }, tab: store.get('tab') ?? 'all', list: [], chat: null, id: store.get('chat'), poll: null, listPoll: null, draft: null, expanded: new Set(), runs: new Map() }
+
+  // ---------------- list
+  const projectOf = id => S.projects.find(p => p.id === id)
+  const projColor = p => p?.color ?? PCOLORS[Math.max(0, S.projects.indexOf(p)) % PCOLORS.length]
+  const projChip = id => { const p = projectOf(id); return p ? h('span', { class: 'chip pchip', style: { background: projColor(p) } }, p.name) : h('span', { class: 'chip' }, 'General') }
+  const inTab = c => S.tab === 'all' || (S.tab === '' ? !c.project : c.project === S.tab)
+
+  function renderTabs() {
+    const tab = (id, label, stats, p) => h('button', { class: `tab${S.tab === id ? ' sel' : ''}`, title: p?.description ?? '', onclick: () => setTab(id) },
+      p ? h('span', { class: 'sw', style: { background: projColor(p) } }) : null, label,
+      stats ? h('span', { class: 'cnt' }, String(stats.chats)) : null,
+      stats?.busy ? h('span', { class: 'pulse', title: `${stats.busy} working` }) : null,
+      p && S.tab === id ? h('span', { class: 'edit', title: 'Project settings', onclick: e => { e.stopPropagation(); projectDialog(p) } }, '✎') : null)
+    $('#tabs').replaceChildren(
+      tab('all', 'All', { chats: S.list.length, busy: S.list.filter(c => c.busy).length }),
+      tab('', 'General', S.general),
+      ...S.projects.map(p => tab(p.id, p.name, p, p)),
+      h('button', { class: 'ghost add', title: 'New project', onclick: () => projectDialog(null) }, '+ Project'))
+    const p = projectOf(S.tab)
+    $('#sideTitle').textContent = S.tab === 'all' ? 'All super teams' : p ? p.name : S.tab === '' ? 'General' : 'Super team'
+    $('#projInfo').textContent = p ? [p.description, p.cwd ? `Folder: ${p.cwd}` : ''].filter(Boolean).join('\n') : ''
+  }
+
+  function setTab(id) {
+    S.tab = id
+    store.set('tab', id)
+    renderTabs()
+    renderList()
+    if (S.chat && !inTab(S.chat)) open(S.list.find(inTab)?.id ?? null)
+    else if (!S.chat) open(S.list.find(inTab)?.id ?? null)
+  }
+
+  async function loadList() {
+    const [list, pr] = await Promise.all([api('GET', 'api/chats'), api('GET', 'api/projects')])
+    S.list = list
+    S.projects = pr.projects
+    S.general = pr.general
+    if (S.tab !== 'all' && S.tab !== '' && !projectOf(S.tab)) { S.tab = 'all'; store.set('tab', 'all') }
+    renderTabs()
+    renderList()
+  }
+
+  function renderList() {
+    const el = $('#chatList')
+    const shown = S.list.filter(inTab)
+    el.replaceChildren(...shown.map(c => h('div', { class: `item${c.id === S.id ? ' sel' : ''}`, onclick: () => open(c.id) },
+      h('div', { class: 'n' }, h('span', {}, c.title), c.busy ? h('span', { class: 'pulse', title: 'working' }) : c.last && c.last !== 'done' ? h('span', { class: `st ${c.last}` }, c.last) : null),
+      h('div', { class: 'c' }, `${SUPER_MODE[c.mode]?.[0] ?? c.mode} · ${c.teams.length} team${c.teams.length === 1 ? '' : 's'}`),
+      h('div', { class: 'c' }, `${c.teams.join(', ') || 'no teams'} · ${ago(c.updatedAt)}`),
+      S.tab === 'all' ? h('div', {}, projChip(c.project)) : null)))
+    if (!shown.length) el.append(h('div', { class: 'muted', style: { padding: '10px' } }, S.tab === 'all' ? 'No super teams yet. Press + New.' : 'No super teams in this project yet. Press + New.'))
+  }
+
+  // ---------------- projects
+  function projectDialog(p) {
+    const d = { name: p?.name ?? '', cwd: p?.cwd ?? '', description: p?.description ?? '', color: p ? projColor(p) : PCOLORS[S.projects.length % PCOLORS.length] }
+    const err = h('div', { class: 'err' })
+    const swatches = h('div', { class: 'row' })
+    const drawSw = () => swatches.replaceChildren(...PCOLORS.map(c => h('button', { title: c, style: { width: '22px', height: '22px', padding: 0, borderRadius: '50%', background: c, outline: c === d.color ? '2px solid var(--ink)' : 'none', outlineOffset: '2px' }, onclick: () => { d.color = c; drawSw() } })))
+    drawSw()
+    const save = async () => {
+      err.textContent = ''
+      try {
+        const out = p ? await api('PUT', `api/projects/${p.id}`, d) : await api('POST', 'api/projects', d)
+        $('#dlg').close()
+        S.tab = out.id
+        store.set('tab', out.id)
+        await loadList()
+        setTab(out.id)
+      } catch (e) { err.textContent = e.message }
+    }
+    const del = async () => {
+      const n = S.list.filter(c => c.project === p.id).length
+      if (!confirm(`Delete project "${p.name}"?${n ? `\nIts ${n} super team(s) move to General (choose Cancel on the next question to keep them).` : ''}`)) return
+      const drop = n ? confirm(`Also DELETE its ${n} super team(s) and their conversations?\nOK = delete them, Cancel = move them to General.`) : false
+      try { await api('DELETE', `api/projects/${p.id}${drop ? '?deleteChats=1' : ''}`); $('#dlg').close(); S.tab = 'all'; store.set('tab', 'all'); await loadList(); setTab('all') } catch (e) { err.textContent = e.message }
+    }
+    $('#dlgTitle').textContent = p ? `Project: ${p.name}` : 'New project'
+    $('#dlgBody').replaceChildren(h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '560px' } },
+      h('label', { class: 'field' }, 'Name', h('input', { value: d.name, placeholder: 'e.g. Mobile app launch', oninput: e => (d.name = e.target.value) })),
+      h('label', { class: 'field' }, 'Default working folder (new super teams in this project start here; optional)', h('input', { value: d.cwd, placeholder: '~/code/my-app', oninput: e => (d.cwd = e.target.value) })),
+      h('label', { class: 'field' }, 'Description (given to every supervisor and team in this project as context; optional)', h('textarea', { value: d.description, oninput: e => (d.description = e.target.value) })),
+      h('div', { class: 'field' }, h('span', {}, 'Color'), swatches),
+      err,
+      h('div', { class: 'row' }, h('button', { class: 'primary', onclick: save }, p ? 'Save' : 'Create project'), p ? h('button', { class: 'danger', onclick: del }, 'Delete project') : null)))
+    $('#dlg').showModal()
+    setTimeout(() => $('#dlgBody input')?.focus(), 30)
+  }
+
+  async function newChat() {
+    try {
+      const teams = S.meta.teams.map(t => ({ team: t.name, mode: 'sequential' }))
+      const sup = S.meta.agents.some(a => a.name === S.meta.defaultSupervisor) ? S.meta.defaultSupervisor : S.meta.agents[0]?.name
+      const project = S.tab !== 'all' && S.tab !== '' ? S.tab : undefined
+      const c = await api('POST', 'api/chats', { title: `Super team ${S.list.filter(x => (x.project ?? '') === (project ?? '')).length + 1}`, supervisor: sup, mode: 'auto', teams, project })
+      await loadList()
+      await open(c.id)
+      openSettings()
+    } catch (e) { flash(e.message) }
+  }
+
+  // ---------------- chat view
+  async function open(id) {
+    S.id = id
+    store.set('chat', id || '')
+    S.expanded.clear()
+    if (!id) { S.chat = null; render(); return }
+    try { S.chat = await api('GET', `api/chats/${id}`) } catch (e) { S.chat = null; S.id = null; store.set('chat', ''); flash(e.message) }
+    render()
+    $('#msgs').scrollTop = 1e9
+    loadList().catch(() => {})
+  }
+
+  async function refresh() {
+    if (!S.id) return
+    try {
+      const atBottom = $('#msgs').scrollHeight - $('#msgs').scrollTop - $('#msgs').clientHeight < 80
+      const wasBusy = S.chat?.busy
+      S.chat = await api('GET', `api/chats/${S.id}`)
+      renderMessages()
+      renderHead()
+      if (atBottom) $('#msgs').scrollTop = 1e9
+      if (wasBusy && !S.chat.busy) loadList().catch(() => {})
+    } catch {}
+  }
+
+  function schedulePoll() {
+    clearInterval(S.poll)
+    S.poll = setInterval(() => { if (S.chat?.busy) refresh() }, 2000)
+  }
+
+  function render() {
+    renderHead()
+    renderMessages()
+    $('#composer').hidden = !S.chat
+    $('#hint').hidden = !S.chat
+    if (!S.chat) $('#settings').hidden = true
+    else if (!$('#settings').hidden) openSettings()
+  }
+
+  function renderHead() {
+    const c = S.chat
+    const head = $('#head')
+    head.hidden = !c
+    if (!c) return
+    const title = h('h2', { title: 'Click to rename', onclick: async () => { const t = prompt('Rename super-team chat', c.title); if (t?.trim()) { await api('PUT', `api/chats/${c.id}`, { title: t }); await open(c.id) } } }, c.title)
+    const modeSel = h('select', { title: 'How the supervisor runs its teams', onchange: async e => { try { await api('PUT', `api/chats/${c.id}`, { mode: e.target.value }); await open(c.id) } catch (err) { flash(err.message) } } },
+      ...S.meta.superModes.map(m => h('option', { value: m, selected: m === c.mode }, SUPER_MODE[m]?.[0] ?? m)))
+    head.replaceChildren(
+      h('div', { class: 'top' }, title, c.busy ? h('span', { class: 'chip' }, h('span', { class: 'pulse' }), c.run?.phase ? `working · ${c.run.phase}` : 'working') : null,
+        h('span', { class: 'spacer' }), h('span', { class: 'muted' }, 'Mode'), modeSel,
+        h('button', { onclick: () => ($('#settings').hidden ? openSettings() : ($('#settings').hidden = true)) }, '⚙ Settings'),
+        h('button', { title: 'New chat with the same settings', onclick: async () => { try { const d = await api('POST', `api/chats/${c.id}/duplicate`); await open(d.id) } catch (e) { flash(e.message) } } }, 'Duplicate'),
+        h('button', { title: 'Delete all messages', disabled: c.busy, onclick: async () => { if (confirm('Clear all messages in this chat?')) { await api('POST', `api/chats/${c.id}/clear`); await open(c.id) } } }, 'Clear'),
+        h('button', { class: 'danger', onclick: async () => { if (confirm(`Delete "${c.title}"?`)) { await api('DELETE', `api/chats/${c.id}`); await loadList(); open(S.list[0]?.id ?? null) } } }, 'Delete')),
+      h('div', { class: 'teamstrip' },
+        projChip(c.project),
+        h('span', { class: 'chip', title: 'Supervisor agent' }, '★ ', h('b', {}, c.supervisor)),
+        c.mode === 'workflow' ? h('span', { class: 'chip' }, 'workflow ', h('b', {}, c.workflow ?? '(none)')) : null,
+        ...c.teams.map(t => h('span', { class: 'chip', title: `${TEAM_MODE[t.mode]}${t.instructions ? `\nRole: ${t.instructions}` : ''}` }, h('b', {}, t.team), ` · ${t.mode}${t.mode === 'workflow' ? ` ${t.workflow}` : ''}`)),
+        !c.teams.length ? h('span', { class: 'muted' }, 'No teams yet — open Settings to add teams.') : null,
+        h('span', { class: 'muted' }, `· up to ${S.meta.maxParallel} agents run at once`)))
+    $('#sendBtn').disabled = !!c.busy
+    $('#stopBtn').hidden = !c.busy
+    $('#hint').textContent = c.mode === 'mention' ? `Mention teams with @name: ${c.teams.map(t => '@' + t.team).join(' ')}` : `${SUPER_MODE[c.mode]?.[1] ?? ''}${c.mode === 'auto' || c.mode === 'handoff' ? ` Max rounds: ${c.maxRounds}.` : ''} Inside each team, briefs can @mention members.`
+  }
+
+  function renderMessages() {
+    const box = $('#msgs')
+    const c = S.chat
+    if (!c) {
+      box.replaceChildren(h('div', { class: 'empty' }, h('h3', {}, 'Super team'), h('p', {}, 'One supervisor agent orchestrates many agent teams: in parallel when the work is independent, in sequence when it builds on earlier results. Each team keeps its own chat mode (sequential, parallel, mention, handoff, workflow).'), h('button', { class: 'primary', onclick: newChat }, '+ New super-team chat')))
+      return
+    }
+    if (!c.messages.length) {
+      box.replaceChildren(h('div', { class: 'empty' }, h('h3', {}, 'Give the super team a task'), h('p', {}, SUPER_MODE[c.mode]?.[1] ?? ''), h('p', { class: 'muted' }, `Teams: ${c.teams.map(t => `${t.team} (${t.mode})`).join(', ') || 'none'}`)))
+      return
+    }
+    const keepOpen = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.key))
+    box.replaceChildren(...c.messages.map(m => m.from === 'user' ? userMsg(m) : superMsg(m, c)))
+    for (const d of box.querySelectorAll('details')) if (keepOpen.has(d.dataset.key)) d.open = true
+  }
+
+  const userMsg = m => h('div', { class: 'msg user' }, h('span', { class: 'av', style: { background: '#6b7280' } }, 'U'),
+    h('div', { class: 'bubble' }, h('div', { class: 'who' }, 'You', h('span', { class: 'muted' }, ago(m.ts))), h('div', { class: 'body' }, m.text)))
+
+  function superMsg(m, c) {
+    const run = c.run?.id === m.runId ? c.run : S.runs.get(m.runId)
+    if (m.runId && !run && m.status !== 'running') loadRun(m.runId)
+    const agentsFor = n => (run?.agents ?? []).filter(a => String(a.label).startsWith(`${n}:`))
+    const live = m.status === 'running'
+    return h('div', { class: 'msg' }, h('span', { class: 'av', style: { background: `hsl(${hue(c.supervisor)} 45% 42%)` } }, '★'),
+      h('div', { class: 'bubble' },
+        h('div', { class: 'who' }, 'Supervisor', h('span', { class: 'muted' }, `${c.supervisor} · ${SUPER_MODE[m.mode]?.[0] ?? m.mode}`),
+          h('span', { class: `st ${m.status}` }, m.status === 'running' ? (run?.phase ? `running · ${run.phase}` : 'running') : m.status),
+          h('span', { class: 'muted' }, [live ? since(m.ts) : dur(m.durationMs), m.costUsd ? `$${Number(m.costUsd).toFixed(2)}` : '', m.runId ? `run ${m.runId}` : ''].filter(Boolean).join(' · '))),
+        timeline(m, agentsFor),
+        m.text ? h('div', { class: 'answer' }, md(m.text)) : null,
+        live && run?.log?.length ? h('div', { class: 'muted' }, run.log.at(-1).msg) : null))
+  }
+
+  function timeline(m, agentsFor) {
+    if (!m.steps?.length) return m.status === 'running' ? h('div', { class: 'muted' }, h('span', { class: 'pulse' }), ' starting…') : null
+    const groups = []
+    for (const s of m.steps) {
+      const g = groups.at(-1)
+      if (s.kind === 'team' && s.group && g && g.group === s.group) g.steps.push(s)
+      else groups.push({ group: s.kind === 'team' ? s.group : null, steps: [s] })
+    }
+    return h('div', { class: 'timeline' }, ...groups.map(g => {
+      const par = g.steps.length > 1
+      const s0 = g.steps[0]
+      const label = par ? `in parallel${s0.round ? ` · round ${s0.round}` : ''}${s0.wave ? ` · wave ${s0.wave}` : ''}` : ''
+      return h('div', { class: `group${par ? ' par' : ''}`, 'data-label': label }, ...g.steps.map(s => stepCard(m, s, agentsFor(s.n))))
+    }))
+  }
+
+  function stepCard(m, s, agents) {
+    const sup = s.kind !== 'team'
+    const key = `${m.id}:${s.n}`
+    const data = s.data
+    let planView = null
+    if (data && (data.waves || data.assignments)) {
+      const waves = data.waves ?? [{ assignments: data.assignments }]
+      planView = h('div', { class: 'md' },
+        data.approach || data.reason ? h('p', {}, data.approach ?? data.reason) : null,
+        data.done ? h('p', {}, h('b', {}, 'Done — writing the final answer.')) : null,
+        ...waves.map((w, i) => h('p', {}, h('b', {}, waves.length > 1 ? `Wave ${i + 1}${w.assignments.length > 1 ? ' (parallel)' : ''}: ` : w.assignments.length > 1 ? 'In parallel: ' : ''), w.assignments.map(a => a.team).join(' + '))))
+    }
+    return h('div', { class: `step${sup ? ' sup' : ''}` },
+      h('div', { class: 'sh' },
+        h('span', { class: 't', title: s.title }, `${s.n}. ${s.title}`),
+        s.mode ? h('span', { class: 'chip', title: TEAM_MODE[s.mode] }, s.mode) : null,
+        s.round && !sup ? h('span', { class: 'muted' }, typeof s.round === 'number' ? `r${s.round}` : s.round) : null,
+        h('span', { class: `st ${s.status}` }, s.status), h('span', { class: 'muted' }, since(s.startedAt, s.endedAt))),
+      planView,
+      s.brief ? h('details', { 'data-key': `${key}:brief` }, h('summary', {}, 'Brief'), md(s.brief)) : null,
+      agents.length ? h('div', { class: 'agents' }, ...agents.map(a => h('div', { class: 'ag', title: 'Open transcript', onclick: () => showTranscript(m.runId, a) },
+        h('span', { class: `dot ${a.status}` }), h('span', {}, a.label.split(':').slice(1).join(':') || a.agent), h('span', { class: 'tool' }, a.status === 'running' ? (a.lastTool ?? 'thinking…') : `${a.status}${a.tools ? ` · ${a.tools} tools` : ''}`)))) : null,
+      s.output && !(sup && planView) && s.kind !== 'answer' ? h('details', { 'data-key': `${key}:out` }, h('summary', {}, sup ? 'Output' : 'Result'), h('div', { class: 'out' }, md(s.output))) : null)
+  }
+
+  async function loadRun(id) {
+    if (S.runs.has(id)) return
+    S.runs.set(id, null)
+    try { S.runs.set(id, await api('GET', `api/runs/${id}`)); renderMessages() } catch { }
+  }
+
+  async function showTranscript(runId, a) {
+    $('#dlgTitle').textContent = `${a.label} — ${a.agent} (${a.model ?? ''}) · ${a.status}`
+    $('#dlgBody').replaceChildren(h('div', { class: 'muted' }, 'Loading…'))
+    $('#dlg').showModal()
+    try { const { text } = await api('GET', `api/runs/${runId}/file?path=${encodeURIComponent(a.file)}`); $('#dlgBody').replaceChildren(md(text)) } catch (e) { $('#dlgBody').replaceChildren(h('div', { class: 'err' }, e.message)) }
+  }
+
+  // ---------------- settings
+  function openSettings() {
+    const c = S.chat
+    if (!c) return
+    const d = S.draft = structuredClone({ project: c.project ?? '', title: c.title, supervisor: c.supervisor, mode: c.mode, teams: c.teams, maxRounds: c.maxRounds, maxHops: c.maxHops, synthesize: c.synthesize, cwd: c.cwd ?? '', workflow: c.workflow ?? '', workflowArgs: c.workflowArgs, instructions: c.instructions ?? '' })
+    const panel = $('#settings')
+    panel.hidden = false
+    const err = h('div', { class: 'err' })
+    const body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } })
+    const draw = () => body.replaceChildren(...settingsBody(d, draw))
+    draw()
+    const save = async () => {
+      err.textContent = ''
+      try {
+        const payload = { ...d, workflowArgs: d.workflowArgs ?? null, workflow: d.workflow || null }
+        await api('PUT', `api/chats/${c.id}`, payload)
+        await open(c.id)
+        flashOk()
+      } catch (e) { err.textContent = e.message }
+    }
+    panel.replaceChildren(h('h3', {}, 'Super team settings', h('span', { class: 'spacer' }), h('button', { class: 'primary', onclick: save }, 'Save'), h('button', { class: 'ghost', onclick: () => (panel.hidden = true) }, '✕')), err, body)
+  }
+  const flashOk = () => { const b = $('#settings h3 .primary'); if (b) { b.textContent = 'Saved ✓'; setTimeout(() => (b.textContent = 'Save'), 1200) } }
+
+  function settingsBody(d, draw) {
+    const M = S.meta
+    const out = []
+    out.push(h('div', { class: 'row' },
+      h('label', { class: 'field grow' }, 'Title', h('input', { value: d.title, oninput: e => (d.title = e.target.value) })),
+      h('label', { class: 'field' }, 'Project', h('select', { onchange: e => (d.project = e.target.value) }, h('option', { value: '', selected: !d.project }, 'General'), ...S.projects.map(p => h('option', { value: p.id, selected: p.id === d.project }, p.name))))))
+    out.push(h('label', { class: 'field' }, 'Supervisor agent (plans, delegates, reviews, writes the answer)',
+      h('select', { onchange: e => (d.supervisor = e.target.value) }, ...M.agents.map(a => h('option', { value: a.name, selected: a.name === d.supervisor }, `${a.name} · ${a.model}${a.name === M.defaultSupervisor ? ' (default)' : ''}`)))))
+    out.push(h('h3', {}, 'Super-team mode'))
+    out.push(h('div', { class: 'modes' }, ...M.superModes.map(m => h('button', { class: 'mode', 'aria-pressed': String(d.mode === m), onclick: () => { d.mode = m; draw() } }, h('b', {}, SUPER_MODE[m][0]), h('span', {}, SUPER_MODE[m][1])))))
+    if (d.mode === 'auto' || d.mode === 'handoff') out.push(h('label', { class: 'field' }, `Max rounds (${d.mode === 'auto' ? 'plan → run → review loops' : 'delegation rounds'})`, h('input', { type: 'number', min: 1, max: 12, value: d.maxRounds, oninput: e => (d.maxRounds = Number(e.target.value)) })))
+    if (['sequential', 'parallel', 'mention'].includes(d.mode)) out.push(h('label', { class: 'field' }, 'Max team hand-offs (a team result that @mentions another team passes the work on)', h('input', { type: 'number', min: 0, max: 50, value: d.maxHops, oninput: e => (d.maxHops = Number(e.target.value)) })))
+    if (d.mode !== 'workflow') out.push(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.synthesize, onchange: e => (d.synthesize = e.target.checked) }), 'Supervisor writes one final answer from all team results (off: show the team results as they are)'))
+    if (d.mode === 'workflow') {
+      out.push(h('label', { class: 'field' }, 'Workflow', h('select', { onchange: e => { d.workflow = e.target.value; draw() } }, h('option', { value: '' }, '(pick a workflow)'), ...M.workflows.map(w => h('option', { value: w.name, selected: w.name === d.workflow }, `${w.name} — ${w.description ?? ''}`.slice(0, 90))))))
+      const wf = M.workflows.find(w => w.name === d.workflow)
+      out.push(h('label', { class: 'field' }, `Workflow args, one key=value per line. {{message}}, {{folder}}, {{teams}} are filled in. message and teams are always passed.${wf?.args?.length ? ` This workflow takes: ${wf.args.join(', ')}` : ''}`,
+        h('textarea', { value: argsText(d.workflowArgs), oninput: e => (d.workflowArgs = parseArgs(e.target.value)) })))
+    }
+    out.push(h('label', { class: 'field' }, 'Working folder for all teams (optional; absolute or ~/…)', h('input', { value: d.cwd, placeholder: '~/code/my-app', oninput: e => (d.cwd = e.target.value) })))
+    out.push(h('label', { class: 'field' }, 'Standing instructions for the supervisor (optional)', h('textarea', { value: d.instructions, placeholder: 'e.g. Always have the dev team review before release; keep answers short.', oninput: e => (d.instructions = e.target.value) })))
+
+    out.push(h('h3', {}, `Teams (${d.teams.length})`, h('span', { class: 'spacer' })))
+    out.push(h('div', { class: 'help' }, 'Each team runs inside with its own chat mode, like Agent chat. In Sequential mode teams run in this order. Create teams on the Agent teams page.'))
+    d.teams.forEach((t, i) => out.push(teamCard(d, t, i, draw)))
+    const free = M.teams.filter(t => !d.teams.some(x => x.team === t.name))
+    if (free.length) out.push(h('div', { class: 'row' }, h('select', { id: 'addTeam' }, ...free.map(t => h('option', { value: t.name }, `${t.name} (${t.members.length} agents)`))),
+      h('button', { onclick: () => { d.teams.push({ team: $('#addTeam').value, mode: 'sequential', maxHops: 3 }); draw() } }, '+ Add team'),
+      h('button', { class: 'ghost', onclick: () => { for (const t of free) d.teams.push({ team: t.name, mode: 'sequential', maxHops: 3 }); draw() } }, 'Add all')))
+    else if (!M.teams.length) out.push(h('div', { class: 'muted' }, 'No teams exist yet. Create some on the Agent teams page.'))
+    return out
+  }
+
+  function teamCard(d, t, i, draw) {
+    const def = S.meta.teams.find(x => x.name === t.team)
+    const members = def?.members ?? []
+    const chosen = t.agents?.length ? t.agents : members
+    const move = k => { const j = i + k; if (j < 0 || j >= d.teams.length) return; [d.teams[i], d.teams[j]] = [d.teams[j], d.teams[i]]; draw() }
+    const wfs = S.meta.workflows
+    return h('div', { class: 'tcard' },
+      h('div', { class: 'th' }, h('span', { class: 'muted' }, `${i + 1}.`), h('b', {}, t.team), h('button', { class: 'ghost', title: 'Move up', onclick: () => move(-1) }, '↑'), h('button', { class: 'ghost', title: 'Move down', onclick: () => move(1) }, '↓'), h('button', { class: 'ghost danger', title: 'Remove', onclick: () => { d.teams.splice(i, 1); draw() } }, '✕')),
+      def?.description ? h('div', { class: 'muted' }, def.description) : null,
+      h('label', { class: 'field' }, 'Team chat mode', h('select', { onchange: e => { t.mode = e.target.value; draw() } }, ...S.meta.teamModes.map(m => h('option', { value: m, selected: m === t.mode }, TEAM_MODE[m])))),
+      t.mode === 'workflow'
+        ? [h('label', { class: 'field' }, 'Workflow', h('select', { onchange: e => (t.workflow = e.target.value) }, h('option', { value: '' }, '(pick)'), ...[...(def?.orchestrations ?? []), ...wfs.map(w => w.name).filter(n => !(def?.orchestrations ?? []).includes(n))].filter(n => wfs.some(w => w.name === n)).map(n => h('option', { value: n, selected: n === t.workflow }, n)))),
+           h('label', { class: 'field' }, 'Workflow args (key=value per line; {{message}} = the brief, {{request}}, {{folder}}, {{team}})', h('textarea', { value: argsText(t.workflowArgs), placeholder: 'task={{message}}\nrepo={{folder}}', oninput: e => (t.workflowArgs = parseArgs(e.target.value)) }))]
+        : [h('div', { class: 'field' }, h('span', { class: 'muted' }, 'Members that take part'), h('div', { class: 'members' }, ...members.map(a => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: chosen.includes(a), onchange: e => { const set = new Set(chosen); e.target.checked ? set.add(a) : set.delete(a); t.agents = members.filter(x => set.has(x)); if (t.agents.length === members.length) delete t.agents; draw() } }), a)))),
+           h('div', { class: 'row' },
+             t.mode === 'handoff' ? h('label', { class: 'field grow' }, 'Lead', h('select', { onchange: e => (t.lead = e.target.value) }, ...chosen.map(a => h('option', { value: a, selected: a === (t.lead ?? chosen[0]) }, a)))) : null,
+             h('label', { class: 'field' }, 'Max @hand-offs', h('input', { type: 'number', min: 0, max: 50, value: t.maxHops ?? 3, style: { width: '90px' }, oninput: e => (t.maxHops = Number(e.target.value)) })))],
+      h('label', { class: 'field' }, 'Role in this super team (optional, shown to the supervisor and the team)', h('input', { value: t.instructions ?? '', placeholder: 'e.g. builds and tests the code', oninput: e => (t.instructions = e.target.value) })))
+  }
+
+  // ---------------- composer
+  async function send() {
+    const ta = $('#input')
+    const text = ta.value.trim()
+    if (!text || !S.chat) return
+    $('#sendBtn').disabled = true
+    try {
+      await api('POST', `api/chats/${S.chat.id}/post`, { text })
+      ta.value = ''
+      await refresh()
+      $('#msgs').scrollTop = 1e9
+    } catch (e) { flash(e.message); $('#sendBtn').disabled = false }
+  }
+  $('#sendBtn').onclick = send
+  $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
+  $('#stopBtn').onclick = async () => { try { await api('POST', `api/chats/${S.chat.id}/cancel`); setTimeout(refresh, 600) } catch (e) { flash(e.message) } }
+  $('#newBtn').onclick = newChat
+  $('#dlgClose').onclick = () => $('#dlg').close()
+
+  ;(async () => {
+    try { S.meta = await api('GET', 'api/meta') } catch (e) { document.body.replaceChildren(h('div', { class: 'err', style: { padding: '20px' } }, `Could not load: ${e.message}`)); return }
+    await loadList()
+    await open(S.list.some(c => c.id === S.id && inTab(c)) ? S.id : S.list.find(inTab)?.id ?? null)
+    schedulePoll()
+    S.listPoll = setInterval(() => loadList().catch(() => {}), 6000)
+  })()
+})()
+</script>
+</body>
+</html>
