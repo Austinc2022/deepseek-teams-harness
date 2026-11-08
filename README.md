@@ -176,7 +176,9 @@ In `sequential`, `parallel` and `mention` mode, a team whose result `@mentions` 
 
 **Team modes:** inside the super team, each team keeps the Agent chat modes: `sequential`, `parallel`, `mention`, `handoff` (with a lead) and `workflow`, plus `@agent` hand-offs between members. Per team you can also choose which members take part and give the team a role. Supervisor briefs can `@mention` individual members.
 
-Each message is one Agent Forge run, so it also shows on Workflows → Runs. Click any agent in the timeline to open its transcript. Follow-up messages see the earlier requests and answers. `FORGE_MAX_PARALLEL` (default 4) caps how many agents run at once across all teams. Chats are saved in `forge/super-teams/` (excluded from git).
+**Projects (tabs):** the tab bar at the top groups super teams by project, so one project can hold many super teams, each with its own supervisor, mode and teams. **+ Project** creates one, with a name, a color, an optional default folder (new super teams in it start there) and a description that every supervisor and team in it gets as context. The ✎ on the active tab edits or deletes the project; deleting moves its super teams to **General** or deletes them. **All** shows every super team, labelled by project. Settings → Project moves a super team to another project.
+
+Each message is one Agent Forge run, so it also shows on Workflows → Runs. Click any agent in the timeline to open its transcript. Follow-up messages see the earlier requests and answers. `FORGE_MAX_PARALLEL` (default 4) caps how many agents run at once across all teams. Chats are saved in `forge/super-teams/` and projects in `forge/super-team-projects.json` (both excluded from git).
 
 ## CLI workbench: many Claude Code terminals on one page
 
