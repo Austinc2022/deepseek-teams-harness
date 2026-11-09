@@ -272,6 +272,102 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
 @media (hover: hover) { .mentions button:hover { background: var(--hover); color: var(--ink); } }
 .av { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 500; }
 
+/* ---------- chat: team strip, direct messages ---------- */
+body[data-tab="chat"] .detail { position: relative; }
+.who-chip { display: inline-flex; align-items: center; border: .5px solid var(--line-3); border-radius: 999px; overflow: hidden; }
+.who-chip.on { border-color: var(--ink-2); background: var(--active); }
+.mentions .who-chip button { border: 0; border-radius: 0; }
+.mentions .who-chip button.at { padding: 0 9px; border-left: .5px solid var(--line); color: var(--ink-3); }
+.who-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-3); }
+.who-chip.active .dot { background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.who-chip.queued .dot { background: var(--warn); }
+.who-chip .wst { color: var(--ink-3); font-size: 11px; }
+.msg .who .to { color: var(--ink-2); font-weight: 500; }
+.msg .who b.link { cursor: pointer; }
+@media (hover: hover) { .msg .who b.link:hover { text-decoration: underline; } }
+.msg.note { opacity: .85; } .msg.note .bubble { font-size: 13px; color: var(--ink-2); }
+.msg-files { margin: 6px 0 0 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+.to-sel { width: auto !important; height: 28px !important; min-height: 28px !important; font-size: 12px; padding: 0 8px; }
+.dm-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--bg); border-left: .5px solid var(--line-3); box-shadow: var(--dsw-elevation-prominent); }
+.dm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: .5px solid var(--line); }
+.dm-head b { font-size: 14px; font-weight: 500; margin-right: auto; }
+.dm-assign { padding: 8px 16px; border-bottom: .5px solid var(--line); font-size: 12px; }
+.dm-assign summary { cursor: pointer; color: var(--ink-3); }
+.dm-assign .bubble { white-space: pre-wrap; margin-top: 6px; max-height: 160px; overflow: auto; }
+.dm-msgs { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+.dm-msgs .msg:not(.user) .bubble { padding-left: 0; } .dm-msgs .msg .tools, .dm-msgs .msg-files { margin-left: 0; }
+.dm-compose { display: flex; align-items: flex-end; gap: 8px; margin: 10px 12px 14px; border: .5px solid var(--line-3); border-radius: var(--r-xl); background: var(--surface); padding: 8px 8px 8px 12px; }
+.dm-compose textarea { flex: 1; min-height: 40px; max-height: 200px; border: 0; background: transparent; box-shadow: none; resize: none; font-size: 13.5px; padding: 2px 0; }
+.chat-roles { flex: 1 1 100%; }
+.ctag.queued { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.cbar.queued > i { background: var(--warn); }
+
+/* ---------- chat: Overview / Memory / Files tabs ---------- */
+.tab-view { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px 8px 28px 32px; }
+.tab-view h3 { margin: 0; }
+.ov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.ov-tile { border: .5px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; }
+.ov-tile .k { color: var(--ink-3); font-size: 12px; } .ov-tile .v { font-size: 20px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; } .ov-tile .s { color: var(--ink-3); font-size: 11.5px; }
+.ov-card { border: .5px solid var(--line); border-radius: var(--r-md); padding: 14px 16px; margin-bottom: 18px; }
+.ov-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
+.ov-card-head h3 { margin-right: 4px; }
+.ov-card-head .grow { flex: 1; }
+.ov-headline { font-size: 15px; line-height: 23px; font-weight: 500; margin: 0 0 12px; }
+.ov-card .bubble { white-space: pre-wrap; font-size: 13.5px; line-height: 22px; margin-top: 12px; }
+.ov-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.ov-lists ul { margin: 4px 0 0; padding-left: 18px; } .ov-lists li { margin: 3px 0; }
+.ov-lists b { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.timeline { display: flex; flex-direction: column; }
+.tl-day { margin: 12px 0 4px; color: var(--ink-3); font-size: 12px; font-weight: 500; }
+.tl-row { display: grid; grid-template-columns: 52px 14px minmax(0, 1fr); gap: 8px; padding: 4px 0; font-size: 13px; }
+.tl-row .t { color: var(--ink-3); font-size: 11.5px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.tl-row .d { position: relative; } .tl-row .d::before { content: ''; position: absolute; left: 4px; top: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.tl-row .d::after { content: ''; position: absolute; left: 7px; top: 15px; bottom: -10px; width: 1px; background: var(--line); }
+.tl-row.task .d::before { background: var(--ink); } .tl-row.spawn .d::before { background: var(--info); } .tl-row.merge .d::before { background: var(--ok); }
+.tl-row.reply.done .d::before { background: var(--ok); } .tl-row.reply.failed .d::before, .tl-row.reply.cancelled .d::before { background: var(--bad); } .tl-row.reply.pending .d::before { background: var(--info); }
+.tl-row .x { min-width: 0; } .tl-row .x .p { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-row a { text-decoration: none; }
+.files-view { display: grid; grid-template-columns: minmax(280px, 42%) minmax(0, 1fr); gap: 0; padding: 0; overflow: hidden; }
+.files-list { overflow: auto; padding: 14px 12px 24px 32px; border-right: .5px solid var(--line); }
+.files-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.files-tools input { flex: 1 1 160px; height: 30px; min-height: 30px; }
+.seg { display: inline-flex; border: .5px solid var(--line-3); border-radius: var(--r-sm); overflow: hidden; }
+.seg button { border: 0; background: none; padding: 4px 10px; font: inherit; font-size: 12px; color: var(--ink-3); cursor: pointer; } .seg button.on { background: var(--active); color: var(--ink); }
+.file-task { margin-bottom: 16px; }
+.ft-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; min-width: 0; }
+.ft-head > b, .ft-head > .ctag, .ft-head > code { flex: none; white-space: nowrap; }
+.ft-head .tx { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-step { margin: 0 0 8px 8px; padding-left: 10px; border-left: 1px solid var(--line); }
+.fs-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; margin: 4px 0; }
+.file-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 14px; gap: 8px; align-items: center; padding: 4px 6px; border-radius: var(--r-sm); cursor: pointer; font-size: 12.5px; }
+.file-row:hover { background: var(--hover); } .file-row.on { background: var(--active); }
+.file-row .fp { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.file-row .fp.plain { direction: ltr; font-family: inherit; display: flex; align-items: center; gap: 4px; }
+.file-row .fn { font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fn .add, .diff .da { color: var(--ok); font-style: normal; } .fn .del, .diff .dd { color: var(--bad); font-style: normal; }
+.fst { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink-3); } .fst.A { color: var(--ok); } .fst.D { color: var(--bad); } .fst.M { color: var(--info); }
+.diff-pane { overflow: auto; padding: 14px 16px 24px; min-width: 0; }
+.diff-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; font-size: 12px; }
+pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: normal; }
+.diff .dh { color: var(--ink-3); } .diff .dhunk { color: var(--info); }
+.mem-store { border: .5px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 14px; }
+.ms-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 8px; }
+.ms-head b { font-size: 14px; font-weight: 500; }
+.ms-head code.dir { margin-left: auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
+.ms-sec { margin-top: 10px; } .ms-sec > summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.ms-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mem-note { border-top: .5px solid var(--line); padding: 6px 0; } .mem-note summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.mem-note .bubble { white-space: pre-wrap; font-size: 13px; line-height: 21px; margin: 8px 0; }
+.jrow { border-top: .5px solid var(--line); padding: 8px 0; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+.jrow .bubble { white-space: pre-wrap; }
+.note-form { border: .5px solid var(--line-3); border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 760px) {
+  .tab-view, .files-list { padding-left: 0; padding-right: 0; }
+  .files-view { grid-template-columns: 1fr; overflow: auto; }
+  .files-list { border-right: 0; border-bottom: .5px solid var(--line); overflow: visible; }
+  .diff-pane { overflow: visible; padding: 14px 0; }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 760px) {
   .page { padding: 0 16px; height: auto; min-height: 100%; }
@@ -800,8 +896,8 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
   })
 
   // ---------------- Agent chat (multi-agent group chat)
-  const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply', handoff: 'the lead replies first, then only @mentioned agents take over', workflow: 'each message runs the chosen workflow and posts its progress' }
-  const MODE_LABEL = { sequential: 'Group chat: everyone in turn', parallel: 'Group chat: everyone at once', mention: 'Mention only', handoff: 'Handoff: lead starts, @mentions pass it on', workflow: 'Workflow: run a saved workflow' }
+  const MODE_HELP = { sequential: 'every agent replies in turn and sees earlier replies', parallel: 'every agent replies at once', mention: 'only @mentioned agents reply', handoff: 'the lead replies first, then only @mentioned agents take over', workflow: 'each message runs the chosen workflow and posts its progress', supervisor: 'the supervisor plans and spawns worker agents at any time' }
+  const MODE_LABEL = { sequential: 'Group chat: everyone in turn', parallel: 'Group chat: everyone at once', mention: 'Mention only', handoff: 'Handoff: lead starts, @mentions pass it on', workflow: 'Workflow: run a saved workflow', supervisor: 'Supervisor: lead spawns worker agents' }
   const MAX_HOPS = 50
   const parseArgs = t => Object.fromEntries(String(t).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.includes('=')).map(l => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]))
   const argsText = o => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join('\n')
@@ -827,13 +923,14 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
   const TASK_LABEL = t => !t ? 'no messages yet'
     : t.status === 'working' ? `working${t.current?.length ? `: ${t.current.map(short).join(', ')}` : ''}`
     : t.status === 'waiting' ? `waiting on ${t.waitingOn.map(a => '@' + short(a)).join(', ')}`
+    : t.status === 'queued' ? `queued for @${short(t.to)}`
     : t.status === 'no-reply' ? 'no reply' : t.status
-  const TASK_HELP = { working: 'Agents are replying now', waiting: 'The last reply handed work to these agents but they did not get a turn (hand-off limit reached or stopped). Reply "continue" or raise Max hand-offs.', done: 'The last reply finished without handing work on', failed: 'The last reply failed', stopped: 'Stopped (Stop pressed or the harness restarted)', interrupted: 'A reply was cut off (the harness restarted mid-reply)', 'no-reply': 'No agent has replied yet' }
+  const TASK_HELP = { queued: 'A direct message waiting for its agent to finish its current reply', working: 'Agents are replying now', waiting: 'The last reply handed work to these agents but they did not get a turn (hand-off limit reached or stopped). Reply "continue" or raise Max hand-offs.', done: 'The last reply finished without handing work on', failed: 'The last reply failed', stopped: 'Stopped (Stop pressed or the harness restarted)', interrupted: 'A reply was cut off (the harness restarted mid-reply)', 'no-reply': 'No agent has replied yet' }
   const taskStat = (t, extra) => h('div', { class: 'tstat', title: t ? `${TASK_HELP[t.status] ?? ''}\n${t.done} finished step(s), progress ${Math.round((t.progress ?? 0) * 100)}%` : '' },
     h('span', { class: `ctag ${t?.status ?? ''}` }, TASK_LABEL(t)),
     t ? h('span', { class: `cbar ${t.status}` }, h('i', { style: `width:${Math.max(4, Math.round((t.progress ?? 0) * 100))}%` })) : null, extra ?? null)
   const chatItem = r => {
-    const el = item(r.id, r.title, `${r.agents.length} agents · ${MODE_LABEL[r.mode]?.split(':')[0] ?? r.mode}${r.tasks ? ` · ${r.tasks} task${r.tasks > 1 ? 's' : ''}` : ''}`, [`${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))
+    const el = item(r.id, r.title, `${r.agents.length} agents · ${MODE_LABEL[r.mode]?.split(':')[0] ?? r.mode}${r.tasks ? ` · ${r.tasks} task${r.tasks > 1 ? 's' : ''}` : ''}${r.workers ? ` · ${r.workersActive ? `${r.workersActive}/` : ''}${r.workers} worker${r.workers > 1 ? 's' : ''}` : ''}`, [`${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))
     el.append(taskStat(r.task ? { ...r.task, status: r.busy ? 'working' : r.task.status } : null))
     return el
   }
@@ -887,7 +984,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const t = tasks.find(x => x.n === selN) ?? tasks.at(-1)
     const rerender = () => { const v = $('#detail .tasks-view'); if (v) v.replaceWith(tasksView(r)) }
     const rows = [...tasks].reverse().map(x => h('div', { class: `task-row${x.n === t.n ? ' on' : ''}`, onclick: () => { state.taskSel[r.id] = x.n; state.taskNode = null; rerender() } },
-      h('span', { class: 'num' }, `#${x.n}`), h('span', { class: 'tx', title: x.text }, x.text.replace(/\s+/g, ' ')),
+      h('span', { class: 'num' }, `#${x.n}`), h('span', { class: 'tx', title: x.text }, x.to ? `→ @${x.to}: ` : '', x.text.replace(/\s+/g, ' ')),
       h('span', { class: 'meta' }, `${x.agents.length} agents · ${x.replies.length} steps${x.durationMs ? ' · ' + fmtDur(x.durationMs) : ''}`),
       taskStat(r.busy && x.n === tasks.at(-1).n ? { ...x, status: 'working' } : x)))
     let detail = null
@@ -1048,6 +1145,338 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       rest.length ? h('details', { class: 'sec' }, h('summary', {}, `Other agents (${rest.length})`), h('div', { class: 'sec-body' }, rest.map(a => card(a, false)))) : null))
   }
 
+  // ---------------- Chat: team strip, direct messages, Overview / Memory / Files tabs
+  const speakersOf = r => [...r.agents, ...Object.keys(r.workers ?? {})]
+  const agentState = (r, a) => r.activeAgents?.includes(a) ? 'active' : r.inbox?.[a] ? 'queued' : r.busy && r.workers?.[a]?.status === 'queued' ? 'queued' : 'idle'
+  const clipText = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
+  const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+  const fmtWhen = ts => ts ? new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+  const roomFiles = r => new Set(r.messages.flatMap(m => (m.files ?? []).map(f => f.path)))
+
+  function msgEl(m, r) {
+    const user = m.from === 'user'
+    const w = r.workers?.[m.from]
+    return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}${m.note ? ' note' : ''}` },
+      h('div', { class: 'who' },
+        user ? h('b', {}, 'You') : [avatar(m.from), h('b', { class: 'link', title: `Message @${m.from} directly`, onclick: () => openDm(r, m.from) }, m.from),
+          m.worker || w ? h('span', { class: 'chip' }, `worker · ${m.role ?? w?.role}`) : h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null],
+        m.to ? h('span', { class: 'to' }, `→ @${m.to}`) : null,
+        m.queued ? h('span', { class: 'st running', title: 'Delivered when the agent finishes its current reply' }, 'queued') : null,
+        m.dropped ? h('span', { class: 'st failed' }, 'dropped') : null,
+        m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null,
+        m.durationMs ? h('span', {}, fmtDur(m.durationMs)) : null),
+      h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
+      !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null,
+      !user && m.files?.length ? h('div', { class: 'msg-files' },
+        h('a', { onclick: () => { state.chatTab = 'files'; state.fileSel = { msg: m.id, path: m.files[0].path }; showChat(r.id) } }, `${m.files.length} file${m.files.length > 1 ? 's' : ''} changed`),
+        m.files.slice(0, 4).map(f => h('code', { title: f.path }, f.path.split('/').pop())), m.files.length > 4 ? `+${m.files.length - 4}` : null) : null)
+  }
+
+  /** Agents and workers of the room: click to message one directly, @ to mention it. */
+  function teamStrip(r, insert) {
+    return h('div', { class: 'mentions' }, speakersOf(r).map(a => {
+      const w = r.workers?.[a], st = agentState(r, a)
+      return h('span', { class: `who-chip ${st}${state.dm === a ? ' on' : ''}`, 'data-agent': a, title: `${a}${w ? ` (worker, ${w.role}): ${clipText(w.assignment, 200)}` : ''}\n${st === 'active' ? 'replying now' : st === 'queued' ? 'messages queued' : 'idle'}. Click to message directly.` },
+        h('button', { onclick: () => openDm(r, a) }, avatar(a), h('i', { class: 'dot' }), a, a === r.supervisorAgent ? h('span', { class: 'wst' }, 'supervisor') : w ? h('span', { class: 'wst' }, w.status) : null),
+        h('button', { class: 'at', onclick: () => insert(a), title: `Mention @${a}` }, '@'))
+    }))
+  }
+
+  function openDm(r, a) { state.dm = a; syncDm(r) }
+  function dmPanel(r) {
+    const a = state.dm
+    const w = r.workers?.[a], st = agentState(r, a)
+    const thread = r.messages.filter(m => m.to === a || m.from === a)
+    state.dmDraft ??= {}
+    const ta = h('textarea', { rows: 2, placeholder: `Ask @${a} a question or assign a task…`, value: state.dmDraft[a] ?? '', oninput: () => { state.dmDraft[a] = ta.value } })
+    const send = guard(async () => {
+      const text = ta.value.trim(); if (!text) return
+      const busy = agentState(state.lastRoom ?? r, a) !== 'idle'
+      await api('POST', `api/chats/${r.id}/messages`, { text, to: a })
+      ta.value = ''; state.dmDraft[a] = ''
+      toast(busy ? `Queued for @${a}: delivered when it finishes its current reply` : `Sent to @${a}`)
+      showChat(r.id, true)
+    })
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
+    return h('aside', { class: 'dm-panel', 'data-agent': a },
+      h('div', { class: 'dm-head' }, avatar(a), h('b', {}, a),
+        a === r.supervisorAgent ? h('span', { class: 'chip' }, 'supervisor') : w ? h('span', { class: 'chip' }, `worker · ${w.role}`) : null,
+        h('span', { class: `ctag ${st === 'active' ? 'working' : st === 'queued' ? 'queued' : ''}` }, st === 'active' ? 'replying' : st === 'queued' ? `${r.inbox?.[a] ?? ''} queued` : w ? w.status : 'idle'),
+        st !== 'idle' ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${r.id}/cancel`, { agent: a }); toast(`Stopping @${a}`) }) }, 'Stop') : null,
+        h('button', { class: 'b', onclick: () => { state.dm = null; $('#detail .dm-panel')?.remove(); $('#detail .mentions')?.querySelectorAll('.who-chip.on').forEach(e => e.classList.remove('on')) } }, 'Close')),
+      w ? h('details', { class: 'dm-assign' }, h('summary', {}, `Assignment from @${w.spawnedBy}${w.worktree ? ` · branch ${w.worktree.branch}${w.merged ? ' (merged)' : ''}` : ' · shared folder'}`), h('div', { class: 'bubble' }, w.assignment)) : null,
+      h('div', { class: 'dm-msgs' }, thread.length ? thread.map(m => msgEl(m, r)) : h('p', { class: 'muted' }, `Nothing with @${a} yet. Messages you send here go to ${a} only. If it is busy, they wait until its current reply ends.`)),
+      h('div', { class: 'dm-compose' }, ta, h('button', { class: 'send', title: 'Send', 'aria-label': 'Send', onclick: send }, icon('send', 16))))
+  }
+  /** Show, refresh or remove the direct-message drawer, keeping its draft, focus and scroll position. */
+  function syncDm(r) {
+    state.lastRoom = r
+    const old = $('#detail .dm-panel')
+    if (!state.dm || !speakersOf(r).includes(state.dm)) { old?.remove(); return }
+    $('#detail .mentions')?.querySelectorAll('.who-chip').forEach(e => e.classList.toggle('on', e.dataset.agent === state.dm))
+    const next = dmPanel(r)
+    if (old && old.dataset.agent === state.dm) {
+      const ol = old.querySelector('.dm-msgs'), atB = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40, top = ol.scrollTop
+      const openD = [...ol.querySelectorAll('details')].map(d => d.open)
+      old.querySelector('.dm-head').replaceWith(next.querySelector('.dm-head'))
+      ol.replaceChildren(...next.querySelector('.dm-msgs').childNodes)
+      ol.querySelectorAll('details').forEach((d, i) => { if (openD[i]) d.open = true })
+      ol.scrollTop = atB ? ol.scrollHeight : top
+      return
+    }
+    old?.remove()
+    $('#detail').append(next)
+    const l = next.querySelector('.dm-msgs'); l.scrollTop = l.scrollHeight
+    next.querySelector('textarea').focus()
+  }
+
+  // ----- Files tab: changes by task timeline, with per-step diffs
+  const diffEl = d => h('pre', { class: 'diff' }, d ? d.split('\n').map(l => h('span', { class: l.startsWith('+++') || l.startsWith('---') || l.startsWith('diff ') || l.startsWith('index ') ? 'dh' : l[0] === '+' ? 'da' : l[0] === '-' ? 'dd' : l.startsWith('@@') ? 'dhunk' : '' }, l + '\n')) : '(no text difference: binary file or mode change)')
+  function filesView(r) {
+    const steps = r.messages.filter(m => m.files?.length)
+    if (!steps.length) return h('div', { class: 'tab-view' }, emptyState('No file changes yet', 'Files that agents create, edit or delete appear here, grouped by task. In a git repository every step is snapshotted, so changes made with shell commands are caught too.'))
+    state.filesGroup ??= 'task'
+    const q = (state.filesQ ?? '').toLowerCase()
+    const match = (m, f) => !q || f.path.toLowerCase().includes(q) || m.from.includes(q)
+    const taskOf = new Map((r.tasks ?? []).map(t => [t.id, t]))
+    const sel = state.fileSel
+    const rerender = () => {
+      const v = $('#detail .files-view'); if (!v) return
+      const top = v.querySelector('.files-list')?.scrollTop ?? 0
+      const focus = document.activeElement === v.querySelector('.files-tools input')
+      const next = filesView(r); v.replaceWith(next)
+      next.querySelector('.files-list').scrollTop = top
+      if (focus) { const i = next.querySelector('.files-tools input'); i.focus(); i.setSelectionRange(i.value.length, i.value.length) }
+    }
+    const pick = (m, f) => { state.fileSel = { msg: m.id, path: f.path }; rerender() }
+    const nums = f => f.add != null ? [h('i', { class: 'add' }, `+${f.add}`), ' ', h('i', { class: 'del' }, `-${f.del}`)] : ''
+    const mark = f => f.byTool ? h('span', { class: 'muted', title: 'Edited by this agent with Write/Edit' }, '✎') : h('span', { class: 'muted', title: 'Changed in the folder during this step (a shell command, or another agent working at the same time)' }, '·')
+    const isSel = (m, f) => sel?.msg === m.id && sel?.path === f.path
+    let body
+    if (state.filesGroup === 'task') {
+      const groups = new Map()
+      for (const m of steps) { const k = m.task ?? '?'; groups.set(k, [...(groups.get(k) ?? []), m]) }
+      body = [...groups].reverse().map(([k, ms]) => {
+        const t = taskOf.get(k)
+        const rows = ms.slice().reverse().map(m => {
+          const fs = m.files.filter(f => match(m, f)); if (!fs.length) return null
+          return h('div', { class: 'file-step' },
+            h('div', { class: 'fs-head' }, avatar(m.from), h('b', {}, m.from), m.worker ? h('span', { class: 'chip' }, m.role) : null, h('span', { class: 'muted' }, `${fmtWhen(m.ts)} · ${fs.length} file${fs.length > 1 ? 's' : ''}`), m.tree ? null : h('span', { class: 'muted', title: 'Not a git repository: only Write/Edit tool calls are known' }, '· tool calls only')),
+            fs.map(f => h('div', { class: `file-row${isSel(m, f) ? ' on' : ''}`, onclick: () => pick(m, f) }, h('span', { class: `fst ${f.status}` }, f.status), h('span', { class: 'fp', title: f.path }, f.path), h('span', { class: 'fn' }, nums(f)), mark(f))))
+        }).filter(Boolean)
+        if (!rows.length) return null
+        return h('div', { class: 'file-task' }, h('div', { class: 'ft-head' }, h('b', {}, t ? `Task #${t.n}` : 'Task'), t ? h('span', { class: `ctag ${t.status}` }, t.status) : null, h('span', { class: 'tx', title: t?.text ?? '' }, t ? `${t.to ? `→ @${t.to}: ` : ''}${t.text.replace(/\s+/g, ' ')}` : '')), rows)
+      }).filter(Boolean)
+    } else {
+      const byPath = new Map()
+      for (const m of steps) for (const f of m.files) if (match(m, f)) byPath.set(f.path, [...(byPath.get(f.path) ?? []), { m, f }])
+      body = [...byPath].sort((a, b) => a[0].localeCompare(b[0])).map(([p, list]) => h('div', { class: 'file-task' },
+        h('div', { class: 'ft-head' }, h('code', { title: p }, p), h('span', { class: 'muted' }, `${list.length} change${list.length > 1 ? 's' : ''}`)),
+        list.slice().reverse().map(({ m, f }) => h('div', { class: `file-row${isSel(m, f) ? ' on' : ''}`, onclick: () => pick(m, f) }, h('span', { class: `fst ${f.status}` }, f.status),
+          h('span', { class: 'fp plain' }, avatar(m.from), m.from, h('span', { class: 'muted' }, `· #${taskOf.get(m.task)?.n ?? '?'} · ${fmtWhen(m.ts)}`)), h('span', { class: 'fn' }, nums(f)), mark(f)))))
+    }
+    const seg = h('span', { class: 'seg' }, [['task', 'By task'], ['file', 'By file']].map(([k, l]) => h('button', { class: state.filesGroup === k ? 'on' : '', onclick: () => { state.filesGroup = k; rerender() } }, l)))
+    const filter = h('input', { placeholder: 'Filter by path or agent', value: state.filesQ ?? '', oninput: e => { state.filesQ = e.target.value; rerender() } })
+    const pane = h('div', { class: 'diff-pane' })
+    const m = sel && r.messages.find(x => x.id === sel.msg), f = m?.files?.find(x => x.path === sel.path)
+    if (!m || !f) pane.append(emptyState('Pick a file', 'Click a file to see what that step changed.'))
+    else {
+      const head = h('div', { class: 'diff-head' }, h('code', {}, f.path), avatar(m.from), h('span', {}, m.from), h('span', { class: 'muted' }, `task #${taskOf.get(m.task)?.n ?? '?'} · ${fmtWhen(m.ts)}`), h('span', { class: 'muted', title: 'Repository' }, m.tree?.root ?? m.cwd ?? ''))
+      const key = `${m.id}|${f.path}`
+      state.diffCache ??= {}
+      if (!m.tree || f.untracked) pane.append(head, h('p', { class: 'muted' }, 'This step has no snapshot (its folder is not a git repository), so only the file name is known: the agent edited it with Write/Edit.'))
+      else if (state.diffCache[key] != null) pane.append(head, diffEl(state.diffCache[key]))
+      else {
+        pane.append(head, h('div', { class: 'spinner-wrap' }, spinner()))
+        api('GET', `api/chats/${r.id}/diff?msg=${encodeURIComponent(m.id)}&path=${encodeURIComponent(f.path)}`)
+          .then(d => { state.diffCache[key] = d.diff; pane.replaceChildren(head, diffEl(d.diff)) })
+          .catch(e => pane.replaceChildren(head, h('p', { class: 'err' }, e.message)))
+      }
+    }
+    const total = new Set(steps.flatMap(x => x.files.map(y => y.path))).size
+    return h('div', { class: 'tab-view files-view' },
+      h('div', { class: 'files-list' }, h('div', { class: 'files-tools' }, h('b', {}, `${total} file${total > 1 ? 's' : ''} · ${steps.length} step${steps.length > 1 ? 's' : ''}`), seg, filter), body.length ? body : h('p', { class: 'muted' }, 'No file matches the filter.')),
+      pane)
+  }
+
+  // ----- Memory tab: every agent's memory folder
+  async function memoryView(r) {
+    const data = await api('GET', `api/chats/${r.id}/memory`)
+    const q = (state.memQ ?? '').toLowerCase()
+    const hit = (...xs) => !q || xs.some(x => String(x ?? '').toLowerCase().includes(q))
+    const refresh = async () => { const v = $('#detail .tab-view'); if (!v) return; const top = v.scrollTop; const next = await memoryView(r); v.replaceWith(next); next.scrollTop = top }
+    const noteForm = (s, n, host) => {
+      const title = h('input', { placeholder: 'Title', value: n?.title ?? '' })
+      const tags = h('input', { placeholder: 'tags, comma separated', value: (n?.tags ?? []).join(', ') })
+      const content = h('textarea', { rows: 6, placeholder: 'What should this agent remember?', value: n?.body ?? '' })
+      const form = h('div', { class: 'note-form' }, title, tags, content, h('div', { class: 'btns' },
+        h('button', { class: 'b p', onclick: guard(async () => {
+          await api('PUT', `api/chats/${r.id}/memory`, { dir: s.dir, title: title.value, content: content.value, tags: tags.value.split(',').map(t => t.trim()).filter(Boolean) })
+          const slug = x => String(x).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'note'
+          if (n && slug(title.value) !== n.id) await api('DELETE', `api/chats/${r.id}/memory?dir=${encodeURIComponent(s.dir)}&note=${encodeURIComponent(n.id)}`)
+          toast('Memory saved'); refresh()
+        }) }, 'Save'), h('button', { class: 'b', onclick: () => form.remove() }, 'Cancel')))
+      host.prepend(form); title.focus()
+    }
+    const search = h('input', { placeholder: 'Search memories', value: state.memQ ?? '', style: 'max-width:320px', oninput: e => { state.memQ = e.target.value; clearTimeout(state.memT); state.memT = setTimeout(async () => { const v = $('#detail .tab-view'); const next = await memoryView(r); v?.replaceWith(next); const i = next.querySelector('input'); i.focus(); i.setSelectionRange(i.value.length, i.value.length) }, 250) } })
+    const cards = data.stores.map(s => {
+      const notes = s.notes.filter(n => hit(n.title, n.body, n.tags.join(' ')))
+      const journal = s.journal.filter(j => hit(j.task, j.outcome, j.label))
+      const hasNotes = s.mode === 'markdown' || s.mode === 'hybrid'
+      const notesBox = h('div', { class: 'ms-sec' })
+      if (hasNotes) notesBox.append(...[
+        h('div', { class: 'ms-sec-head' }, h('b', {}, `Notes (${notes.length}${q ? ` of ${s.notes.length}` : ''})`), h('button', { class: 'b', onclick: () => noteForm(s, null, notesBox) }, 'Add note')),
+        ...notes.map(n => h('details', { class: 'mem-note' },
+          h('summary', {}, h('b', {}, n.title), n.tags.map(t => h('span', { class: 'chip' }, t)), h('span', { class: 'muted' }, fmtWhen(n.updated))),
+          h('div', { class: 'bubble' }, md(n.body)),
+          h('div', { class: 'btns' }, h('button', { class: 'b', onclick: e => noteForm(s, n, e.target.closest('.mem-note')) }, 'Edit'),
+            h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(`Delete memory "${n.title}"?`)) return; await api('DELETE', `api/chats/${r.id}/memory?dir=${encodeURIComponent(s.dir)}&note=${encodeURIComponent(n.id)}`); toast('Deleted'); refresh() }) }, 'Delete')))),
+        !notes.length ? h('p', { class: 'muted' }, q ? 'No note matches.' : 'No notes yet. Agents save notes with their memory tools.') : null].filter(Boolean))
+      return h('div', { class: 'mem-store' },
+        h('div', { class: 'ms-head' }, s.agents.map(a => avatar(a)), h('b', {}, s.agents.join(', ')),
+          s.workers.length ? h('span', { class: 'muted', title: s.workers.join(', ') }, `+ ${s.workers.length} worker${s.workers.length > 1 ? 's' : ''}`) : null,
+          h('span', { class: 'chip' }, s.mode), h('span', { class: 'chip' }, s.scope === 'agent' ? 'private' : `shared · ${s.scope}${s.namespace ? ` ${s.namespace}` : ''}`),
+          h('code', { class: 'dir', title: s.dir }, s.dir)),
+        notesBox,
+        s.mode === 'journal' || s.mode === 'hybrid' ? h('details', { class: 'ms-sec', open: !!q }, h('summary', {}, `Work journal: ${s.journalCount} entries${q ? `, ${journal.length} match` : ''} (newest first)`),
+          journal.length ? journal.map(j => h('div', { class: 'jrow' }, h('span', { class: 'muted' }, `${fmtWhen(j.ts)} · ${j.label ?? ''}${j.ok === false ? ' · failed' : ''}`), h('div', {}, h('b', {}, 'Task: '), clipText(j.task, 400)), h('div', { class: 'bubble' }, h('b', {}, 'Outcome: '), md(clipText(j.outcome, 1200))))) : h('p', { class: 'muted' }, 'No entries.')) : null,
+        s.mode === 'session' ? h('p', { class: 'muted' }, s.session ? `Resumes Claude Code session ${s.session.sessionId} (saved ${fmtWhen(s.session.updated)}).` : 'No saved session yet.') : null)
+    })
+    return h('div', { class: 'tab-view' },
+      h('div', { class: 'files-tools' }, h('b', {}, `${data.stores.length} memory store${data.stores.length === 1 ? '' : 's'}`), search, h('button', { class: 'b', onclick: refresh }, 'Refresh')),
+      cards.length ? cards : emptyState('No agent memory', 'None of the agents in this chat has memory turned on. Set memory on the agent (Agents → Memory).'),
+      data.noMemory.length ? h('p', { class: 'muted' }, `No memory: ${data.noMemory.join(', ')}.`) : null,
+      h('p', { class: 'muted', style: 'font-size:12px' }, 'Workers share the memory of the role agent they were spawned from.'))
+  }
+
+  // ----- Overview tab: totals, written summary with a phase flow chart, task timeline chart, event timeline
+  const SUM_TAG = { 'on-track': 'done', done: 'done', 'in-progress': 'working', blocked: 'failed', idle: '' }
+  const PHASE_COLOR = { done: 'var(--ok)', active: 'var(--info)', planned: 'var(--ink-3)', blocked: 'var(--bad)' }
+  const wrapText = (s, n, lines) => {
+    const out = []; let cur = ''
+    for (const w of String(s ?? '').split(/\s+/)) { if ((cur + ' ' + w).trim().length > n) { if (cur) out.push(cur); cur = w } else cur = (cur + ' ' + w).trim() }
+    if (cur) out.push(cur)
+    if (out.length > lines) { out.length = lines; out[lines - 1] = clipText(out[lines - 1], n - 1) + '…' }
+    return out
+  }
+  function phaseFlow(sum) {
+    const ph = sum.phases ?? []
+    if (!ph.length) return null
+    const W = 190, H = 92, GX = 44, GY = 40, PAD = 14
+    const avail = ($('#detail')?.clientWidth ?? 900) - 110
+    const per = Math.max(1, Math.min(ph.length, 5, Math.floor((avail - PAD * 2 + GX) / (W + GX))))
+    const rows = Math.ceil(ph.length / per)
+    const width = PAD * 2 + per * W + (per - 1) * GX, height = PAD * 2 + rows * H + (rows - 1) * GY + 24
+    const pos = i => { const row = Math.floor(i / per), c = i % per, col = row % 2 ? per - 1 - c : c; return { x: PAD + col * (W + GX), y: PAD + row * (H + GY), row } }
+    const idx = new Map(ph.map((p, i) => [p.id, i]))
+    const edges = []
+    for (let i = 0; i + 1 < ph.length; i++) {
+      const a = pos(i), b = pos(i + 1)
+      const d = a.row === b.row ? (b.x > a.x ? `M${a.x + W},${a.y + H / 2} L${b.x - 4},${b.y + H / 2}` : `M${a.x},${a.y + H / 2} L${b.x + W + 4},${b.y + H / 2}`) : `M${a.x + W / 2},${a.y + H} L${b.x + W / 2},${b.y - 4}`
+      edges.push(svg('path', { d, fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1.4, 'marker-end': 'url(#parr)' }))
+    }
+    for (const l of sum.links ?? []) {
+      const i = idx.get(l.from), j = idx.get(l.to)
+      if (i == null || j == null || j === i + 1) continue
+      const a = pos(i), b = pos(j), sx = a.x + W / 2, sy = a.y + H, dx = b.x + W / 2 + 10, dy = b.y + H, low = Math.max(sy, dy) + 22
+      edges.push(svg('path', { d: `M${sx},${sy} C${sx},${low} ${dx},${low} ${dx},${dy + 4}`, fill: 'none', stroke: 'var(--warn)', 'stroke-width': 1.3, 'stroke-dasharray': '4 3', 'marker-end': 'url(#parr)' }))
+      if (l.label) edges.push(svg('text', { x: (sx + dx) / 2, y: low - 2, 'font-size': 10.5, fill: 'var(--ink-3)', 'text-anchor': 'middle' }, clipText(l.label, 28)))
+    }
+    const nodes = ph.map((p, i) => {
+      const { x, y } = pos(i), c = PHASE_COLOR[p.status] ?? 'var(--ink-3)'
+      const detail = wrapText(p.detail, 30, 2)
+      const foot = [p.tasks?.length ? p.tasks.map(n => `#${n}`).join(' ') : '', p.agents?.length ? p.agents.map(short).join(', ') : ''].filter(Boolean).join(' · ')
+      return svg('g', {}, svg('title', {}, `${p.title} (${p.status})\n${p.detail ?? ''}${foot ? `\n${foot}` : ''}`),
+        svg('rect', { x, y, width: W, height: H, rx: 10, fill: 'var(--surface, #fff)', stroke: c, 'stroke-width': p.status === 'active' ? 2 : 1.3, 'stroke-dasharray': p.status === 'planned' ? '5 3' : null }),
+        svg('circle', { cx: x + 14, cy: y + 17, r: 4, fill: c }),
+        svg('text', { x: x + 24, y: y + 21, 'font-size': 12.5, 'font-weight': 600, fill: 'var(--ink)' }, clipText(p.title, 24)),
+        detail.map((t, k) => svg('text', { x: x + 12, y: y + 41 + k * 15, 'font-size': 11, fill: 'var(--ink-2)' }, t)),
+        foot ? svg('text', { x: x + 12, y: y + H - 10, 'font-size': 10.5, fill: 'var(--ink-3)' }, clipText(foot, 32)) : null)
+    })
+    return h('div', { class: 'flow-wrap' }, svg('svg', { width, height, viewBox: `0 0 ${width} ${height}` },
+      svg('defs', {}, svg('marker', { id: 'parr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, svg('path', { d: 'M0,0 L10,5 L0,10 z', fill: 'var(--ink-3)' }))),
+      edges, nodes))
+  }
+  const BAR_COLOR = { done: 'var(--ok)', working: 'var(--info)', waiting: 'var(--warn)', queued: 'var(--warn)', interrupted: 'var(--warn)', failed: 'var(--bad)', stopped: 'var(--bad)' }
+  /** Gantt-style chart: one bar per task from its start to its last activity. */
+  function taskChart(ov, r) {
+    const ts = ov.tasks
+    if (!ts.length) return null
+    const t0 = Math.min(...ts.map(t => +new Date(t.startedAt)))
+    const t1 = Math.max(...ts.map(t => +new Date(t.status === 'working' ? Date.now() : t.lastActivity)), t0 + 60000)
+    const LW = 230, BW = 560, RH = 24, TOP = 8, width = LW + BW + 20, height = TOP + ts.length * RH + 26
+    const X = t => LW + ((t - t0) / (t1 - t0)) * BW
+    const rows = ts.map((t, i) => {
+      const y = TOP + i * RH, a = X(+new Date(t.startedAt)), b = X(+new Date(t.status === 'working' ? Date.now() : t.lastActivity))
+      return svg('g', { class: 'node', onclick: () => { state.taskSel ??= {}; state.taskSel[r.id] = t.n; state.chatTab = 'tasks'; state.taskNode = null; showChat(r.id) } },
+        svg('title', {}, `#${t.n} ${t.status}: ${t.text}\n${fmtWhen(t.startedAt)} to ${fmtWhen(t.lastActivity)}${t.durationMs ? ` · ${fmtDur(t.durationMs)} agent time` : ''}${t.files ? ` · ${t.files} files` : ''}`),
+        i % 2 ? svg('rect', { x: 0, y, width, height: RH, fill: 'var(--hover)', opacity: 0.4 }) : null,
+        svg('text', { x: 8, y: y + 16, 'font-size': 11.5, fill: 'var(--ink-2)' }, clipText(`#${t.n} ${t.to ? `→@${t.to} ` : ''}${t.text.replace(/\s+/g, ' ')}`, 36)),
+        svg('rect', { x: a, y: y + 6, width: Math.max(4, b - a), height: RH - 12, rx: 3, fill: BAR_COLOR[t.status] ?? 'var(--ink-3)', opacity: 0.85 }))
+    })
+    const axisY = TOP + ts.length * RH + 16
+    return h('div', { class: 'flow-wrap' }, svg('svg', { width, height, viewBox: `0 0 ${width} ${height}` }, rows,
+      svg('text', { x: LW, y: axisY, 'font-size': 10.5, fill: 'var(--ink-3)' }, fmtWhen(t0)),
+      svg('text', { x: LW + BW, y: axisY, 'font-size': 10.5, fill: 'var(--ink-3)', 'text-anchor': 'end' }, fmtWhen(t1))))
+  }
+  function eventRow(e, r) {
+    const goTask = e.task ? () => { state.taskSel ??= {}; state.taskSel[r.id] = e.task; state.chatTab = 'tasks'; state.taskNode = null; showChat(r.id) } : null
+    const tk = e.task ? h('a', { onclick: goTask }, `#${e.task}`) : ''
+    let main, sub = e.text
+    if (e.kind === 'task') main = ['You started task ', tk, e.to ? ` (direct to @${e.to})` : '']
+    else if (e.kind === 'spawn') main = [h('b', {}, `@${e.from}`), ` spawned `, h('b', {}, e.worker), ` (${e.role}, ${e.isolation}) for `, tk]
+    else if (e.kind === 'merge') { main = [h('b', {}, e.worker), ' merged into the room folder · ', tk]; sub = e.text }
+    else if (e.kind === 'message') main = [h('b', {}, `@${e.from}`), ` → @${e.to} · `, tk]
+    else main = [h('b', {}, `@${e.from}`), e.worker ? ` (${e.role})` : '', ` ${e.status === 'done' ? 'replied' : e.status === 'pending' ? 'is working' : e.status} · `, tk, e.files ? ` · ${e.files} file${e.files > 1 ? 's' : ''}` : '', e.durationMs ? ` · ${fmtDur(e.durationMs)}` : '']
+    return h('div', { class: `tl-row ${e.kind} ${e.status ?? ''}` }, h('span', { class: 't' }, fmtTime(e.ts)), h('span', { class: 'd' }), h('div', { class: 'x' }, h('div', {}, main), sub ? h('div', { class: 'p', title: sub }, sub) : null))
+  }
+  async function overviewView(r) {
+    const ov = await api('GET', `api/chats/${r.id}/overview`)
+    state.ovPending = ov.summaryPending
+    const T = ov.totals, bs = T.byStatus
+    const tile = (k, v, s) => h('div', { class: 'ov-tile' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v), s ? h('div', { class: 's' }, s) : null)
+    const sum = ov.summary
+    const btn = h('button', { class: 'b p', disabled: ov.summaryPending, onclick: guard(async () => { await api('POST', `api/chats/${r.id}/summary`); toast('Summarizing the project…'); state.ovPending = true; showChat(r.id, true) }) },
+      ov.summaryPending ? 'Summarizing…' : sum ? 'Refresh summary' : 'Summarize project')
+    const list = (title, xs) => xs?.length ? h('div', {}, h('b', {}, title), h('ul', {}, xs.map(x => h('li', {}, x)))) : null
+    const card = h('section', { class: 'ov-card' },
+      h('div', { class: 'ov-card-head' }, h('h3', {}, 'Summary'), sum ? h('span', { class: `ctag ${SUM_TAG[sum.status] ?? ''}` }, sum.status) : null,
+        ov.summaryStale ? h('span', { class: 'ctag waiting', title: 'New messages since this summary' }, 'out of date') : null,
+        sum ? h('span', { class: 'muted' }, `${fmtWhen(sum.ts)} · ${sum.model}`) : null, h('span', { class: 'grow' }), ov.summaryPending ? spinner() : null, btn),
+      ov.summaryError ? h('p', { class: 'err' }, ov.summaryError) : null,
+      sum ? [h('p', { class: 'ov-headline' }, sum.headline), phaseFlow(sum), h('div', { class: 'bubble' }, md(sum.summary)),
+        h('div', { class: 'ov-lists' }, list('Decisions', sum.decisions), list('Open issues and risks', sum.open), list('Next steps', sum.next))]
+        : h('p', { class: 'muted' }, 'Get a written summary of the project so far with a flow chart of its phases. It runs on demand with a fast model (Haiku) over the tasks, replies, workers and file changes.'))
+    state.ovShowAll ??= {}
+    const evs = ov.events
+    const shown = state.ovShowAll[r.id] ? evs : evs.slice(-120)
+    const tl = []
+    let day = ''
+    for (const e of shown) { const d = new Date(e.ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); if (d !== day) { day = d; tl.push(h('div', { class: 'tl-day' }, d)) } tl.push(eventRow(e, r)) }
+    const agentsTable = ov.agents.length ? h('div', { class: 'overflow' }, h('table', {}, h('tr', {}, ['Agent', 'Replies', 'Done', 'Failed', 'Agent time', 'Tools', 'Files'].map(x => h('th', {}, x))),
+      ov.agents.map(a => h('tr', {}, h('td', {}, avatar(a.name), ' ', a.name, a.worker ? h('span', { class: 'muted' }, ` (${a.role})`) : null), h('td', {}, a.replies), h('td', {}, a.done), h('td', {}, a.failed || ''), h('td', {}, fmtDur(a.durationMs)), h('td', {}, a.tools), h('td', {}, a.files || ''))))) : null
+    const workersTable = ov.workers.length ? h('div', { class: 'overflow' }, h('table', {}, h('tr', {}, ['Worker', 'Status', 'Isolation', 'Spawned', 'Assignment'].map(x => h('th', {}, x))),
+      ov.workers.map(w => h('tr', {}, h('td', {}, h('a', { onclick: () => openDm(state.lastRoom ?? r, w.id) }, w.id), h('span', { class: 'muted' }, ` ${w.role}`)), h('td', {}, h('span', { class: `ctag ${w.status === 'running' || w.status === 'queued' ? 'working' : w.status === 'done' ? 'done' : w.status === 'interrupted' ? 'interrupted' : 'failed'}` }, w.status)),
+        h('td', {}, w.worktree ? `${w.worktree.branch}${w.merged ? ' (merged)' : ''}` : w.isolation), h('td', {}, fmtWhen(w.spawnedAt)), h('td', { title: w.assignment }, clipText(w.assignment, 140)))))) : null
+    return h('div', { class: 'tab-view' },
+      h('div', { class: 'ov-tiles' },
+        tile('Tasks', T.tasks, Object.entries(bs).map(([k, v]) => `${v} ${k}`).join(' · ')),
+        tile('Agents', T.agents, `${r.agents.length} in the room`),
+        T.workers ? tile('Workers', T.workers, `${ov.workers.filter(w => w.status === 'running' || w.status === 'queued').length} active`) : null,
+        tile('Files changed', T.files, ov.topFiles[0] ? `most: ${ov.topFiles[0].path.split('/').pop()}` : ''),
+        tile('Agent time', fmtDur(T.durationMs) || '0s', `${T.tools} tool calls`),
+        T.costUsd ? tile('Cost', `$${T.costUsd.toFixed(2)}`, 'API-equivalent') : null),
+      card,
+      ov.tasks.length ? h('section', { class: 'ov-card' }, h('div', { class: 'ov-card-head' }, h('h3', {}, 'Task timeline'), h('span', { class: 'muted' }, 'Each bar runs from when a task started to its last activity. Click one to open it in Tasks.')), taskChart(ov, r)) : null,
+      h('section', { class: 'ov-card' }, h('div', { class: 'ov-card-head' }, h('h3', {}, 'Activity'), h('span', { class: 'muted' }, `${evs.length} events`), h('span', { class: 'grow' }),
+        evs.length > shown.length ? h('button', { class: 'b', onclick: () => { state.ovShowAll[r.id] = true; showChat(r.id, true) } }, `Show all ${evs.length}`) : null),
+        tl.length ? h('div', { class: 'timeline' }, tl) : h('p', { class: 'muted' }, 'Nothing has happened yet.')),
+      workersTable ? h('section', { class: 'ov-card' }, h('div', { class: 'ov-card-head' }, h('h3', {}, 'Workers')), workersTable) : null,
+      agentsTable ? h('section', { class: 'ov-card' }, h('div', { class: 'ov-card-head' }, h('h3', {}, 'Agents')), agentsTable) : null)
+  }
+  const PANE_TABS = ['overview', 'memory', 'files']
+  const paneView = r => state.chatTab === 'overview' ? overviewView(r) : state.chatTab === 'memory' ? memoryView(r) : Promise.resolve(filesView(r))
+
   async function listChats() {
     $('#detail').classList.remove('tasks-on')
     const [rooms] = await Promise.all([api('GET', 'api/chats'), loadProjects()])
@@ -1075,7 +1504,15 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     state.orchs ??= await api('GET', 'api/orchestrations')
     const wf = h('select', {}, h('option', { value: '' }, '(pick a workflow)'), state.orchs.filter(o => !o.invalid).map(o => h('option', { value: o.name, title: o.description }, o.name)))
     const wfBox = h('div', { hidden: true }, h('label', {}, 'Workflow (each message runs it; team and message are passed automatically)'), wf)
-    const mode = h('select', { onchange: () => { wfBox.hidden = mode.value !== 'workflow' } }, state.meta.chatModes.map(m => h('option', { value: m }, MODE_LABEL[m] ?? m)))
+    const supSel = h('select', {}, h('option', { value: '' }, '(team lead / first agent)'), state.agents.filter(a => !a.invalid).map(a => h('option', { value: a.name }, a.name)))
+    const rolesBox = h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', { title: a.description }, h('input', { type: 'checkbox', value: a.name }), a.name, h('span', { class: 'muted', style: 'font-size:11px' }, a.model))))
+    const maxW = h('input', { type: 'number', min: 1, max: 50, value: 10 })
+    const maxC = h('input', { type: 'number', min: 1, max: 16, value: 4 })
+    const supBox = h('div', { hidden: true },
+      h('p', { class: 'muted' }, 'The supervisor plans the work and spawns workers (fresh copies of the role agents) at any time. Each worker uses the shared room folder or its own git worktree, chosen per task. Supervisors must use the Claude Code backend.'),
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Supervisor'), supSel), h('div', {}, h('label', {}, 'Max active workers'), maxW), h('div', {}, h('label', {}, 'Workers running at once'), maxC)),
+      h('label', {}, 'Worker roles (none = the other agents in this chat)'), rolesBox)
+    const mode = h('select', { onchange: () => { wfBox.hidden = mode.value !== 'workflow'; supBox.hidden = mode.value !== 'supervisor' } }, state.meta.chatModes.map(m => h('option', { value: m }, MODE_LABEL[m] ?? m)))
     const cwd = h('input', { placeholder: 'blank = each agent works in its own project folder or home folder' })
     const hops = h('input', { type: 'number', min: 0, max: MAX_HOPS, value: 4 })
     const first = h('textarea', { placeholder: 'First message (optional). Use @agent-name to address someone.' })
@@ -1090,11 +1527,13 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Title'), title), h('div', {}, h('label', {}, 'Project'), project), h('div', {}, h('label', {}, 'Start from team'), team)),
       h('label', {}, 'Agents'), agentsBox,
       h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Reply mode'), mode), h('div', {}, h('label', {}, 'Working directory'), cwd), h('div', {}, h('label', {}, `Max agent-to-agent hand-offs per message (0-${MAX_HOPS})`), hops)),
-      wfBox,
+      wfBox, supBox,
       h('label', {}, 'First message'), first,
       h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => {
         const agents = [...agentsBox.querySelectorAll('input:checked')].map(i => i.value)
-        const room = await api('POST', 'api/chats', { title: title.value, project: project.value || undefined, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value), workflow: wf.value || undefined })
+        const sup = mode.value === 'supervisor' ? { supervisor: supSel.value || undefined, workerRoles: [...rolesBox.querySelectorAll('input:checked')].map(i => i.value), maxWorkers: Number(maxW.value), maxConcurrent: Number(maxC.value) } : {}
+        if (sup.supervisor && !agents.includes(sup.supervisor)) agents.unshift(sup.supervisor)
+        const room = await api('POST', 'api/chats', { title: title.value, project: project.value || undefined, agents, team: team.value || undefined, mode: mode.value, cwd: cwd.value.trim() || undefined, maxHops: Number(hops.value), workflow: wf.value || undefined, ...sup })
         if (first.value.trim()) await api('POST', `api/chats/${room.id}/messages`, { text: first.value })
         setProject(room.project ?? ''); state.sel = room.id; await load()
       }) }, 'Start chat'))))
@@ -1127,22 +1566,41 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const argCount = Object.keys(r.workflowArgs ?? {}).length
     const projSel = h('select', { onchange: guard(async () => { await put({ project: projSel.value }, `Moved to ${projName(projSel.value)}`); setProject(projSel.value); await listChats() }) },
       h('option', { value: '' }, 'General'), (state.projects ?? []).map(p => h('option', { value: p.id, selected: p.id === r.project ? true : false }, p.name)))
+    const supSel = h('select', { onchange: guard(async () => { await put({ supervisor: supSel.value }, `Supervisor: ${supSel.value || 'lead / first agent'}`); showChat(id) }) },
+      h('option', { value: '' }, '(lead / first agent)'), r.agents.map(a => h('option', { value: a, selected: a === r.supervisor ? true : false }, a)))
+    const numIn = (key, v, lo, hi, label) => { const el = h('input', { type: 'number', min: lo, max: hi, value: v, style: 'width:64px', onchange: guard(async () => { await put({ [key]: Number(el.value) }, `${label}: ${el.value}`) }) }); return el }
+    const rolesBox = h('div', { class: 'chat-args chat-roles', hidden: true },
+      h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:4px' }, 'Agents the supervisor may spawn workers from. None picked = the other agents in this chat.'),
+      h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', { title: a.description }, h('input', { type: 'checkbox', value: a.name, checked: (r.workerRoles ?? []).includes(a.name) }), a.name))),
+      h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await put({ workerRoles: [...rolesBox.querySelectorAll('input:checked')].map(i => i.value) }, 'Worker roles saved'); rolesBox.hidden = true; showChat(id) }) }, 'Save roles')))
     const opts = h('div', { class: 'chat-opts' },
       opt('Project', projSel, 'Move this chat to another project tab'),
-      r.mode === 'workflow'
+      r.mode === 'supervisor'
+        ? [opt('Supervisor', supSel, 'Plans the work and spawns workers'),
+           h('button', { class: 'b', title: 'Which agents workers are copied from', onclick: () => { rolesBox.hidden = !rolesBox.hidden } }, `Worker roles: ${(r.workerRolesResolved ?? []).join(', ') || '?'}`),
+           opt('Max workers', numIn('maxWorkers', r.maxWorkers ?? 10, 1, 50, 'Max active workers'), 'Most workers active (queued or running) at once'),
+           opt('Run at once', numIn('maxConcurrent', r.maxConcurrent ?? 4, 1, 16, 'Run at once'), 'Most workers running at the same moment; the rest queue'), rolesBox]
+        : r.mode === 'workflow'
         ? [opt('Workflow', wfSel, 'Each message you send starts this workflow'), h('button', { class: 'b', onclick: () => { argsBox.hidden = !argsBox.hidden; if (!argsBox.hidden) argsTa.focus() } }, `Settings${argCount ? ` (${argCount})` : ''}`), wfMeta ? h('span', { class: 'muted', style: 'font-size:12px' }, wfMeta.description) : null]
         : [opt('Max hand-offs', hopsIn, `How many times agents may pass the floor to each other per message (0-${MAX_HOPS})`),
            r.mode === 'handoff' ? opt('Lead', leadSel, 'Who answers your message first') : null],
       argsBox)
-    const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => {
-      const user = m.from === 'user'
-      return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}` },
-        h('div', { class: 'who' }, user ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
-        h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
-        !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null)
-    }) : emptyState('No messages yet', `Say hello to ${r.agents.map(a => '@' + a).join(', ')}`))
-    const ta = h('textarea', { rows: 2, placeholder: r.busy ? 'Agents are replying… you can type your next message' : `Message ${r.agents.map(a => '@' + a).join(' ')}`, value: draft })
-    const sendMsg = guard(async () => { if (!ta.value.trim()) return; await api('POST', `api/chats/${id}/messages`, { text: ta.value }); ta.value = ''; showChat(id) })
+    const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => msgEl(m, r)) : emptyState('No messages yet', `Say hello to ${r.agents.map(a => '@' + a).join(', ')}`))
+    state.toSel ??= {}
+    if (state.toSel[id] && !speakersOf(r).includes(state.toSel[id])) state.toSel[id] = ''
+    const placeholder = () => state.toSel[id] ? `Message @${state.toSel[id]} directly (only it replies)` : r.busy && r.mode !== 'supervisor' ? 'Agents are replying… pick one agent in "To" to message it now, or wait' : `Message ${r.agents.map(a => '@' + a).join(' ')}`
+    const ta = h('textarea', { rows: 2, placeholder: placeholder(), value: draft })
+    const toSel = h('select', { class: 'to-sel', title: 'Everyone: the chat mode decides who replies. One agent: a direct message only it answers, even while others are busy.', onchange: () => { state.toSel[id] = toSel.value; const t = $('#detail .composer textarea'); if (t) t.placeholder = placeholder() } },
+      h('option', { value: '' }, 'To: everyone'), speakersOf(r).map(a => h('option', { value: a, selected: a === state.toSel[id] ? true : false }, `To: @${a}${r.workers?.[a] ? ` (${r.workers[a].role})` : ''}`)))
+    const sendMsg = guard(async () => {
+      const box = $('#detail .composer textarea') ?? ta
+      if (!box.value.trim()) return
+      const to = state.toSel[id] || undefined
+      await api('POST', `api/chats/${id}/messages`, { text: box.value, to })
+      box.value = ''
+      if (to) toast(agentState(state.lastRoom ?? r, to) !== 'idle' ? `Queued for @${to}` : `Sent to @${to}`)
+      showChat(id, true)
+    })
     ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg() } })
     const insert = name => { ta.value = `${ta.value}${ta.value && !ta.value.endsWith(' ') ? ' ' : ''}@${name} `; ta.focus() }
     const editAgents = guard(async () => {
@@ -1175,11 +1633,31 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
         h('button', { class: 'b', title: `Model, memory, skills and backup models for these agents in ${projName(r.project)}`, onclick: () => projectAgentsView(r.project ?? '', r.agents) }, 'Agent settings'),
         r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
         h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete'))
-    const poll = () => { if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500); else listChatsQuiet() }
+    const poll = () => { syncDm(r); if (r.busy || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500); else listChatsQuiet() }
     state.chatTab ??= 'chat'
     const tabBtn = (key, label) => h('button', { class: state.chatTab === key ? 'on' : '', onclick: () => { if (state.chatTab === key) return; state.chatTab = key; state.taskNode = null; showChat(id) } }, label)
-    const tabs = h('div', { class: 'chat-tabs' }, tabBtn('chat', 'Chat'), tabBtn('tasks', `Tasks (${(r.tasks ?? []).length})`))
+    const nFiles = roomFiles(r).size
+    const tabs = h('div', { class: 'chat-tabs' }, tabBtn('chat', 'Chat'), tabBtn('tasks', `Tasks (${(r.tasks ?? []).length})`), tabBtn('overview', 'Overview'), tabBtn('memory', 'Memory'), tabBtn('files', `Files${nFiles ? ` (${nFiles})` : ''}`))
     const keepHead = oldHead => oldHead && !oldHead.querySelector('h2 input') && !oldHead.contains(document.activeElement) && oldHead.querySelector('.chat-args')?.hidden !== false
+    if (PANE_TABS.includes(state.chatTab) && keepDraft) {
+      const prevView = $('#detail .tab-view')
+      if (prevView?.isConnected) {
+        // the Memory tab is not auto-refreshed (it holds note editors); Overview and Files are, keeping scroll positions
+        if (state.chatTab !== 'memory') {
+          const next = await paneView(r)
+          if (state.tab !== 'chat' || state.sel !== id || !prevView.isConnected) return
+          const tops = [...prevView.querySelectorAll('.files-list, .diff-pane')].map(e => e.scrollTop)
+          const top = prevView.scrollTop
+          const focus = document.activeElement?.closest?.('.tab-view') === prevView ? document.activeElement.className : null
+          if (!focus || state.chatTab === 'overview') { prevView.replaceWith(next); next.scrollTop = top; next.querySelectorAll('.files-list, .diff-pane').forEach((e, i) => { e.scrollTop = tops[i] ?? 0 }) }
+        }
+        head.append(opts, tabs)
+        const oldHead = $('#detail .chat-head')
+        if (keepHead(oldHead)) oldHead.replaceWith(head)
+        const oldStrip = $('#detail .composer .mentions'); if (oldStrip) oldStrip.replaceWith(teamStrip(r, insert))
+        return poll()
+      }
+    }
     if (state.chatTab === 'tasks' && keepDraft) {
       const prevView = $('#detail .tasks-view')
       if (prevView?.isConnected) {
@@ -1189,6 +1667,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
         prevView.replaceWith(next)
         const set = (sel, top, left) => { const e = next.querySelector(sel); if (e) { if (top != null) e.scrollTop = top; if (left != null) e.scrollLeft = left } }
         set('.task-list', lt); set('.task-flow', ft); set('.flow-wrap', null, gl)
+        const oldStrip = $('#detail .composer .mentions'); if (oldStrip) oldStrip.replaceWith(teamStrip(r, insert))
         head.append(opts, tabs)
         const oldHead = $('#detail .chat-head')
         if (keepHead(oldHead)) oldHead.replaceWith(head)
@@ -1212,23 +1691,32 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       if (keepHead(oldHead)) oldHead.replaceWith(head)
       const oldTa = $('#detail .composer textarea')
       if (oldTa) oldTa.placeholder = ta.placeholder
+      const oldStrip = $('#detail .composer .mentions'); if (oldStrip) oldStrip.replaceWith(teamStrip(r, insert))
+      const oldSel = $('#detail .composer .to-sel'); if (oldSel && document.activeElement !== oldSel) oldSel.replaceWith(toSel)
       return poll()
     }
     msgs.addEventListener('pointerdown', () => { state.msgsPointerDown = true })
     head.append(opts, tabs)
-    $('#detail').classList.toggle('tasks-on', state.chatTab === 'tasks')
+    let view = msgs
+    if (state.chatTab === 'tasks') view = tasksView(r)
+    else if (PANE_TABS.includes(state.chatTab)) {
+      try { view = await paneView(r) } catch (e) { view = h('div', { class: 'tab-view' }, h('p', { class: 'err' }, e.message)) }
+      if (state.tab !== 'chat' || state.sel !== id) return
+    }
+    $('#detail').classList.toggle('tasks-on', state.chatTab !== 'chat')
     $('#detail').replaceChildren(
       head,
-      state.chatTab === 'tasks' ? tasksView(r) : msgs,
+      view,
       h('div', { class: 'composer' },
-        h('div', { class: 'mentions' }, r.agents.map(a => h('button', { onclick: () => insert(a), title: `Mention ${a}` }, avatar(a), ` @${a}`))),
+        teamStrip(r, insert),
         h('div', { class: 'composer-box' }, ta,
-          h('div', { class: 'composer-foot' }, h('span', { class: 'hint', title: r.cwd ?? '' }, `${r.mode}: ${MODE_HELP[r.mode]} · Enter to send, Shift+Enter for a new line`),
+          h('div', { class: 'composer-foot' }, toSel, h('span', { class: 'hint', title: r.cwd ?? '' }, `${r.mode}: ${MODE_HELP[r.mode]} · Enter to send, Shift+Enter for a new line`),
             h('button', { class: 'send', title: 'Send', 'aria-label': 'Send', onclick: sendMsg }, icon('send', 16))))))
     if (atBottom) msgs.scrollTop = msgs.scrollHeight
     else msgs.scrollTop = prevBox.scrollTop
     if (hadFocus) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
-    if (r.busy) state.chatPoll = setTimeout(() => showChat(id, true), 1500)
+    syncDm(r)
+    if (r.busy || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500)
     else if (prevBox && keepDraft) listChatsQuiet()
   }
   window.addEventListener('pointerup', () => { state.msgsPointerDown = false })

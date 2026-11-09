@@ -114,8 +114,14 @@ export function createForgeHandler({ registry, engine, chats }) {
     ['GET', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => chats.view(id)],
     ['PUT', /^\/api\/chats\/([\w-]+)$/, (b, [id]) => chats.update(id, b)],
     ['DELETE', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => (chats.delete(id), { ok: true })],
-    ['POST', /^\/api\/chats\/([\w-]+)\/messages$/, (b, [id]) => chats.post(id, b.text)],
-    ['POST', /^\/api\/chats\/([\w-]+)\/cancel$/, (_, [id]) => ({ cancelled: chats.cancel(id) })],
+    ['POST', /^\/api\/chats\/([\w-]+)\/messages$/, (b, [id]) => chats.post(id, b.text, { to: b.to || undefined })],
+    ['POST', /^\/api\/chats\/([\w-]+)\/cancel$/, (b, [id]) => ({ cancelled: b?.agent ? chats.cancelAgent(id, b.agent) : chats.cancel(id) })],
+    ['GET', /^\/api\/chats\/([\w-]+)\/overview$/, (_, [id]) => chats.overview(id)],
+    ['POST', /^\/api\/chats\/([\w-]+)\/summary$/, (_, [id]) => chats.summarize(id)],
+    ['GET', /^\/api\/chats\/([\w-]+)\/memory$/, (_, [id]) => chats.memory(id)],
+    ['PUT', /^\/api\/chats\/([\w-]+)\/memory$/, (b, [id]) => chats.saveMemoryNote(id, b)],
+    ['DELETE', /^\/api\/chats\/([\w-]+)\/memory$/, (_, [id], q) => chats.deleteMemoryNote(id, q.get('dir'), q.get('note'))],
+    ['GET', /^\/api\/chats\/([\w-]+)\/diff$/, (_, [id], q) => chats.diff(id, q.get('msg'), q.get('path'))],
   ]
 
   return async (req, res, subpath, { authorizeApi }) => {

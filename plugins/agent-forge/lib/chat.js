@@ -10,8 +10,19 @@
  *                only @mentioned agents get the floor, up to maxHops hand-offs
  *  - workflow:   the message starts the room's chosen orchestration (room.workflow + room.workflowArgs,
  *                plus team=<room team> and message=<text>); its live progress and result post into the chat
+ *  - supervisor: the supervisor agent answers and can spawn any number of workers (fresh copies of the
+ *                room's worker-role agents) at any time through its forge_team tools. Workers run in the
+ *                background (maxConcurrent at once), in the shared room folder or their own git worktree,
+ *                and the supervisor is woken with their results when they finish. Claude Code backend only.
  * In the agent modes, a reply that @mentions another room agent hands the floor to that
  * agent (bounded by maxHops), so agents can talk to each other.
+ *
+ * Direct messages: a user message with `to` goes to one agent (or worker) only, and runs even while the
+ * rest of the room is busy; if that agent is replying already, the message is queued and delivered as
+ * soon as it finishes.
+ *
+ * Every message belongs to a task (the id of the user message that started it). Each agent step records
+ * the files it changed: Write/Edit tool calls, plus a before/after git snapshot of its working folder.
  *
  * Each reply is one runAgent call, so agents keep their own model, skills,
  * memory, sub-agents and execution environment. Rooms persist as JSON in forge/chats.
@@ -29,53 +40,85 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { assertName, deepMerge, normalizeAgent } from './registry.js'
-import { runAgent } from './runner.js'
+import { runAgent, resolveCwd, toolsMcp, quickQuery } from './runner.js'
+import { listMemory, saveNote, deleteNote } from './memory.js'
+import { snapshot, changedFiles, fileDiff, addWorktree, finishWorktree, mergeWorktree, removeWorktree } from './snapshots.js'
 
-export const CHAT_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'workflow']
+export const CHAT_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'workflow', 'supervisor']
 export const MAX_HOPS = 50
 const GENERAL = '_general'
+const MAX_WAKES = 60
 const clampHops = v => Math.max(0, Math.min(MAX_HOPS, Number(v) || 0))
+const clampInt = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt }
 const TRANSCRIPT_CHARS = 60000
+const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
 const now = () => new Date().toISOString()
 const newId = () => `${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`
+const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? `${s.slice(0, n)}…` : s }
 
-const mentionsIn = (text, agents, self) => {
+class Semaphore {
+  constructor(n) { this.n = n; this.q = [] }
+  async acquire() { if (this.n > 0) { this.n--; return } await new Promise(r => this.q.push(r)) }
+  release() { const r = this.q.shift(); if (r) r(); else this.n++ }
+}
+
+/** Everyone who can speak or be addressed in a room: its agents plus its spawned workers. */
+const speakers = room => [...room.agents, ...Object.keys(room.workers ?? {})]
+
+const mentionsIn = (text, names, self) => {
   const out = []
-  for (const m of String(text ?? '').matchAll(/@([a-z][a-z0-9-]*)/g)) if (agents.includes(m[1]) && m[1] !== self && !out.includes(m[1])) out.push(m[1])
+  for (const m of String(text ?? '').matchAll(/@([a-z][a-z0-9-]*)/g)) if (names.includes(m[1]) && m[1] !== self && !out.includes(m[1])) out.push(m[1])
   return out
 }
 
 /**
  * Split a room into tasks (one per user message) and describe each: who replied, what caused each reply
- * (the user's message or an earlier agent's @mention), and where the task stands:
- *   working     agents are replying right now
+ * (the user's message, an earlier agent's @mention, or the supervisor spawning a worker), and where the task stands:
+ *   working     agents are replying right now (or workers are queued for it)
+ *   queued      a direct message waiting for its agent to finish another reply
  *   waiting     the last reply hands work to @agents but nobody took it (hand-off limit reached or cut short)
  *   done        the last reply finished without handing off
  *   failed / stopped / interrupted / no-reply
  * progress = finished replies / (finished + running + still-waiting agents).
  */
 export function summarizeTasks(room, live = false) {
+  const names = speakers(room)
   const tasks = []
+  const byId = new Map()
   room.messages.forEach((m, i) => {
-    if (m.from === 'user') tasks.push({ n: tasks.length + 1, index: i, text: m.text, ts: m.ts, replies: [] })
-    else if (tasks.length) tasks.at(-1).replies.push({ m, i })
+    if (m.from === 'user' && (!m.task || m.task === m.id)) {
+      const t = { n: tasks.length + 1, id: m.id, index: i, text: m.text, to: m.to, queued: !!m.queued, ts: m.ts, replies: [] }
+      tasks.push(t); byId.set(m.id, t)
+    } else {
+      const t = m.task ? byId.get(m.task) : tasks.at(-1)
+      if (t && m.from !== 'user' && !m.note) t.replies.push({ m, i })
+    }
   })
+  const idxOf = new Map(room.messages.map((m, i) => [m.id, i]))
+  const workers = Object.values(room.workers ?? {})
   return tasks.map((t, k) => {
     const isLast = k === tasks.length - 1
     const replies = t.replies.map(({ m, i }, j) => {
       let cause = 'user'
-      for (let q = j - 1; q >= 0; q--) { const prev = t.replies[q].m; if (prev.status === 'done' && mentionsIn(prev.text, room.agents, prev.from).includes(m.from)) { cause = t.replies[q].i; break } }
+      if (m.cause && m.cause !== 'user' && idxOf.has(m.cause)) cause = idxOf.get(m.cause)
+      else if (!m.cause) {
+        for (let q = j - 1; q >= 0; q--) { const prev = t.replies[q].m; if (prev.status === 'done' && mentionsIn(prev.text, names, prev.from).includes(m.from)) { cause = t.replies[q].i; break } }
+      }
       return {
-        index: i, from: m.from, status: m.status ?? 'done', ts: m.ts, durationMs: m.durationMs ?? null, tools: (m.tools ?? []).length,
-        lastTool: (m.tools ?? []).at(-1) ?? null, runId: m.runId, cause, mentions: m.status === 'done' ? mentionsIn(m.text, room.agents, m.from) : [],
+        index: i, from: m.from, to: m.to, role: m.role, worker: !!m.worker, status: m.status ?? 'done', ts: m.ts, durationMs: m.durationMs ?? null, tools: (m.tools ?? []).length,
+        lastTool: (m.tools ?? []).at(-1) ?? null, runId: m.runId, cause, files: (m.files ?? []).length,
+        mentions: m.status === 'done' && room.mode !== 'supervisor' ? mentionsIn(m.text, names, m.from) : [],
         preview: String(m.text ?? '').replace(/\s+/g, ' ').slice(0, 160),
       }
     })
     const last = replies.at(-1)
     const running = replies.filter(r => r.status === 'pending')
+    const queuedWorkers = live ? workers.filter(w => w.task === t.id && (w.status === 'queued' || w.status === 'running')).map(w => w.id) : []
     let status, waitingOn = []
-    if (isLast && live) status = 'working'
+    if (live && (running.length || queuedWorkers.length)) status = 'working'
+    else if (live && t.queued) status = 'queued'
+    else if (live && isLast && !last) status = 'working'
     else if (!last) status = 'no-reply'
     else if (last.status === 'failed') status = 'failed'
     else if (last.status === 'cancelled') status = 'stopped'
@@ -86,17 +129,51 @@ export function summarizeTasks(room, live = false) {
       status = room.mode !== 'workflow' && waitingOn.length ? 'waiting' : 'done'
     }
     const done = replies.filter(r => r.status === 'done').length
-    const denom = done + running.length + waitingOn.length + (status === 'working' && !running.length ? 1 : 0)
+    const extra = queuedWorkers.filter(w => !running.some(r => r.from === w)).length
+    const denom = done + running.length + extra + waitingOn.length + (status === 'working' && !running.length && !extra ? 1 : 0)
     const endTs = last?.ts ?? t.ts
     return {
-      n: t.n, index: t.index, text: t.text, ts: t.ts, status, waitingOn, current: running.map(r => r.from),
+      n: t.n, id: t.id, index: t.index, text: t.text, to: t.to, ts: t.ts, status, waitingOn, current: [...new Set([...running.map(r => r.from), ...queuedWorkers])],
       agents: [...new Set(replies.map(r => r.from))], replies, done,
       progress: status === 'done' ? 1 : denom ? done / denom : 0,
       tools: replies.reduce((a, r) => a + r.tools, 0),
+      files: replies.reduce((a, r) => a + r.files, 0),
       durationMs: replies.reduce((a, r) => a + (r.durationMs ?? 0), 0),
       startedAt: t.ts, lastActivity: endTs,
     }
   })
+}
+
+const SUMMARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    headline: { type: 'string', description: 'One sentence: what this project is and where it stands' },
+    status: { type: 'string', enum: ['on-track', 'in-progress', 'blocked', 'done', 'idle'] },
+    summary: { type: 'string', description: 'Markdown, 1-3 short paragraphs: goal, what has been done, current state' },
+    phases: {
+      type: 'array', description: 'The project as 3-8 stages in order, for a flow chart',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'short id like p1' },
+          title: { type: 'string', description: '2-5 words' },
+          detail: { type: 'string', description: 'one sentence' },
+          status: { type: 'string', enum: ['done', 'active', 'planned', 'blocked'] },
+          agents: { type: 'array', items: { type: 'string' } },
+          tasks: { type: 'array', items: { type: 'number' }, description: 'task numbers (#n) in this stage' },
+        },
+        required: ['id', 'title', 'status'],
+      },
+    },
+    links: {
+      type: 'array', description: 'Arrows between phases when the flow is not simply one after another (branches, loops back)',
+      items: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' }, label: { type: 'string' } }, required: ['from', 'to'] },
+    },
+    decisions: { type: 'array', items: { type: 'string' } },
+    open: { type: 'array', items: { type: 'string' }, description: 'open questions, blockers, risks' },
+    next: { type: 'array', items: { type: 'string' }, description: 'next steps' },
+  },
+  required: ['headline', 'status', 'summary', 'phases'],
 }
 
 export class ChatStore {
@@ -106,7 +183,9 @@ export class ChatStore {
     this.dir = registry.d.chats
     fs.mkdirSync(this.dir, { recursive: true })
     this.log = log
-    this.live = new Map() // id -> { abort: AbortController }
+    /** id -> { abort, runs, agents: Map<who, count>, replies: Map<who, Set<AbortController>>, inbox: Map<who, msgId[]>, workers: Map<wid, {task, promise}>, sem, supLock } */
+    this.live = new Map()
+    this.summaries = new Set()
     this.projectsFile = path.join(path.dirname(this.dir), 'chat-projects.json')
     this.overridesFile = path.join(path.dirname(this.dir), 'chat-project-agents.json')
   }
@@ -256,10 +335,19 @@ export class ChatStore {
   }
 
   #save(room) {
+    delete room.busy
     room.updatedAt = now()
     const f = this.#file(room.id)
     fs.writeFileSync(`${f}.tmp`, JSON.stringify(room, null, 2))
     fs.renameSync(`${f}.tmp`, f)
+  }
+
+  /** Read-modify-write a room synchronously (no await between read and write, so concurrent steps cannot lose updates). */
+  #mutate(id, fn) {
+    const r = this.get(id)
+    const out = fn(r)
+    this.#save(r)
+    return out
   }
 
   #validate(agents) {
@@ -268,31 +356,52 @@ export class ChatStore {
     return [...new Set(agents)]
   }
 
+  #isBusy(id) { return (this.live.get(id)?.runs ?? 0) > 0 }
+
+  #liveOf(id) {
+    let l = this.live.get(id)
+    if (!l) { l = { abort: new AbortController(), runs: 0, agents: new Map(), replies: new Map(), inbox: new Map(), workers: new Map(), sem: null, supLock: Promise.resolve() }; this.live.set(id, l) }
+    return l
+  }
+
+  /** Run fn(signal) as part of the room's live work; the room is busy until every tracked run ends. */
+  #track(id, fn) {
+    const l = this.#liveOf(id)
+    l.runs++
+    return (async () => fn(l.abort.signal))()
+      .catch(e => this.log(`chat ${id}: ${e?.message ?? e}`))
+      .finally(() => { if (--l.runs === 0 && this.live.get(id) === l) this.live.delete(id) })
+  }
+
   list() {
     return fs.readdirSync(this.dir).filter(f => f.endsWith('.json')).map(f => {
       try {
         const r = JSON.parse(fs.readFileSync(path.join(this.dir, f), 'utf8'))
-        const tasks = summarizeTasks(r, this.live.has(r.id))
+        const busy = this.#isBusy(r.id)
+        const tasks = summarizeTasks(r, busy)
         const t = tasks.at(-1)
         const task = t ? { n: t.n, status: t.status, progress: t.progress, current: t.current, waitingOn: t.waitingOn, done: t.done } : null
-        return { id: r.id, title: r.title, project: r.project, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy: this.live.has(r.id), messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task }
+        const workers = Object.values(r.workers ?? {})
+        return { id: r.id, title: r.title, project: r.project, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy, messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task, workers: workers.length, workersActive: busy ? workers.filter(w => w.status === 'running' || w.status === 'queued').length : 0 }
       } catch { return null }
     }).filter(Boolean).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
   }
 
-  /** The room as the UI shows it: the stored room plus its task summaries. */
+  /** The room as the UI shows it: the stored room plus its task summaries and live agent activity. */
   view(id) {
     const room = this.get(id)
-    return { ...room, tasks: summarizeTasks(room, room.busy) }
+    const l = this.live.get(id)
+    if (!room.busy) for (const w of Object.values(room.workers ?? {})) if (w.status === 'running' || w.status === 'queued') w.status = 'interrupted'
+    return { ...room, tasks: summarizeTasks(room, room.busy), activeAgents: l ? [...l.agents.keys()] : [], inbox: l ? Object.fromEntries([...l.inbox].map(([k, v]) => [k, v.length])) : {}, supervisorAgent: room.mode === 'supervisor' ? this.#supervisor(room) : undefined, workerRolesResolved: room.mode === 'supervisor' ? this.#roles(room) : undefined }
   }
 
   get(id) {
     const room = JSON.parse(fs.readFileSync(this.#file(id), 'utf8'))
-    room.busy = this.live.has(id)
+    room.busy = this.#isBusy(id)
     return room
   }
 
-  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, project }) {
+  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, supervisor, workerRoles, maxWorkers, maxConcurrent, project }) {
     project = this.#assertProject(project)
     if (!cwd && project) cwd = this.#readProjects().find(p => p.id === project)?.cwd
     if (team && (!agents || agents.length === 0)) agents = this.registry.getTeam(team).members
@@ -306,8 +415,20 @@ export class ChatStore {
     if (lead) room.lead = lead
     if (workflow) room.workflow = workflow
     if (workflowArgs) room.workflowArgs = this.#args(workflowArgs)
+    this.#applySupervisor(room, { supervisor, workerRoles, maxWorkers, maxConcurrent })
     this.#save(room)
     return room
+  }
+
+  #applySupervisor(room, p) {
+    if (p.supervisor !== undefined) { if (p.supervisor && !room.agents.includes(p.supervisor)) throw new Error("supervisor must be one of this chat's agents"); room.supervisor = p.supervisor || undefined }
+    if (p.workerRoles !== undefined) {
+      const roles = (p.workerRoles ?? []).filter(Boolean)
+      for (const a of roles) { assertName(a, 'worker role'); this.registry.getAgent(a) }
+      room.workerRoles = roles.length ? [...new Set(roles)] : undefined
+    }
+    if (p.maxWorkers !== undefined) room.maxWorkers = clampInt(p.maxWorkers, 1, 50, 10)
+    if (p.maxConcurrent !== undefined) room.maxConcurrent = clampInt(p.maxConcurrent, 1, 16, 4)
   }
 
   update(id, patch) {
@@ -321,7 +442,7 @@ export class ChatStore {
     if (patch.lead !== undefined) { if (patch.lead && !room.agents.includes(patch.lead)) throw new Error("lead must be one of this chat's agents"); room.lead = patch.lead || undefined }
     if (patch.workflow !== undefined) { if (patch.workflow) this.registry.orchestrationFile(patch.workflow); room.workflow = patch.workflow || undefined }
     if (patch.workflowArgs !== undefined) room.workflowArgs = this.#args(patch.workflowArgs)
-    delete room.busy
+    this.#applySupervisor(room, patch)
     this.#save(room)
     return room
   }
@@ -339,8 +460,26 @@ export class ChatStore {
     return room.agents[0]
   }
 
+  #supervisor(room) { return room.supervisor && room.agents.includes(room.supervisor) ? room.supervisor : this.#lead(room) }
+
+  /** Agent definitions the supervisor may spawn workers from: the chosen roles, else the room's other agents, else itself. */
+  #roles(room) {
+    const sup = this.#supervisor(room)
+    if (room.workerRoles?.length) return room.workerRoles
+    const others = room.agents.filter(a => a !== sup)
+    return others.length ? others : [sup]
+  }
+
+  /** The shared room folder: the chat's working directory, else the supervisor's (or first agent's) default folder. */
+  #roomFolder(room) {
+    return resolveCwd(this.registry, this.agentDef(room.project, room.mode === 'supervisor' ? this.#supervisor(room) : room.agents[0]), room.cwd)
+  }
+
   delete(id) {
+    let room
+    try { room = this.get(id) } catch {}
     this.cancel(id)
+    for (const w of Object.values(room?.workers ?? {})) if (w.worktree && !w.merged) removeWorktree(w.worktree).catch(() => {})
     fs.rmSync(this.#file(id), { force: true })
   }
 
@@ -351,33 +490,75 @@ export class ChatStore {
     return true
   }
 
-  /** Append a user message and start agent replies in the background. */
-  post(id, text) {
+  /** Stop one agent's (or worker's) current reply and drop its queued direct messages. */
+  cancelAgent(id, who) {
+    const l = this.live.get(id)
+    if (!l) return false
+    const set = l.replies.get(who)
+    const queued = l.inbox.get(who) ?? []
+    l.inbox.delete(who)
+    if (queued.length) this.#mutate(id, r => { for (const m of r.messages) if (queued.includes(m.id)) { delete m.queued; m.dropped = true } })
+    if (set) for (const a of set) a.abort()
+    return !!(set?.size || queued.length)
+  }
+
+  /**
+   * Append a user message and start replies in the background.
+   * With `to`, only that agent or worker answers (queued if it is mid-reply); otherwise the room mode decides.
+   */
+  post(id, text, { to } = {}) {
     if (typeof text !== 'string' || !text.trim()) throw new Error('empty message')
-    if (this.live.has(id)) throw new Error('agents are still replying; wait or press Stop')
     const room = this.get(id)
-    delete room.busy
-    room.messages.push({ id: newId(), from: 'user', text: text.trim(), ts: now() })
+    if (to && !speakers(room).includes(to)) throw new Error(`"${to}" is not an agent or worker in this chat`)
+    const busy = this.#isBusy(id)
+    if (!to && busy && room.mode !== 'supervisor') throw new Error('agents are still replying: message one agent directly, wait, or press Stop')
+    const msg = { id: newId(), from: 'user', text: text.trim(), ts: now() }
+    msg.task = msg.id
+    if (to) msg.to = to
+    room.messages.push(msg)
     this.#save(room)
-    const abort = new AbortController()
-    this.live.set(id, { abort })
-    this.#respond(id, abort.signal)
-      .catch(e => this.log(`chat ${id}: ${e?.message ?? e}`))
-      .finally(() => this.live.delete(id))
-    return { ok: true }
+    if (to) this.#deliver(id, to, [msg.id])
+    else if (room.mode === 'supervisor' && busy) this.#deliver(id, this.#supervisor(room), [msg.id])
+    else this.#track(id, signal => this.#respond(id, msg.id, signal))
+    return { ok: true, id: msg.id }
   }
 
-  #mentions(text, room) {
-    const found = []
-    for (const m of text.matchAll(/@([a-z][a-z0-9-]*)/g)) if (room.agents.includes(m[1]) && !found.includes(m[1])) found.push(m[1])
-    return found
+  /** Hand messages to one agent: run now if it is free, else queue them until its current reply ends. */
+  #deliver(id, who, msgIds) {
+    const l = this.#liveOf(id)
+    if ((l.agents.get(who) ?? 0) > 0) {
+      l.inbox.set(who, [...(l.inbox.get(who) ?? []), ...msgIds])
+      this.#mutate(id, r => { for (const m of r.messages) if (msgIds.includes(m.id)) m.queued = true })
+      return 'queued'
+    }
+    this.#track(id, signal => this.#directTurn(id, who, msgIds, signal))
+    return 'started'
   }
 
-  async #respond(id, signal) {
-    let room = this.get(id)
-    const userMsg = room.messages.at(-1)
-    const mentioned = this.#mentions(userMsg.text, room)
-    if (room.mode === 'workflow') return this.#workflow(id, userMsg.text, signal)
+  async #directTurn(id, who, msgIds, signal) {
+    const room = this.get(id)
+    const first = room.messages.find(m => m.id === msgIds[0])
+    const task = first?.task ?? msgIds[0]
+    if (room.workers?.[who]) {
+      // a follow-up step for a worker: runs after its current step, and is registered so wait_for_workers sees it
+      const l = this.#liveOf(id)
+      const prev = l.workers.get(who)?.promise
+      const p = (async () => { if (prev) await prev.catch(() => {}); return this.#workerTurn(id, who, { messages: msgIds }, signal) })()
+      l.workers.set(who, { task: room.workers[who].task, promise: p })
+      p.finally(() => { if (l.workers.get(who)?.promise === p) l.workers.delete(who) })
+      return p
+    }
+    if (room.mode === 'supervisor' && who === this.#supervisor(room)) return this.#supervise(id, task, signal, { direct: msgIds })
+    await this.#reply(id, who, signal, { task, cause: first?.from === 'user' ? 'user' : msgIds[0], direct: msgIds })
+    if (room.mode !== 'workflow' && room.mode !== 'supervisor') await this.#handoffs(id, task, signal)
+  }
+
+  async #respond(id, task, signal) {
+    const room = this.get(id)
+    const userMsg = room.messages.find(m => m.id === task)
+    if (room.mode === 'workflow') return this.#workflow(id, task, userMsg.text, signal)
+    if (room.mode === 'supervisor') return this.#supervise(id, task, signal, {})
+    const mentioned = mentionsIn(userMsg.text, room.agents)
     let first
     if (room.mode === 'mention') first = mentioned.length ? mentioned : [room.agents[0]]
     else if (room.mode === 'handoff') first = mentioned.length ? mentioned : [this.#lead(room)]
@@ -385,30 +566,305 @@ export class ChatStore {
 
     if (room.mode === 'parallel' && first.length > 1) {
       const cut = room.messages.length
-      await Promise.all(first.map(a => this.#reply(id, a, signal, cut)))
+      await Promise.all(first.map(a => this.#reply(id, a, signal, { task, cause: 'user', cutoff: cut })))
     } else {
-      for (const a of first) { if (signal.aborted) return; await this.#reply(id, a, signal) }
+      for (const a of first) { if (signal.aborted) return; await this.#reply(id, a, signal, { task, cause: 'user' }) }
     }
+    await this.#handoffs(id, task, signal)
+  }
 
-    // hand-offs: an agent reply that @mentions another room agent gives it the floor
+  /** Hand-offs: while the task's newest reply @mentions another room agent, give that agent the floor. */
+  async #handoffs(id, task, signal) {
     let hops = 0
-    room = this.get(id)
+    let room = this.get(id)
     while (!signal.aborted && hops < room.maxHops) {
-      const last = room.messages.at(-1)
-      if (!last || last.from === 'user' || last.status !== 'done') break
-      const next = this.#mentions(last.text, room).filter(a => a !== last.from)
+      const last = room.messages.filter(m => m.task === task && m.from !== 'user').at(-1)
+      if (!last || last.status !== 'done') break
+      const next = mentionsIn(last.text, room.agents, last.from)
       if (!next.length) break
-      for (const a of next) { if (signal.aborted) break; await this.#reply(id, a, signal); hops++ }
+      for (const a of next) { if (signal.aborted) break; await this.#reply(id, a, signal, { task, cause: last.id }); hops++ }
       room = this.get(id)
     }
   }
 
-  /** Workflow mode: run the room's orchestration for this message and mirror its progress into one chat message. */
-  async #workflow(id, text, signal) {
+  // ---------------- supervisor mode
+
+  /** One supervisor turn for a task, then wake it with worker results until the task's workers are all reported. */
+  async #supervise(id, task, signal, { direct }) {
+    const l = this.#liveOf(id)
+    const sup = this.#supervisor(this.get(id))
+    // one supervisor reply at a time per room
+    const locked = fn => { const p = l.supLock.then(fn, fn); l.supLock = p.catch(() => {}); return p }
+    await locked(() => this.#reply(id, sup, signal, { task, cause: direct ? (this.get(id).messages.find(m => m.id === direct[0])?.from === 'user' ? 'user' : direct[0]) : 'user', direct, supervisorTask: task }))
+    for (let wakes = 0; !signal.aborted && wakes < MAX_WAKES; wakes++) {
+      const room = this.get(id)
+      const unreported = Object.values(room.workers ?? {}).filter(w => w.task === task && !w.reported && ['done', 'failed', 'stopped'].includes(w.status))
+      if (!unreported.length) {
+        const running = [...l.workers.values()].filter(w => w.task === task).map(w => w.promise)
+        if (!running.length) break
+        await Promise.race(running)
+        await new Promise(r => setTimeout(r, 1500)) // batch workers that finish together
+        wakes--
+        continue
+      }
+      const ids = unreported.map(w => w.id)
+      this.#mutate(id, r => { for (const w of ids) if (r.workers[w]) r.workers[w].reported = true })
+      const updates = unreported.map(w => `### ${w.id} (${w.role}) — ${w.status}${w.diffStat ? `\nBranch ${w.worktree?.branch} (not merged yet; use merge_worker):\n${w.diffStat}` : ''}\n${clip(room.messages.find(m => m.id === w.msgId)?.text ?? w.error ?? '', 6000)}`).join('\n\n')
+      const lastMsg = unreported.map(w => w.msgId).filter(Boolean).at(-1)
+      await locked(() => this.#reply(id, sup, signal, { task, cause: lastMsg ?? 'user', supervisorTask: task, updates }))
+    }
+  }
+
+  #supervisorTools(id, task, getMsgId) {
+    const room = this.get(id)
+    const roles = this.#roles(room)
+    const defs = [
+      { name: 'spawn_worker', description: `Start a new worker agent in the background and return its id immediately. A worker is a fresh copy of a role agent that works only on the assignment you give it, so make the assignment self-contained (goal, files or areas, constraints, what to report). Roles: ${roles.join(', ')}. isolation "shared" (default): the worker edits the shared room folder directly; use it for independent files, reading or research. isolation "worktree": the worker gets its own git worktree and branch from HEAD (uncommitted changes in the room folder are not included); use it when parallel workers might edit the same files, then call merge_worker when it is done.`,
+        inputSchema: { type: 'object', properties: { role: { type: 'string', enum: roles }, task: { type: 'string', description: 'the full assignment' }, isolation: { type: 'string', enum: ['shared', 'worktree'] } }, required: ['role', 'task'] } },
+      { name: 'list_workers', description: 'Every worker in this chat: id, role, status (queued, running, done, failed, stopped), assignment, isolation, branch and a preview of its result.', inputSchema: { type: 'object', properties: {} } },
+      { name: 'wait_for_workers', description: 'Wait until the given workers (default: all unfinished workers) finish, or timeoutSec passes (default 300, max 1800), and return their full results. You do not have to wait: if you end your turn, you are woken with results automatically as workers finish.',
+        inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } }, timeoutSec: { type: 'number' } } } },
+      { name: 'message_worker', description: 'Send a message to a worker: more instructions, a correction or a follow-up task. A running worker gets it when its current step ends; a finished worker starts a new step with it.',
+        inputSchema: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' } }, required: ['id', 'text'] } },
+      { name: 'stop_worker', description: 'Stop a queued or running worker.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+      { name: 'merge_worker', description: "Merge a finished worktree worker's branch into the room folder's current branch (git merge --no-ff). On conflict the merge is aborted and the output is returned so you can resolve it (for example by messaging the worker to rebase).",
+        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+    ]
+    const workerOf = wid => { const w = this.get(id).workers?.[wid]; if (!w) throw new Error(`no worker "${wid}"; call list_workers`); return w }
+    const handle = async (name, a) => {
+      switch (name) {
+        case 'spawn_worker': {
+          const wid = this.#spawn(id, task, getMsgId(), a)
+          return `spawned ${wid} (${a.role}, ${a.isolation ?? 'shared'}). It runs in the background; mention it as @${wid}.`
+        }
+        case 'list_workers': {
+          const ws = Object.values(this.get(id).workers ?? {})
+          if (!ws.length) return 'no workers yet'
+          return JSON.stringify(ws.map(w => ({ id: w.id, role: w.role, status: w.status, task: w.task === task ? 'this task' : w.task, isolation: w.isolation, branch: w.worktree?.branch, merged: w.merged, assignment: clip(w.assignment, 300), result: clip(this.get(id).messages.find(m => m.id === w.msgId)?.text ?? w.error ?? '', 400) })), null, 2)
+        }
+        case 'wait_for_workers': {
+          const l = this.#liveOf(id)
+          const r0 = this.get(id)
+          const ids = a.ids?.length ? a.ids : Object.values(r0.workers ?? {}).filter(w => w.status === 'queued' || w.status === 'running' || !w.reported).map(w => w.id)
+          for (const w of ids) workerOf(w)
+          const promises = ids.map(w => l.workers.get(w)?.promise).filter(Boolean)
+          const ms = clampInt((a.timeoutSec ?? 300) * 1000, 1000, 1800000, 300000)
+          let timer
+          await Promise.race([Promise.all(promises), new Promise(r => { timer = setTimeout(r, ms) }), new Promise(r => l.abort.signal.addEventListener('abort', r, { once: true }))])
+          clearTimeout(timer)
+          const room = this.get(id)
+          const out = ids.map(wid => {
+            const w = room.workers[wid]
+            const finished = ['done', 'failed', 'stopped'].includes(w.status)
+            return `### ${wid} (${w.role}) — ${w.status}${w.diffStat ? `\nBranch ${w.worktree?.branch}${w.merged ? ' (merged)' : ' (not merged yet)'}:\n${w.diffStat}` : ''}${finished ? `\n${clip(room.messages.find(m => m.id === w.msgId)?.text ?? w.error ?? '', 8000)}` : ''}`
+          })
+          this.#mutate(id, r => { for (const wid of ids) if (['done', 'failed', 'stopped'].includes(r.workers[wid]?.status)) r.workers[wid].reported = true })
+          return out.join('\n\n')
+        }
+        case 'message_worker': {
+          workerOf(a.id)
+          const sup = this.#supervisor(this.get(id))
+          const mid = this.#mutate(id, r => { const m = { id: newId(), from: sup, to: a.id, text: String(a.text), ts: now(), task, cause: getMsgId(), status: 'done', note: true }; r.messages.push(m); return m.id })
+          return `message ${this.#deliver(id, a.id, [mid])} for ${a.id}`
+        }
+        case 'stop_worker': {
+          const w = workerOf(a.id)
+          this.#mutate(id, r => { if (r.workers[a.id].status === 'queued') r.workers[a.id].status = 'stopped' })
+          this.cancelAgent(id, a.id)
+          return `stopping ${a.id} (was ${w.status})`
+        }
+        case 'merge_worker': {
+          const w = workerOf(a.id)
+          if (!w.worktree) return `${a.id} worked in the shared folder; nothing to merge`
+          if (w.merged) return `${a.id} is already merged`
+          if (w.status === 'running' || w.status === 'queued') return `${a.id} is still ${w.status}; wait for it first`
+          const r = await mergeWorktree(w.worktree)
+          if (r.ok) this.#mutate(id, room => { room.workers[a.id].merged = true; room.workers[a.id].mergedAt = now() })
+          return `${r.ok ? 'merged' : 'merge failed (aborted)'}: ${clip(r.output, 4000)}`
+        }
+      }
+      throw new Error(`unknown tool ${name}`)
+    }
+    return toolsMcp('forge_team', defs, handle)
+  }
+
+  /** Create a worker record and start it in the background (limited to maxConcurrent at once per room). */
+  #spawn(id, task, cause, { role, task: assignment, isolation = 'shared' }) {
+    if (!assignment?.trim()) throw new Error('task (the assignment) is required')
+    if (!['shared', 'worktree'].includes(isolation)) throw new Error('isolation must be shared or worktree')
+    const wid = this.#mutate(id, room => {
+      if (!this.#roles(room).includes(role)) throw new Error(`role must be one of ${this.#roles(room).join(', ')}`)
+      room.workers ??= {}
+      const active = Object.values(room.workers).filter(w => w.status === 'queued' || w.status === 'running').length
+      const max = room.maxWorkers ?? 10
+      if (active >= max) throw new Error(`already ${active} active workers (limit ${max}); wait for some to finish`)
+      room.workerSeq ??= {}
+      let n = room.workerSeq[role] ?? 0, wid
+      do { n++; wid = `${role}-${n}` } while (room.workers[wid] || room.agents.includes(wid))
+      room.workerSeq[role] = n
+      room.workers[wid] = { id: wid, role, assignment: assignment.trim(), isolation, status: 'queued', task, cause, spawnedBy: this.#supervisor(room), spawnedAt: now() }
+      return wid
+    })
+    const l = this.#liveOf(id)
+    const promise = this.#track(id, signal => this.#workerTurn(id, wid, { first: true }, signal))
+    l.workers.set(wid, { task, promise })
+    promise.finally(() => { if (l.workers.get(wid)?.promise === promise) l.workers.delete(wid) })
+    return wid
+  }
+
+  async #workerTurn(id, wid, { first, messages }, signal) {
+    const l = this.#liveOf(id)
+    l.sem ??= new Semaphore(this.get(id).maxConcurrent ?? 4)
     let room = this.get(id)
-    const msg = { id: newId(), from: `workflow:${room.workflow ?? '?'}`, model: 'workflow', text: '', status: 'pending', tools: [], ts: now() }
-    room.messages.push(msg); delete room.busy; this.#save(room)
-    const patch = fn => { const r = this.get(id); delete r.busy; const m = r.messages.find(x => x.id === msg.id); if (m) { fn(m); this.#save(r) } }
+    const patchW = fn => this.#mutate(id, r => fn(r.workers[wid]))
+    if (!first) patchW(w => { w.status = 'queued'; w.reported = false })
+    await l.sem.acquire()
+    try {
+      room = this.get(id)
+      const w = room.workers[wid]
+      if (signal.aborted || (first && w.status === 'stopped')) { patchW(x => { x.status = 'stopped'; x.endedAt = now() }); return }
+      if (w.isolation === 'worktree' && !w.worktree) {
+        try {
+          const wt = await addWorktree(this.#roomFolder(room), path.join(this.registry.home, 'worktrees', id, wid), `forge/${id}/${wid}`)
+          patchW(x => { x.worktree = wt })
+        } catch (e) {
+          patchW(x => { x.status = 'failed'; x.error = e.message; x.endedAt = now() })
+          this.#mutate(id, r => r.messages.push({ id: newId(), from: wid, role: w.role, worker: true, task: w.task, cause: w.cause, status: 'failed', text: `Could not start: ${e.message}`, tools: [], ts: now() }))
+          return
+        }
+      }
+      patchW(x => { x.status = 'running'; x.startedAt ??= now() })
+      room = this.get(id)
+      const wk = room.workers[wid]
+      // a user's direct message starts its own task; a supervisor's message continues the worker's task
+      const m0 = messages?.length ? room.messages.find(m => m.id === messages[0]) : null
+      const cause = first || !m0 ? wk.cause : m0.from === 'user' ? 'user' : m0.note ? (m0.cause ?? wk.cause) : m0.id
+      const res = await this.#reply(id, wid, signal, {
+        task: m0?.from === 'user' ? m0.task : wk.task, cause, role: wk.role, cwd: wk.worktree?.cwd ?? this.#roomFolder(room), worker: wk, direct: messages, first,
+      })
+      let diffStat
+      if (wk.worktree) { try { diffStat = await finishWorktree({ ...wk.worktree, id: wid }) } catch (e) { diffStat = `could not commit worktree: ${e.message}` } }
+      patchW(x => { x.status = res.ok ? 'done' : signal.aborted || res.cancelled ? 'stopped' : 'failed'; x.endedAt = now(); x.msgId = res.msgId; x.reported = false; x.steps = (x.steps ?? 0) + 1; if (diffStat !== undefined) x.diffStat = diffStat; if (!res.ok) x.error = res.text })
+    } finally {
+      l.sem.release()
+    }
+  }
+
+  // ---------------- one agent step
+
+  /**
+   * One reply by an agent or worker. opts: task, cause, cutoff (transcript end), direct (message ids addressed
+   * to it), role/worker (worker steps), cwd, supervisorTask (adds the worker tools), updates (worker results).
+   */
+  async #reply(id, who, signal, opts = {}) {
+    let room = this.get(id)
+    const def = this.agentDef(room.project, opts.role ?? who)
+    const l = this.#liveOf(id)
+    const ac = new AbortController()
+    const onAbort = () => ac.abort()
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (!l.replies.has(who)) l.replies.set(who, new Set())
+    l.replies.get(who).add(ac)
+    l.agents.set(who, (l.agents.get(who) ?? 0) + 1)
+    if (opts.direct?.length) this.#mutate(id, r => { for (const m of r.messages) if (opts.direct.includes(m.id)) delete m.queued })
+
+    const msg = { id: newId(), from: who, model: def.model, text: '', status: 'pending', tools: [], ts: now(), task: opts.task, cause: opts.cause ?? 'user' }
+    if (opts.worker) { msg.worker = true; msg.role = def.name }
+    const patch = fn => { try { this.#mutate(id, r => { const m = r.messages.find(x => x.id === msg.id); if (m) fn(m) }) } catch {} }
+    try {
+      room = this.#mutate(id, r => { r.messages.push(msg); return r })
+      if (opts.supervisorTask && def.backend !== 'claude-code') throw new Error(`supervisor "${who}" uses the ${def.backend} backend; supervisor mode needs a Claude Code (claude-code backend) agent to get its worker tools`)
+      const cwd = resolveCwd(this.registry, def, opts.cwd ?? room.cwd)
+      const before = await snapshot(cwd)
+      const { prompt, contextNote } = this.#promptFor(room, who, def, opts, msg)
+      const edited = new Set()
+      let lastFlush = 0
+      const res = await runAgent({
+        def, registry: this.registry, prompt, cwd, team: room.team, label: `chat:${who}`, contextNote, signal: ac.signal,
+        extraMcp: opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : undefined,
+        onEvent: e => {
+          if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
+          if (e.type !== 'tool' && e.type !== 'fallback') return
+          msg.tools.push(e.brief ?? e.name)
+          const fp = EDIT_TOOLS.has(e.name) ? (e.input?.file_path ?? e.input?.notebook_path) : null
+          if (fp) edited.add(path.resolve(cwd, fp))
+          if (Date.now() - lastFlush > 800) { lastFlush = Date.now(); const t = [...msg.tools]; patch(m => { m.tools = t }) }
+        },
+      })
+      const after = before ? await snapshot(cwd) : null
+      let files = []
+      if (before && after && before.root === after.root) { try { files = await changedFiles(before.root, before.tree, after.tree) } catch {} }
+      const root = before?.root
+      const rel = f => root && (f === root || f.startsWith(root + path.sep)) ? path.relative(root, f) : f
+      const editedRel = [...edited].map(rel)
+      for (const f of files) if (editedRel.includes(f.path)) f.byTool = true
+      for (const f of editedRel) if (!files.some(x => x.path === f)) files.push({ path: f, status: 'M', add: null, del: null, byTool: true, untracked: !root || path.isAbsolute(f) })
+      const cancelled = ac.signal.aborted
+      patch(m => {
+        m.tools = msg.tools
+        m.durationMs = res.durationMs
+        if (res.attempts) m.attempts = res.attempts
+        if (res.costUsd) m.costUsd = res.costUsd
+        m.cwd = cwd
+        if (files.length) m.files = files
+        if (before && after) m.tree = { root: before.root, before: before.tree, after: after.tree }
+        if (res.ok) { m.status = 'done'; m.text = (res.text ?? JSON.stringify(res.structured, null, 2)).replace(new RegExp(`^\\s*\\**@?${who}\\**\\s*:\\s*`, 'i'), '') }
+        else { m.status = cancelled ? 'cancelled' : 'failed'; m.text = cancelled ? 'Stopped.' : res.error }
+      })
+      return { ok: res.ok, msgId: msg.id, text: res.ok ? res.text : res.error, cancelled }
+    } catch (e) {
+      patch(m => { m.status = 'failed'; m.text = `Error: ${e?.message ?? e}` })
+      return { ok: false, msgId: msg.id, text: e?.message ?? String(e) }
+    } finally {
+      signal.removeEventListener('abort', onAbort)
+      l.replies.get(who)?.delete(ac)
+      const n = (l.agents.get(who) ?? 1) - 1
+      if (n > 0) l.agents.set(who, n); else l.agents.delete(who)
+      // deliver direct messages that arrived while this agent was busy
+      const queued = l.inbox.get(who)
+      if (n <= 0 && queued?.length && !signal.aborted) { l.inbox.delete(who); this.#track(id, s => this.#directTurn(id, who, queued, s)) }
+    }
+  }
+
+  #promptFor(room, who, def, opts, msg) {
+    const transcript = this.#transcript(room, opts.cutoff ?? room.messages.length - 1)
+    const directMsgs = (opts.direct ?? []).map(i => room.messages.find(m => m.id === i)).filter(Boolean)
+    const directText = directMsgs.length ? `\n\nMessages addressed to you directly (answer these):\n${directMsgs.map(m => `[${m.from === 'user' ? 'user' : '@' + m.from} → you]\n${m.text}`).join('\n\n')}` : ''
+    if (opts.worker) {
+      const w = opts.worker
+      const sup = w.spawnedBy
+      const taskMsg = room.messages.find(m => m.id === w.task)
+      const iso = w.worktree
+        ? `You work in your own git worktree on branch ${w.worktree.branch} (folder ${w.worktree.cwd}). Commit your work there with clear messages; the supervisor merges your branch.`
+        : 'You work in the shared room folder. Other workers may be editing files in the same folder at the same time: stay within your assignment, do not revert changes you did not make, and avoid broad reformatting.'
+      const prev = !opts.first && w.msgId ? room.messages.find(m => m.id === w.msgId) : null
+      return {
+        contextNote: `You are worker "${who}", a copy of the "${def.name}" agent, spawned by @${sup} (the supervisor) in a group chat with a human user. You work on one assignment and report back. Do the real work with your tools. Do not @mention other agents; your reply goes to the supervisor and the user. ${iso}${this.#teamNote(room.team)}`,
+        prompt: `Your assignment from @${sup}:\n${w.assignment}\n\nThe user's request that started this task:\n${clip(taskMsg?.text ?? '', 4000)}${prev ? `\n\nYour previous report:\n${clip(prev.text, 4000)}` : ''}${directText}\n\n---\nWhen finished, reply with a concise report: what you did, files changed, anything left open. Do not start it with your own name.`,
+      }
+    }
+    const others = speakers(room).filter(a => a !== who)
+    if (opts.supervisorTask) {
+      const roles = this.#roles(room).map(r => { try { const d = this.agentDef(room.project, r); return `- ${r}: ${clip(d.description || d.role || '', 200)}` } catch { return `- ${r}` } }).join('\n')
+      const ws = Object.values(room.workers ?? {})
+      const wlist = ws.length ? ws.map(w => `- ${w.id} (${w.role}) ${w.status}${w.worktree ? ` [worktree ${w.worktree.branch}${w.merged ? ', merged' : ''}]` : ''}: ${clip(w.assignment, 120)}`).join('\n') : '(none yet)'
+      return {
+        contextNote: `You are "${who}", the supervisor of a live group chat with a human user. You plan the work and delegate it to worker agents you spawn with the forge_team tools (spawn_worker, list_workers, wait_for_workers, message_worker, stop_worker, merge_worker), at any time, as many as the work needs (up to ${room.maxWorkers ?? 10} active, ${room.maxConcurrent ?? 4} running at once; extra workers queue). Split work into independent, self-contained assignments. Choose isolation per worker: "shared" when workers touch different files or only read, "worktree" when parallel workers may edit the same files (then merge_worker each one and check the result). After spawning you may wait_for_workers, or end your turn with a short status for the user: you are woken automatically with worker results as they finish. Do small things yourself. When all work is done, give the user a clear final summary. The shared room folder is ${this.#roomFolder(room)}.\n\nWorker roles you can spawn:\n${roles}\n\nWorkers so far:\n${wlist}${this.#teamNote(room.team)}`,
+        prompt: `Group chat transcript so far:\n\n${transcript}${directText}${opts.updates ? `\n\n---\nWorker updates since your last message:\n\n${opts.updates}\n\nDecide what is next: spawn more workers, message or merge workers, or report to the user.` : ''}\n\n---\nWrite your next message in this chat. Do not start it with your own name; the chat shows who is speaking.`,
+      }
+    }
+    return {
+      contextNote: `You are agent "${who}" in a live group chat with a human user${others.length ? ` and these other agents: ${others.map(a => `@${a}`).join(', ')}` : ''}. Reply to the latest message as yourself. Use your tools when the request needs real work. To hand a question or task to another agent, mention them as @name in your reply; mention an agent only when you want them to respond next. Keep replies focused; use Markdown.${this.#teamNote(room.team)}`,
+      prompt: `Group chat transcript so far:\n\n${transcript}${directText}\n\n---\nWrite your next message in this chat${directMsgs.length ? ', answering the message(s) addressed to you' : ''}. Do not start it with your own name; the chat shows who is speaking.`,
+    }
+  }
+
+  /** Workflow mode: run the room's orchestration for this message and mirror its progress into one chat message. */
+  async #workflow(id, task, text, signal) {
+    let room = this.get(id)
+    const msg = { id: newId(), from: `workflow:${room.workflow ?? '?'}`, model: 'workflow', text: '', status: 'pending', tools: [], ts: now(), task, cause: 'user' }
+    room.messages.push(msg); this.#save(room)
+    const patch = fn => this.#mutate(id, r => { const m = r.messages.find(x => x.id === msg.id); if (m) fn(m) })
     const t0 = Date.now()
     const fence = '```'
     try {
@@ -447,8 +903,8 @@ export class ChatStore {
   }
 
   #transcript(room, uptoIndex) {
-    const msgs = room.messages.slice(0, uptoIndex).filter(m => m.status !== 'failed' && m.status !== 'pending')
-    let out = msgs.map(m => `[${m.from === 'user' ? 'user' : `@${m.from}`}]\n${m.text}`).join('\n\n')
+    const msgs = room.messages.slice(0, uptoIndex).filter(m => m.status !== 'failed' && m.status !== 'pending' && !m.dropped)
+    let out = msgs.map(m => `[${m.from === 'user' ? 'user' : `@${m.from}`}${m.to ? ` → @${m.to}` : ''}]\n${m.text}`).join('\n\n')
     if (out.length > TRANSCRIPT_CHARS) out = `[earlier messages omitted]\n…${out.slice(-TRANSCRIPT_CHARS)}`
     return out
   }
@@ -467,35 +923,110 @@ export class ChatStore {
     return lines.join('\n')
   }
 
-  async #reply(id, agentName, signal, cutoff) {
-    let room = this.get(id)
-    const def = this.agentDef(room.project, agentName)
-    const transcript = this.#transcript(room, cutoff ?? room.messages.length)
-    const msg = { id: newId(), from: agentName, model: def.model, text: '', status: 'pending', tools: [], ts: now() }
-    room.messages.push(msg)
-    delete room.busy
-    this.#save(room)
-    const patch = fn => { const r = this.get(id); delete r.busy; const m = r.messages.find(x => x.id === msg.id); if (m) { fn(m); this.#save(r) } }
+  // ---------------- Overview, Memory and Files tabs
 
-    const others = room.agents.filter(a => a !== agentName)
-    const contextNote = `You are agent "${agentName}" in a live group chat with a human user${others.length ? ` and these other agents: ${others.map(a => `@${a}`).join(', ')}` : ''}. Reply to the latest message as yourself. Use your tools when the request needs real work. To hand a question or task to another agent, mention them as @name in your reply; mention an agent only when you want them to respond next. Keep replies focused; use Markdown.${this.#teamNote(room.team)}`
-    const prompt = `Group chat transcript so far:\n\n${transcript}\n\n---\nWrite your next message in this chat. Do not start it with your own name; the chat shows who is speaking.`
-    let lastFlush = 0
-    const res = await runAgent({
-      def, registry: this.registry, prompt, cwd: room.cwd, team: room.team, label: `chat:${agentName}`, contextNote, signal,
-      onEvent: e => {
-        if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
-        if (e.type !== 'tool' && e.type !== 'fallback') return
-        msg.tools.push(e.brief ?? e.name)
-        if (Date.now() - lastFlush > 800) { lastFlush = Date.now(); const t = [...msg.tools]; patch(m => { m.tools = t }) }
-      },
-    })
-    patch(m => {
-      m.tools = msg.tools
-      m.durationMs = res.durationMs
-      if (res.attempts) m.attempts = res.attempts
-      if (res.ok) { m.status = 'done'; m.text = (res.text ?? JSON.stringify(res.structured, null, 2)).replace(new RegExp(`^\\s*\\**@?${agentName}\\**\\s*:\\s*`, 'i'), '') }
-      else { m.status = signal.aborted ? 'cancelled' : 'failed'; m.text = signal.aborted ? 'Stopped.' : res.error }
-    })
+  /** Computed project overview: totals, per-agent activity, workers, a timeline of events and the cached written summary. */
+  overview(id) {
+    const room = this.view(id)
+    const tasks = room.tasks
+    const byStatus = {}
+    for (const t of tasks) byStatus[t.status] = (byStatus[t.status] ?? 0) + 1
+    const agents = new Map()
+    const files = new Map()
+    let cost = 0
+    for (const m of room.messages) {
+      if (m.from === 'user' || m.note) continue
+      const a = agents.get(m.from) ?? { name: m.from, role: m.role, worker: !!m.worker, replies: 0, done: 0, failed: 0, durationMs: 0, tools: 0, files: 0, last: null }
+      a.replies++; if (m.status === 'done') a.done++; if (m.status === 'failed') a.failed++
+      a.durationMs += m.durationMs ?? 0; a.tools += (m.tools ?? []).length; a.files += (m.files ?? []).length; a.last = m.ts
+      agents.set(m.from, a)
+      cost += m.costUsd ?? 0
+      for (const f of m.files ?? []) files.set(f.path, (files.get(f.path) ?? 0) + 1)
+    }
+    const taskN = new Map(tasks.map(t => [t.id, t.n]))
+    const events = []
+    for (const m of room.messages) {
+      if (m.from === 'user') events.push({ ts: m.ts, kind: m.task === m.id ? 'task' : 'note', task: taskN.get(m.task), text: clip(m.text, 200), to: m.to })
+      else if (m.note) events.push({ ts: m.ts, kind: 'message', from: m.from, to: m.to, task: taskN.get(m.task), text: clip(m.text, 200) })
+      else events.push({ ts: m.ts, kind: 'reply', from: m.from, role: m.role, worker: !!m.worker, status: m.status, task: taskN.get(m.task), files: (m.files ?? []).length, durationMs: m.durationMs, text: clip(String(m.text ?? '').replace(/\s+/g, ' '), 200) })
+    }
+    for (const w of Object.values(room.workers ?? {})) {
+      events.push({ ts: w.spawnedAt, kind: 'spawn', from: w.spawnedBy, worker: w.id, role: w.role, isolation: w.isolation, task: taskN.get(w.task), text: clip(w.assignment, 200) })
+      if (w.mergedAt) events.push({ ts: w.mergedAt, kind: 'merge', worker: w.id, task: taskN.get(w.task), text: `merged ${w.worktree?.branch}` })
+    }
+    events.sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
+    const s = room.summary
+    return {
+      id: room.id, title: room.title, mode: room.mode, busy: room.busy, createdAt: room.createdAt, updatedAt: room.updatedAt, folder: (() => { try { return this.#roomFolder(room) } catch { return null } })(),
+      totals: { tasks: tasks.length, byStatus, messages: room.messages.length, agents: agents.size, workers: Object.keys(room.workers ?? {}).length, files: files.size, tools: tasks.reduce((a, t) => a + t.tools, 0), durationMs: tasks.reduce((a, t) => a + t.durationMs, 0), costUsd: cost },
+      agents: [...agents.values()].sort((a, b) => b.replies - a.replies),
+      workers: Object.values(room.workers ?? {}),
+      tasks: tasks.map(t => ({ n: t.n, text: clip(t.text, 200), to: t.to, status: t.status, progress: t.progress, agents: t.agents, startedAt: t.startedAt, lastActivity: t.lastActivity, files: t.files, durationMs: t.durationMs })),
+      topFiles: [...files].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([p, n]) => ({ path: p, steps: n })),
+      events: events.slice(-400),
+      summary: s ?? null, summaryPending: this.summaries.has(id), summaryStale: !!s && (s.uptoMessages ?? 0) < room.messages.length, summaryError: room.summaryError ?? null,
+    }
+  }
+
+  /** Start an on-demand written summary (Haiku) of the project so far; the result lands in room.summary. */
+  summarize(id) {
+    if (this.summaries.has(id)) return { pending: true }
+    const ov = this.overview(id)
+    const room = this.get(id)
+    const taskN = new Map(summarizeTasks(room).map(t => [t.id, t.n]))
+    const lines = [`Project chat: "${room.title}" (mode ${room.mode}, agents: ${room.agents.join(', ')}${room.team ? `, team ${room.team}` : ''})`, `Folder: ${ov.folder ?? '?'}`, '']
+    for (const t of ov.tasks) lines.push(`Task #${t.n} [${t.status}]${t.to ? ` (direct to @${t.to})` : ''} ${t.startedAt?.slice(0, 16)}: ${t.text}`)
+    lines.push('', 'Workers:')
+    for (const w of ov.workers) lines.push(`- ${w.id} (${w.role}, ${w.isolation}${w.merged ? ', merged' : ''}) ${w.status}, task #${taskN.get(w.task) ?? '?'}: ${clip(w.assignment, 200)}`)
+    lines.push('', 'Files changed most:', ...ov.topFiles.map(f => `- ${f.path} (${f.steps} steps)`), '', 'Transcript (newest last):')
+    let tx = room.messages.filter(m => m.status !== 'pending').map(m => `[#${taskN.get(m.task) ?? '?'} ${m.from === 'user' ? 'user' : '@' + m.from}${m.to ? ` → @${m.to}` : ''} ${String(m.ts).slice(0, 16)}${m.status && m.status !== 'done' ? ` ${m.status}` : ''}${m.files?.length ? ` files: ${m.files.map(f => f.path).slice(0, 12).join(', ')}` : ''}]\n${clip(m.text, 1500)}`).join('\n\n')
+    if (tx.length > 50000) tx = `…${tx.slice(-50000)}`
+    const prompt = `${lines.join('\n')}\n${tx}\n\n---\nSummarize this project for its owner so they can understand it at a glance. Describe the overall goal, what each agent did, where things stand, decisions, open issues and next steps. Break the project into 3-8 phases in order for a flow chart (use links only for branches or loops). Use the task numbers.`
+    const upto = room.messages.length
+    this.summaries.add(id)
+    this.#mutate(id, r => { delete r.summaryError })
+    quickQuery({ prompt, schema: SUMMARY_SCHEMA, model: 'haiku' })
+      .then(out => this.#mutate(id, r => { r.summary = { ...out, ts: now(), uptoMessages: upto, model: 'haiku' } }))
+      .catch(e => { try { this.#mutate(id, r => { r.summaryError = e?.message ?? String(e) }) } catch {} })
+      .finally(() => this.summaries.delete(id))
+    return { pending: true }
+  }
+
+  /** Memory folders of every agent and worker role in the room; folders shared by several agents are listed once. */
+  memory(id) {
+    const room = this.get(id)
+    const names = [...new Set([...room.agents, ...(room.mode === 'supervisor' ? this.#roles(room) : []), ...Object.values(room.workers ?? {}).map(w => w.role)])]
+    const stores = new Map()
+    const none = []
+    for (const n of names) {
+      let def
+      try { def = this.agentDef(room.project, n) } catch { continue }
+      const mem = listMemory(this.registry.home, def, { team: room.team })
+      if (!mem) { none.push(n); continue }
+      const s = stores.get(mem.dir) ?? { ...mem, agents: [] }
+      s.agents.push(n)
+      stores.set(mem.dir, s)
+    }
+    const workersOf = role => Object.values(room.workers ?? {}).filter(w => w.role === role).map(w => w.id)
+    return { stores: [...stores.values()].map(s => ({ ...s, workers: s.agents.flatMap(workersOf) })), noMemory: none }
+  }
+
+  #memDir(id, dir) {
+    if (!this.memory(id).stores.some(s => s.dir === dir)) throw new Error("that memory folder does not belong to this chat's agents")
+    return dir
+  }
+  saveMemoryNote(id, { dir, title, content, tags }) {
+    if (!title?.trim() || typeof content !== 'string') throw new Error('title and content are required')
+    return { result: saveNote(this.#memDir(id, dir), { title: title.trim(), content, tags: Array.isArray(tags) ? tags : [] }) }
+  }
+  deleteMemoryNote(id, dir, note) { deleteNote(this.#memDir(id, dir), note); return { ok: true } }
+
+  /** The diff of one file in one agent step (from that step's before/after snapshots). */
+  async diff(id, msgId, file) {
+    const m = this.get(id).messages.find(x => x.id === msgId)
+    if (!m) throw new Error('unknown message')
+    if (!m.tree) throw new Error('no snapshot for this step (its folder is not a git repository)')
+    if (!(m.files ?? []).some(f => f.path === file)) throw new Error('that file did not change in this step')
+    return { diff: await fileDiff(m.tree.root, m.tree.before, m.tree.after, file), root: m.tree.root }
   }
 }

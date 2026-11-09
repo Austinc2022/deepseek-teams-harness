@@ -185,28 +185,29 @@ export async function apply(ctx, config = {}) {
     }),
     defineTool({
       name: 'forge_chat_start',
-      description: 'Open a multi-agent group chat room with Agent Forge agents (or a whole team) and post the first message. Agents reply in order (sequential), all at once (parallel), or only when @mentioned (mention), and can @mention each other. Returns the chat id; read replies with forge_chat_read. The user can follow the room in the Web UI under "Agent chat".',
+      description: 'Open a multi-agent group chat room with Agent Forge agents (or a whole team) and post the first message. Agents reply in order (sequential), all at once (parallel), only when @mentioned (mention), lead first then by @mention (handoff), or a supervisor agent spawns worker agents from the other agents as needed (supervisor). Agents can @mention each other. Returns the chat id; read replies with forge_chat_read. The user can follow the room in the Web UI under "Agent chat".',
       parameters: {
         agents: { type: 'array', items: { type: 'string' }, description: 'Agent names (omit when team is given)' },
         team: { type: 'string', description: 'Team name; all members join' },
         message: { type: 'string', required: true },
-        mode: { type: 'string', enum: ['sequential', 'parallel', 'mention'] },
+        mode: { type: 'string', enum: ['sequential', 'parallel', 'mention', 'handoff', 'supervisor'] },
+        supervisor: { type: 'string', description: 'supervisor mode: the agent that plans and spawns workers (default: first agent)' },
         title: { type: 'string' },
         cwd: { type: 'string', description: 'Working directory for the agents (absolute path)' },
       },
       output: text,
       async execute(args) {
-        const room = chats.create({ title: args.title, agents: args.agents, team: args.team, mode: args.mode ?? 'sequential', cwd: args.cwd })
+        const room = chats.create({ title: args.title, agents: args.agents, team: args.team, mode: args.mode ?? 'sequential', cwd: args.cwd, supervisor: args.supervisor })
         chats.post(room.id, args.message)
         return `Started chat ${room.id} "${room.title}" with ${room.agents.join(', ')} (${room.mode}). Agents are replying now; call forge_chat_read with this id.`
       },
     }),
     defineTool({
       name: 'forge_chat_post',
-      description: 'Post a follow-up message to an Agent Forge group chat. Use @name to address specific agents.',
-      parameters: { chat_id: { type: 'string', required: true }, message: { type: 'string', required: true } },
+      description: 'Post a follow-up message to an Agent Forge group chat. Use @name to address specific agents, or `to` to message one agent or worker directly (only it replies, even while others are busy).',
+      parameters: { chat_id: { type: 'string', required: true }, message: { type: 'string', required: true }, to: { type: 'string', description: 'Direct message to this agent or worker id' } },
       output: text,
-      async execute(args) { chats.post(args.chat_id, args.message); return `Posted to ${args.chat_id}. Read replies with forge_chat_read.` },
+      async execute(args) { chats.post(args.chat_id, args.message, { to: args.to || undefined }); return `Posted to ${args.chat_id}${args.to ? ` for @${args.to}` : ''}. Read replies with forge_chat_read.` },
     }),
     defineTool({
       name: 'forge_chat_read',
