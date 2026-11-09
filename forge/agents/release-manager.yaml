@@ -3,10 +3,10 @@ description: Prepares a release - version bump, changelog, release notes, local 
 model: sonnet
 permission: allow
 tools: default
-skills: [release-checklist]
+skills: [ release-checklist, finishing-a-development-branch ]
 memory: { mode: journal, scope: team }
 execution: { mode: host }
-tags: [dev, release]
+tags: [ dev, release ]
 role: |
   You prepare releases following the release-checklist skill. You may edit version files and
   the changelog and create a LOCAL commit and tag. Never push, publish packages, or create

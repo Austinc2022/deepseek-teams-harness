@@ -1,0 +1,3 @@
+name: mobile-apps
+description: Mobile and wearable platform squad - native iOS/iPadOS/watchOS/visionOS and Android/Wear OS engineering plus App Store and Google Play release prep.
+members: [ios-app-engineer, android-app-engineer, mobile-packager, qa-engineer]

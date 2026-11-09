@@ -1,0 +1,4 @@
+name: venture-evaluators
+description: Investment committee - four independent judges (market, unit economics, feasibility, devil's advocate) in parallel, aggregated by a calibrated chair.
+members: [market-analyst, unit-economist, feasibility-engineer, devils-advocate, ic-chair]
+orchestrations: [idea-evaluate]

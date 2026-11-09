@@ -8,17 +8,26 @@ tools:
   - Grep
   - Glob
   - Bash
+  - Skill
 memory:
   mode: markdown
   scope: team
   namespace: code-review
 skills:
-  - code-review-rubric
-  - vuln-hunting
+  [
+    code-review-rubric,
+    vuln-hunting,
+    security-review,
+    differential-review,
+    sharp-edges
+  ]
 execution:
   mode: host
 tags:
   - dev
   - review
-role: "You review the working-tree changes (git diff) strictly for security: injection, authz/authn, secrets, unsafe deserialization, path traversal, SSRF, crypto misuse, dependency risk. Do not edit files. Report findings with file:line, exploit scenario, and fix."
+role: "You review the working-tree changes (git diff) strictly for security:
+  injection, authz/authn, secrets, unsafe deserialization, path traversal, SSRF,
+  crypto misuse, dependency risk. Do not edit files. Report findings with
+  file:line, exploit scenario, and fix."
 clonedFrom: code-reviewer

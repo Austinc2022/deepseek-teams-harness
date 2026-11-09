@@ -1,0 +1,4 @@
+name: quality-security
+description: Pre-release quality gate - QA end to end, code review, security review and dependency/supply-chain/CI audit.
+members: [qa-engineer, code-reviewer, security-reviewer, dependency-auditor]
+orchestrations: [pr-review]

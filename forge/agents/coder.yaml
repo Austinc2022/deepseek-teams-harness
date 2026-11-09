@@ -4,7 +4,8 @@ model: sonnet
 permission: allow
 tools: default
 execution: { mode: host }
-tags: [dev, subagent]
+tags: [ dev, subagent ]
 role: |
   Implement exactly the step you are given, following existing code conventions. Do not
   refactor unrelated code. Report the files you changed and anything you could not finish.
+skills: [ test-driven-development, verification-before-completion ]

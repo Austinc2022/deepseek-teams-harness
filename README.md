@@ -221,6 +221,60 @@ or *"Build an orchestration where planner and security-reviewer work in parallel
 or *"Open a chat with planner and code-reviewer and ask them to debate the caching design"* (`forge_chat_start` / `forge_chat_post` / `forge_chat_read`).
 The lead agent uses the `forge_*` tools to do these.
 
+## Venture studio: from idea scouting to launch
+
+Eleven teams (including three platform squads: mobile, desktop and web) find, judge, plan, build, ship and market app/desktop businesses. The north star is an app that could gross **$10M/day**. The rubric (`forge/skills/venture-scoring`) keeps the agents honest about how rarely that happens, so every idea gets realistic year-1, year-3 and ceiling revenue estimates.
+
+| Team | Members | State |
+|---|---|---|
+| `idea-scouts` | `ios-scout`, `android-scout`, `mac-scout`, `windows-scout`, `web-saas-scout`, `extension-scout`, `wearables-xr-scout`, `idea-curator` | one scout per platform/store; scouts are stateless; the curator saves lessons to the shared `venture-lessons` memory |
+| `venture-evaluators` | `market-analyst`, `unit-economist`, `feasibility-engineer`, `devils-advocate` (in parallel) → `ic-chair` | judges are stateless; the chair keeps a journal of its verdicts for calibration |
+| `product-planning` | `product-manager`, `ux-designer`, `solution-architect`, `plan-reviewer` | team memory |
+| `dev-team` | adds `frontend-engineer`, `desktop-app-engineer`, `ios-app-engineer`, `android-app-engineer` and `extension-engineer`, which are also sub-agents of `implementer` | as before |
+| `mobile-apps` / `desktop-apps` / `web-apps` | platform squads: iOS + Android engineers and `mobile-packager`; desktop engineer and `desktop-packager`; web and extension engineers and `cloud-deployer` | none |
+| `quality-security` | `qa-engineer`, `code-reviewer`, `security-reviewer`, `dependency-auditor` | shared code-review memory |
+| `release-ops` | `devops-engineer`, `desktop-packager`, `mobile-packager`, `extension-engineer`, `cloud-deployer`, `release-manager` | journals |
+| `growth-launch` | `growth-marketer`, `brand-designer`, `legal-drafter` | the marketer keeps its own notes |
+| `learning-loop` | `metrics-analyst`, `feedback-analyst`, `retro-curator` | the retro curator writes `venture-lessons` |
+
+A super team called **Venture studio** (its own project tab on the Super team page) puts the `venture-chief` supervisor over all eleven teams.
+
+| Workflow | What it does | Run it |
+|---|---|---|
+| `idea-scout` | One stateless scout per platform lens (`ios`, `android`, `macos`, `windows`, `web`, `extensions`, `wearables-xr`), plus extra scouts sent to the lenses that produced strong ideas before. Repeats are removed against the ledger in code, then the curator removes near-duplicates, merges ideas and quick-scores them. The ledger is updated and the committee evaluates the best ideas. The report goes to `forge/reports/ideas/<date>.md`. | `./forge-cli run idea-scout` (options: `focus="..."`, `'lenses=["ios","android"]'`, `extraScouts=2`, `evaluateTop=1`) |
+| `idea-evaluate` | Four judges in parallel, then the chair. Writes `forge/reports/ideas/evaluations/<id>.md` and records the verdict in the ledger | `./forge-cli run idea-evaluate idea=<id or free text>` |
+| `venture-pipeline` | PRD → UX and architecture in parallel → plan review → launch kit (marketing, brand and legal drafts). Without `build=true` it stops here. With `build=true`: `dev-pipeline` → dependency audit → **automatic quality gate** (QA passed, no blocking review findings, no critical audit findings) → CI, private repo and installers. With `publish=true` and a passed gate it **goes live**: preview deploy → health check → production, with rollback on failure. | `./forge-cli run venture-pipeline idea=<id> build=true publish=true` |
+| `venture-autopilot` | **Fully autonomous.** Picks the highest-scoring "pursue" idea (evaluating shortlisted ideas first if none is waiting) and runs `venture-pipeline build=true publish=true`. Runs one at a time, at most `maxPerWeek` (default 1) ventures a week, and only ideas scored at least `minOverall` (default 70). | `./forge-cli run venture-autopilot` (`dryRun=true` to see the pick) |
+| `weekly-retro` | Turns lens yield, quick-score vs committee calibration and outcomes into a new `playbook.md`, lens weights and a calibration note for the curator | `./forge-cli run weekly-retro` (options: `metrics=/path feedback=/path`) |
+
+**Memory and learning.** All state is plain files in `forge/reports/ideas/`:
+- `ledger.json` records every idea ever seen, statistics per lens, learned lens weights and the calibration note. Ideas never repeat.
+- `playbook.md` holds the scouts' instructions, rewritten each week. Older versions are kept in `playbook-history/`.
+- `forge/memory/ns/venture-lessons/` holds the curator's and retro curator's lessons.
+
+Every `idea-scout` run feeds the playbook, lessons, known ideas and recently used search angles back into the scouts.
+
+**Automation (DSH Automation tasks).** The `plugins/venture-automation` harness plugin registers three tasks in DSH's own scheduler when the web server starts. They appear on the **Automation tasks** page, where you can pause, edit, Run now or delete them.
+
+| Automation task | When (local time) | What it does |
+|---|---|---|
+| Venture: daily idea scouting | every day 06:00 | `forge_run idea-scout` |
+| Venture: autopilot (build and go live) | every day 09:00 | `forge_run venture-autopilot` |
+| Venture: weekly retrospective | Sundays 07:30 | `forge_run weekly-retro` |
+
+Each task delivers its instruction to the **Venture studio autopilot** conversation, whose lead agent starts the workflow with `forge_run`. Times and prompts live in `plugins/venture-automation/tasks.json`. A task you delete is not re-created. To reset, delete `forge/.cache/venture-automation.json` and restart `./dsh web`. The DSH host must be running for tasks to fire, and after a restart it sends the latest missed run.
+
+**Autonomous go-live rules:**
+- Agents use only accounts already logged in on this Mac (`gh`, `npx vercel login`, `npx wrangler login`). If none is available they finish everything else and report `blockedBy`.
+- Free tiers only: no purchases, domains, plan upgrades or paid store accounts.
+- Source repos are private.
+- Agents never post to social networks or communities as you; launch posts stay drafts in `launch/`.
+- Pause autopilot with `touch forge/reports/ideas/AUTOPILOT-PAUSED`; delete the file to resume.
+
+The macOS LaunchAgent script `scripts/schedule-daily.sh` still works as an alternative, but it is not needed.
+
+**Skills:** about 70 GitHub skills (obra/superpowers, anthropics/skills, trailofbits, getsentry, vercel-labs, cloudflare, wshobson, phuryn/pm-skills, coreyhaines31/marketingskills and more) plus the local `venture-scoring` and `desktop-packaging` skills. Reinstall or refresh them with `scripts/install-venture-skills.sh [--overwrite]`. trailofbits skills are CC-BY-SA-4.0. The platform scouts may run `last30days` with browser-cookie access denied.
+
 ## Notes and limits
 
 - **Subscription usage:** every agent is a real Claude Code session, so runs count against your Claude plan's usage limits. `FORGE_MAX_PARALLEL` (default 4) caps concurrent agents per run.

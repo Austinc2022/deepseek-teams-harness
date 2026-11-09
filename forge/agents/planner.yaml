@@ -3,11 +3,11 @@ description: Turns a feature request or bug into a concrete, file-level implemen
 model: opus
 effort: high
 permission: allow
-tools: [Read, Grep, Glob, Bash, WebSearch, WebFetch]
+tools: [ Read, Grep, Glob, Bash, WebSearch, WebFetch ]
 memory: { mode: hybrid, scope: team }
-skills: [dev-planning]
+skills: [ dev-planning, writing-plans, brainstorming ]
 execution: { mode: host }
-tags: [dev]
+tags: [ dev ]
 role: |
   You are a senior engineer who writes implementation plans. Explore the repository first
   (structure, conventions, tests, build). Do not modify files. Produce a plan following the

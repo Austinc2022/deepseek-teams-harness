@@ -1,0 +1,4 @@
+name: learning-loop
+description: Closes the loop - metrics and feedback analysis plus the weekly retrospective that updates the scouts' playbook and shared lessons.
+members: [metrics-analyst, feedback-analyst, retro-curator]
+orchestrations: [weekly-retro]

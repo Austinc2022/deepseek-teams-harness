@@ -1,0 +1,4 @@
+# Venture studio automation: keeps the venture Automation tasks registered in the DSH schedule.
+- insert:
+    - id: venture-automation
+      name: '@local/venture-automation'

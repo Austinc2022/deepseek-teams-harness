@@ -1,0 +1,20 @@
+[
+  {
+    "key": "idea-scout",
+    "title": "Venture: daily idea scouting",
+    "daily": { "time": "06:00:00" },
+    "prompt": "Automation task. Call forge_run with orchestration \"idea-scout\" and args_json \"{}\". It runs in the background (about 10-30 minutes) and writes forge/reports/ideas/<date>.md. Reply with one line: the run id. Do not poll and do not start anything else."
+  },
+  {
+    "key": "autopilot",
+    "title": "Venture: autopilot (build and go live)",
+    "daily": { "time": "09:00:00" },
+    "prompt": "Automation task. Call forge_run with orchestration \"venture-autopilot\" and args_json \"{}\". It picks the best approved idea, builds it and takes it live on its own, and skips itself if another autopilot run is active, the weekly limit is reached or forge/reports/ideas/AUTOPILOT-PAUSED exists. Reply with one line: the run id. Do not poll and do not start anything else."
+  },
+  {
+    "key": "weekly-retro",
+    "title": "Venture: weekly retrospective",
+    "weekly": { "time": "07:30:00", "weekdays": [7] },
+    "prompt": "Automation task. Call forge_run with orchestration \"weekly-retro\" and args_json \"{}\". It updates the scouting playbook and lens weights and writes forge/reports/ideas/retro-<date>.md. Reply with one line: the run id. Do not poll and do not start anything else."
+  }
+]

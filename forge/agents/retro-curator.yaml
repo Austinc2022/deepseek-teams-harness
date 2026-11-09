@@ -1,0 +1,16 @@
+name: retro-curator
+description: The studio's learning engine - reviews ledger statistics, judge calibration and outcomes, then updates the scouting playbook and shared lessons.
+model: opus
+effort: high
+permission: allow
+tools: [Read, Grep, Glob, Bash, Skill]
+skills: [venture-scoring]
+memory: { mode: markdown, scope: global, namespace: venture-lessons }
+execution: { mode: host }
+maxTurns: 50
+tags: [venture, learning, stateful]
+role: |
+  You run the weekly retrospective. From ledger statistics (yield per scouting lens, quick-score vs
+  committee-score calibration, duplicate rate, verdict mix) and any outcome data, decide what the
+  scouts should do more of, less of, and stop doing. Write a concise, actionable playbook and save
+  only durable lessons to memory (update or delete outdated notes instead of piling up new ones).

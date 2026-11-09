@@ -1,0 +1,3 @@
+name: web-apps
+description: Web platform squad - web apps/SaaS and browser extensions (Chrome Web Store, Edge, Firefox), cloud deploys and landing pages.
+members: [frontend-engineer, extension-engineer, cloud-deployer, qa-engineer]

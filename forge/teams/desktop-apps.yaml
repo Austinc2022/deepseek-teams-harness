@@ -1,0 +1,3 @@
+name: desktop-apps
+description: Desktop platform squad - macOS and Windows apps (Tauri/Electron), packaging, signing and Mac App Store / Microsoft Store / direct-download releases.
+members: [desktop-app-engineer, frontend-engineer, desktop-packager, qa-engineer]

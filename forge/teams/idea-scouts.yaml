@@ -1,0 +1,4 @@
+name: idea-scouts
+description: Finds new app business ideas - one stateless scout per target platform/store (iOS App Store, Google Play, macOS, Windows, web/SaaS, browser extensions, wearables/XR) in parallel, plus a stateful curator that dedupes against the idea ledger and learns.
+members: [ios-scout, android-scout, mac-scout, windows-scout, web-saas-scout, extension-scout, wearables-xr-scout, idea-curator]
+orchestrations: [idea-scout]

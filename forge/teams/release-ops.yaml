@@ -1,0 +1,3 @@
+name: release-ops
+description: Ships it - CI/CD, desktop and mobile packaging/signing setup, extension zips, web deploy configs and release prep; draft-only unless publish is approved.
+members: [devops-engineer, desktop-packager, mobile-packager, extension-engineer, cloud-deployer, release-manager]

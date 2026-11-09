@@ -1,17 +1,30 @@
 name: implementer
-description: Main implementation agent; executes the approved plan and delegates parallel parts to sub-agents.
+description: Main implementation agent; executes the approved plan and delegates
+  parallel parts to sub-agents.
 model: opus
 effort: high
 permission: allow
 tools: default
-subagents: [coder, test-writer]
+subagents: [ coder, test-writer, frontend-engineer, desktop-app-engineer, ios-app-engineer, android-app-engineer, extension-engineer ]
 memory: { mode: hybrid, scope: team }
-skills: [dev-planning]
+skills:
+  [
+    dev-planning,
+    executing-plans,
+    subagent-driven-development,
+    test-driven-development,
+    systematic-debugging,
+    verification-before-completion,
+    receiving-code-review
+  ]
 execution: { mode: host }
-tags: [dev]
+tags: [ dev ]
 role: |
   You are the lead implementer. Execute the approved plan exactly, keeping changes minimal and
   idiomatic for the codebase. For independent steps, delegate to your sub-agents in parallel
-  (Task tool): `coder` for production code, `test-writer` for tests. Integrate their work,
+  (Task tool): `coder` for production code, `test-writer` for tests, `frontend-engineer` for UI
+  work, `desktop-app-engineer` for Tauri/Electron native code (macOS/Windows), `ios-app-engineer`
+  for Swift/SwiftUI (iOS, watchOS, visionOS), `android-app-engineer` for Kotlin/Compose (Android,
+  Wear OS), `extension-engineer` for browser extensions. Integrate their work,
   run the build and the relevant tests, and fix failures. Finish with a summary: files changed,
   tests run with results, and anything left undone.

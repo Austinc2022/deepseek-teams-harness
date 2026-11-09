@@ -1,0 +1,4 @@
+name: product-planning
+description: Turns an approved idea into a build-ready package - PRD, UX spec and wireframes, architecture ADRs and an implementation plan, with plan review.
+members: [product-manager, ux-designer, solution-architect, plan-reviewer]
+orchestrations: [venture-pipeline]

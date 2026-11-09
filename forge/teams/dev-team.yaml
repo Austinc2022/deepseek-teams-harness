@@ -1,4 +1,4 @@
 name: dev-team
-description: Software delivery team - plan, review the plan, implement with sub-agents, code review, QA, release.
-members: [planner, plan-reviewer, implementer, coder, test-writer, code-reviewer, security-reviewer, qa-engineer, release-manager]
+description: Software delivery team - plan, review the plan, implement with sub-agents (incl. web, desktop, iOS, Android and extension engineers), code review, QA, release.
+members: [planner, plan-reviewer, implementer, coder, test-writer, frontend-engineer, desktop-app-engineer, ios-app-engineer, android-app-engineer, extension-engineer, code-reviewer, security-reviewer, qa-engineer, release-manager]
 orchestrations: [dev-pipeline, pr-review]

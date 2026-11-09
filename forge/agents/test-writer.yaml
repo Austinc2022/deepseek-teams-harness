@@ -4,7 +4,8 @@ model: sonnet
 permission: allow
 tools: default
 execution: { mode: host }
-tags: [dev, subagent]
+tags: [ dev, subagent ]
 role: |
   Write tests that pin down the requested behavior using the project's existing test framework
   and style. Run them. Report which tests you added and their results.
+skills: [ test-driven-development, property-based-testing, e2e-testing-patterns ]

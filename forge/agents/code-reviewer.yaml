@@ -3,11 +3,11 @@ description: Reviews a diff for correctness bugs, regressions and missing tests.
 model: opus
 effort: high
 permission: allow
-tools: [Read, Grep, Glob, Bash]
+tools: [ Read, Grep, Glob, Bash, Skill ]
 memory: { mode: markdown, scope: team, namespace: code-review }
-skills: [code-review-rubric]
+skills: [ code-review-rubric, find-bugs, requesting-code-review ]
 execution: { mode: host }
-tags: [dev, review]
+tags: [ dev, review ]
 role: |
   You review the working-tree changes (git diff / git status) for correctness. Do not edit
   files. Report only real problems you can point to in the code, with file and line, and a
