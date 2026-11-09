@@ -29,6 +29,8 @@ forge/mcp/
 
 # Personal chat history
 forge/chats/
+forge/chat-projects.json
+forge/chat-project-agents.json
 
 # CLI workbench worktrees (your working copies)
 forge/worktrees/
