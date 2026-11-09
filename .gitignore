@@ -42,3 +42,11 @@ forge/teams/t[0-9][0-9]-*.yaml
 forge/orchestrations/ros-*.js
 forge/orchestrations/lib/
 forge/skills/ros-*/
+
+# Private crypto quant engine and its agent teams - kept local, never published
+quant/
+forge/agents/quant-*.yaml
+forge/teams/quant-*.yaml
+forge/orchestrations/quant-*.js
+forge/skills/quant-*/
+scripts/schedule-interval.sh
