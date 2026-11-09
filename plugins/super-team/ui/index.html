@@ -513,6 +513,7 @@ dialog .db { padding: 10px 14px; overflow: auto; max-height: calc(86vh - 50px); 
       h('div', { class: 'sh' },
         h('span', { class: 't', title: s.title }, `${s.n}. ${s.title}`),
         s.mode ? h('span', { class: 'chip', title: TEAM_MODE[s.mode] }, s.mode) : null,
+        s.chatId ? h('a', { class: 'chip', href: chatUrl(s.chatId), target: '_blank', rel: 'noopener', title: s.chat === 'linked' ? 'The team worked in its Agent chat' : 'The discussion was copied into the team\'s Agent chat' }, s.chat === 'linked' ? 'in team chat ↗' : 'copied to chat ↗') : null,
         s.round && !sup ? h('span', { class: 'muted' }, typeof s.round === 'number' ? `r${s.round}` : s.round) : null,
         h('span', { class: `st ${s.status}` }, s.status), h('span', { class: 'muted' }, since(s.startedAt, s.endedAt))),
       planView,
@@ -536,9 +537,10 @@ dialog .db { padding: 10px 14px; overflow: auto; max-height: calc(86vh - 50px); 
   }
 
   // ---------------- settings
-  function openSettings() {
+  async function openSettings() {
     const c = S.chat
     if (!c) return
+    try { S.teamChats = await api('GET', 'api/team-chats') } catch { S.teamChats = [] }
     const d = S.draft = structuredClone({ project: c.project ?? '', title: c.title, supervisor: c.supervisor, mode: c.mode, teams: c.teams, maxRounds: c.maxRounds, maxHops: c.maxHops, synthesize: c.synthesize, cwd: c.cwd ?? '', workflow: c.workflow ?? '', workflowArgs: c.workflowArgs, instructions: c.instructions ?? '' })
     const panel = $('#settings')
     panel.hidden = false
@@ -609,7 +611,30 @@ dialog .db { padding: 10px 14px; overflow: auto; max-height: calc(86vh - 50px); 
            h('div', { class: 'row' },
              t.mode === 'handoff' ? h('label', { class: 'field grow' }, 'Lead', h('select', { onchange: e => (t.lead = e.target.value) }, ...chosen.map(a => h('option', { value: a, selected: a === (t.lead ?? chosen[0]) }, a)))) : null,
              h('label', { class: 'field' }, 'Max @hand-offs', h('input', { type: 'number', min: 0, max: 50, value: t.maxHops ?? 3, style: { width: '90px' }, oninput: e => (t.maxHops = Number(e.target.value)) })))],
-      h('label', { class: 'field' }, 'Role in this super team (optional, shown to the supervisor and the team)', h('input', { value: t.instructions ?? '', placeholder: 'e.g. builds and tests the code', oninput: e => (t.instructions = e.target.value) })))
+      h('label', { class: 'field' }, 'Role in this super team (optional, shown to the supervisor and the team)', h('input', { value: t.instructions ?? '', placeholder: 'e.g. builds and tests the code', oninput: e => (t.instructions = e.target.value) })),
+      teamChatRow(t, draw))
+  }
+
+  const chatUrl = id => new URL(`../forge/?view=chat&sel=${encodeURIComponent(id)}`, location.href).href
+
+  /** Where the team's discussion lives on the Agent chat page: linked (works in its chat) or copied there. */
+  function teamChatRow(t, draw) {
+    const rooms = S.teamChats ?? []
+    const mine = rooms.filter(r => r.team === t.team || r.id === t.chatId)
+    const cur = rooms.find(r => r.id === t.chatId)
+    const wf = t.mode === 'workflow'
+    const how = t.chat === 'copy' || wf ? 'copy' : 'linked'
+    return h('div', { class: 'row' },
+      h('label', { class: 'field grow' }, 'Team chat (Agent chat page)',
+        h('select', { onchange: e => { t.chatId = e.target.value; draw() } },
+          h('option', { value: '', selected: !t.chatId || !cur }, t.chatId && !cur ? '(chat was deleted — a new one is created on next use)' : '(new chat, created the first time the team gets work)'),
+          ...mine.map(r => h('option', { value: r.id, selected: r.id === t.chatId }, `${r.title} · ${r.messages} msgs${r.busy ? ' · busy' : ''}`)))),
+      h('label', { class: 'field' }, 'How it is used',
+        h('select', { disabled: wf, title: wf ? 'Teams in workflow mode run their workflow here; the result is copied into the chat.' : '', onchange: e => { t.chat = e.target.value; draw() } },
+          h('option', { value: 'linked', selected: how === 'linked' }, 'Linked: works in its chat, keeps history'),
+          h('option', { value: 'copy', selected: how === 'copy' }, 'Copy: fresh discussion, copied to the chat'))),
+      cur ? h('a', { href: chatUrl(cur.id), target: '_blank', rel: 'noopener', style: { alignSelf: 'flex-end', paddingBottom: '6px' } }, 'Open') : null,
+      how === 'linked' && cur ? h('div', { class: 'help', style: { flexBasis: '100%' } }, 'Linked: the chat\'s own mode, lead, hand-offs, folder and project agent settings apply, not the ones above.') : null)
   }
 
   // ---------------- composer

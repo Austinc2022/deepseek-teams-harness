@@ -11,9 +11,19 @@
  *     mention     only @team-named teams work (falls back to the first team)
  *     handoff     the supervisor delegates one round at a time and decides after each round who goes next
  *     workflow    the message starts a saved orchestration (args + message + teams)
- *   teams        [{ team, mode, agents?, lead?, maxHops, workflow?, workflowArgs?, instructions? }]
+ *   teams        [{ team, mode, agents?, lead?, maxHops, workflow?, workflowArgs?, instructions?, chat, chatId? }]
  *                every team runs inside with its own chat mode (TEAM_MODES, same as Agent chat):
  *                sequential | parallel | mention | handoff | workflow, plus @agent hand-offs up to maxHops
+ *
+ * Team chats (CHAT_LINKS): every team works in, or is copied into, an Agent chat room so its discussion shows on
+ * the Agent chat page. chatId names the room; when it is missing (or the room was deleted) a room titled
+ * "<super team> · <team>" is created the first time the team gets work, in the Agent chat project with the same
+ * name as this super team's project.
+ *   linked  (default) the supervisor's brief is posted into the team's chat and the chat's agents reply there:
+ *           the room's own mode, lead, hand-offs, folder, project agent settings and history apply, so the
+ *           team remembers its earlier work. The replies run inside the super team's run (cost, transcripts).
+ *   copy    the team works as a fresh discussion configured here (no chat history), and the brief and replies
+ *           are then copied into its chat for visibility. Teams in workflow mode always work this way.
  *
  * In sequential, parallel and mention mode a team result that @mentions another team in this chat hands the
  * work to that team (up to the chat's maxHops team hand-offs), like agents do in a group chat.
@@ -34,10 +44,12 @@ import { runNamed, renderTemplate } from '../../agent-forge/lib/engine.js'
 export const SUPER_MODES = ['auto', 'sequential', 'parallel', 'mention', 'handoff', 'workflow']
 export const TEAM_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'workflow']
 export const DEFAULT_SUPERVISOR = 'super-orchestrator'
+export const CHAT_LINKS = ['linked', 'copy']
 const MAX_ROUNDS = 12
 const MAX_HOPS = 50
 const OUT_CLIP = 24000
 const CTX_CLIP = 40000
+const LINKED_PRIOR_CLIP = 12000 // other teams' results inside a brief posted to a team chat (stays in its history)
 
 const now = () => new Date().toISOString()
 const newId = () => `${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`
@@ -54,9 +66,10 @@ const mentionsIn = (text, names, self) => {
 }
 
 export class SuperTeams {
-  constructor({ registry, engine }, { log = () => {} } = {}) {
+  constructor({ registry, engine, chats }, { log = () => {} } = {}) {
     this.registry = registry
     this.engine = engine
+    this.chats = chats // Agent chat rooms (ChatStore), used as the teams' chats
     this.log = log
     this.dir = path.join(registry.home, 'super-teams')
     fs.mkdirSync(this.dir, { recursive: true })
@@ -189,7 +202,45 @@ export class SuperTeams {
     if (mode === 'workflow' && !out.workflow) throw new Error(`team ${team.name}: workflow mode needs a workflow`)
     const args = this.#args(t.workflowArgs)
     if (args) out.workflowArgs = args
+    out.chat = CHAT_LINKS.includes(t.chat) ? t.chat : 'linked'
+    if (typeof t.chatId === 'string' && /^[\w-]{1,64}$/.test(t.chatId)) out.chatId = t.chatId
     return out
+  }
+
+  /**
+   * The Agent chat room of a team in this super team: its chatId when the room still exists, else a new room
+   * (saved back as chatId). Synchronous, so teams of one wave never race on the file. Returns null without chats.
+   */
+  #ensureChat(id, teamName, cwd) {
+    if (!this.chats) return null
+    const s = this.#read(id)
+    const entry = s.teams.find(t => t.team === teamName)
+    if (!entry) return null
+    if (entry.chatId) {
+      try { this.chats.get(entry.chatId); return entry.chatId } catch { this.log(`super-team ${id}: chat ${entry.chatId} of team ${teamName} is gone; creating a new one`) }
+    }
+    const team = this.registry.getTeam(teamName)
+    let project
+    try {
+      const p = this.#project(s.project)
+      if (p) project = this.chats.ensureProject({ name: p.name, cwd: p.cwd, description: p.description })?.id
+    } catch (e) { this.log(`super-team ${id}: chat project: ${e.message}`) }
+    const agents = (entry.agents ?? team.members).filter(a => this.#agentExists(a))
+    const room = this.chats.create({
+      title: `${s.title} · ${teamName}`.slice(0, 120), agents, team: teamName, project, cwd,
+      mode: entry.mode, maxHops: entry.maxHops, lead: entry.lead,
+      ...(entry.mode === 'workflow' ? { workflow: entry.workflow } : {}),
+    })
+    entry.chatId = room.id
+    this.#save(s)
+    this.log(`super-team ${id}: team ${teamName} now has chat ${room.id}`)
+    return room.id
+  }
+
+  /** Agent chat rooms a team could use (same team), for the settings page. */
+  teamChats() {
+    if (!this.chats) return []
+    return this.chats.list().map(r => ({ id: r.id, title: r.title, team: r.team, agents: r.agents, mode: r.mode, project: r.project, busy: r.busy, messages: r.messages }))
   }
 
   #args(v) {
@@ -220,7 +271,13 @@ export class SuperTeams {
     }
     if (b.teams !== undefined || !prev) {
       const list = Array.isArray(b.teams) ? b.teams : this.registry.listTeams().map(t => ({ team: t.name }))
-      const teams = list.slice(0, 24).map(t => this.#cleanTeam(typeof t === 'string' ? { team: t } : t))
+      // a run may have created a team's chat after the settings page loaded: keep it unless chatId is sent ('' = new)
+      const had = new Map((prev?.teams ?? []).map(t => [t.team, t]))
+      const teams = list.slice(0, 24).map(t => {
+        t = typeof t === 'string' ? { team: t } : t
+        if (t.chatId === undefined && had.get(t.team)?.chatId) t = { ...t, chatId: had.get(t.team).chatId }
+        return this.#cleanTeam(t)
+      })
       if (new Set(teams.map(t => t.team)).size !== teams.length) throw new Error('a team can only be added once')
       s.teams = teams
     }
@@ -244,7 +301,8 @@ export class SuperTeams {
   duplicate(id) {
     const s = this.#read(id)
     const { messages, id: _, createdAt, updatedAt, ...cfg } = s
-    return this.create({ ...cfg, title: `${s.title} (copy)` })
+    // the copy gets its own team chats
+    return this.create({ ...cfg, teams: cfg.teams.map(({ chatId, ...t }) => t), title: `${s.title} (copy)` })
   }
 
   delete(id) {
@@ -291,7 +349,10 @@ export class SuperTeams {
     const patch = fn => this.#patchMsg(id, reply.id, fn)
     const t0 = Date.now()
     const { id: runId, done } = this.engine.startCustom(`super: ${s.title}`.slice(0, 80),
-      (api, state) => runSuper({ registry: this.registry, api, state, cfg: snapshot, text, history, patch, cwd: cwd ?? api.run.cwd }),
+      (api, state) => runSuper({
+        registry: this.registry, api, state, cfg: snapshot, text, history, patch, cwd: cwd ?? api.run.cwd,
+        chats: this.chats, ensureChat: team => this.#ensureChat(id, team, cwd), superId: id,
+      }),
       { message: text, mode: s.mode, teams: s.teams.map(t => t.team).join(', ') }, { cwd, meta: { superTeam: id } })
     this.live.set(id, runId)
     patch(m => { m.runId = runId })
@@ -426,10 +487,30 @@ async function runSuper(env) {
     const entry = teamsByName.get(a.team)
     const n = addStep({ kind: 'team', team: a.team, mode: entry.mode, title: `Team ${a.team}`, brief: a.brief, round, wave, group })
     api.log(`step ${n}: team ${a.team} (${entry.mode})`)
+    const others = names.filter(x => x !== a.team)
+    const priorText = prior ?? resultsText()
+    let chatId = null
+    try { chatId = env.ensureChat?.(a.team) ?? null } catch (e) { api.log(`team ${a.team}: no team chat (${e.message})`) }
+    const linked = !!chatId && entry.chat !== 'copy' && entry.mode !== 'workflow'
+    if (chatId) patch(m => { const s = m.steps.find(x => x.n === n); if (s) { s.chatId = chatId; s.chat = linked ? 'linked' : 'copy' } })
+    const via = { superTeam: env.superId, title: cfg.title, step: n, runId: api.run.id }
+    const chatText = chatBrief({ cfg, entry, brief: a.brief, request: text, prior: priorText, others, n })
     let out
-    try {
-      out = await runTeam({ project: cfg.projectInfo, registry, api, entry, brief: a.brief, n, cwd: env.cwd, request: text, history: historyText, prior: prior ?? resultsText(), others: names.filter(x => x !== a.team) })
-    } catch (e) { out = { ok: false, text: `Team failed: ${e.message}` } }
+    if (linked) {
+      try {
+        out = await runLinkedTeam({ chats: env.chats, chatId, api, text: chatText, via, n, team: a.team })
+      } catch (e) {
+        if (api.signal.aborted) out = { ok: false, text: 'Stopped.', replies: [] }
+        else { api.log(`team ${a.team}: chat ${chatId} failed (${e.message}); running a fresh discussion instead`); out = null }
+      }
+    }
+    if (!out) {
+      try {
+        out = await runTeam({ project: cfg.projectInfo, registry, api, entry, brief: a.brief, n, cwd: env.cwd, request: text, history: historyText, prior: priorText, others })
+      } catch (e) { out = { ok: false, text: `Team failed: ${e.message}`, replies: [], full: [] } }
+      // copy the discussion into the team's chat for visibility (in the background: a busy chat must not hold up the team)
+      if (chatId && !linked && out.full?.length) env.chats.appendExchange(chatId, { text: chatText, via, replies: out.full }, { signal: api.signal }).catch(e => api.log(`team ${a.team}: could not copy into chat ${chatId}: ${e.message}`))
+    }
     const r = { n, team: a.team, brief: a.brief, text: clip(out.text, OUT_CLIP), ok: out.ok, round }
     endStep(n, { status: api.signal.aborted ? 'cancelled' : out.ok ? 'done' : 'failed', output: r.text, replies: out.replies })
     api.save(`step-${String(n).padStart(2, '0')}-${a.team}.md`, `# Team ${a.team}\n\n## Brief\n\n${a.brief}\n\n## Result\n\n${out.text}`)
@@ -566,7 +647,8 @@ async function runTeam({ project, registry, api, entry, brief, n, cwd, request, 
     const args = { ...Object.fromEntries(Object.entries(entry.workflowArgs ?? {}).map(([k, v]) => [k, renderTemplate(v, ctx)])), team: team.name, message: brief }
     const { result } = await runNamed(registry, entry.workflow, api, args)
     const text = asText(result)
-    return { ok: text != null, text: text ?? '(the workflow returned no result)', replies: [{ from: `workflow:${entry.workflow}`, ok: text != null }] }
+    const full = [{ from: `workflow:${entry.workflow}`, ok: text != null, text: text ?? '(the workflow returned no result)' }]
+    return { ok: text != null, text: full[0].text, replies: [{ from: full[0].from, ok: full[0].ok }], full }
   }
 
   const members = (entry.agents ?? team.members).filter(a => { try { registry.getAgent(a); return true } catch { return false } })
@@ -617,5 +699,29 @@ async function runTeam({ project, registry, api, entry, brief, n, cwd, request, 
 
   const ok = replies.some(r => r.ok)
   const text = replies.length === 1 ? replies[0].text : replies.map(r => `### @${r.from}\n\n${r.text}`).join('\n\n')
-  return { ok, text, replies: replies.map(r => ({ from: r.from, ok: r.ok })) }
+  return { ok, text, replies: replies.map(r => ({ from: r.from, ok: r.ok })), full: replies.map(r => ({ from: r.from, ok: r.ok, text: r.text })) }
+}
+
+/** The supervisor's assignment as a message in a team's Agent chat (linked: the team works from it; copy: for reading). */
+function chatBrief({ cfg, entry, brief, request, prior, others, n }) {
+  return [
+    `**Assignment from super team "${cfg.title}"** · step ${n}`,
+    brief,
+    entry.instructions ? `**Your team's role in this super team:** ${entry.instructions}` : null,
+    brief.trim() !== request.trim() ? `**The user's original request (for context):**\n\n${clip(request, 4000)}` : null,
+    prior ? `**Results from other teams so far:**\n\n${clipStart(prior, LINKED_PRIOR_CLIP)}` : null,
+    others.length ? `End with a clear result. If another team must take over after yours, mention it as @team-name (${others.join(', ')}) in your last paragraph.` : 'End with a clear result.',
+  ].filter(Boolean).join('\n\n')
+}
+
+/**
+ * Run one team inside its Agent chat: post the brief and wait for the room's replies. Each reply runs through
+ * this run's api.agent (so it counts in the run's cost and transcripts) with the room's agent settings.
+ */
+async function runLinkedTeam({ chats, chatId, api, text, via, n, team }) {
+  const runner = (agent, o) => api.agent(agent, o.prompt, { def: o.def, contextNote: o.contextNote, cwd: o.cwd, team: o.team ?? team, signal: o.signal, onEvent: o.onEvent, full: true, label: `${n}:${team}:${agent}` })
+  const { replies } = await chats.postAndWait(chatId, text, { via, runner, signal: api.signal })
+  const ok = replies.some(r => r.ok)
+  const out = replies.length === 0 ? '(the team chat produced no reply)' : replies.length === 1 ? replies[0].text : replies.map(r => `### @${r.from}\n\n${r.text}`).join('\n\n')
+  return { ok, text: out, replies: replies.map(r => ({ from: r.from, ok: r.ok })) }
 }

@@ -894,7 +894,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     if (state.taskNode != null) {
       const m = state.taskNode === 'user' ? r.messages[t.index] : typeof state.taskNode === 'number' ? r.messages[state.taskNode] : null
       if (m) detail = h('div', { class: 'node-detail' },
-        h('div', { class: 'who' }, m.from === 'user' ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? '')],
+        h('div', { class: 'who' }, m.from === 'user' ? userWho(m) : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? '')],
           m.status ? h('span', { class: `ctag ${m.status === 'pending' ? 'working' : m.status === 'cancelled' ? 'stopped' : m.status}` }, m.status === 'pending' ? 'working' : m.status) : null,
           m.durationMs ? h('span', {}, fmtDur(m.durationMs)) : null, m.ts ? h('span', {}, new Date(m.ts).toLocaleString()) : null,
           h('button', { class: 'b', style: 'margin-left:auto', onclick: () => { state.taskNode = null; rerender() } }, 'Close')),
@@ -1048,6 +1048,13 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
       rest.length ? h('details', { class: 'sec' }, h('summary', {}, `Other agents (${rest.length})`), h('div', { class: 'sec-body' }, rest.map(a => card(a, false)))) : null))
   }
 
+  /** Who wrote a "user" message: you, or a super team's supervisor (its brief, or a discussion copied from it). */
+  function userWho(m) {
+    if (!m.via?.superTeam) return h('b', {}, 'You')
+    const tip = `Posted by the supervisor of super team "${m.via.title ?? m.via.superTeam}"${m.via.step ? `, step ${m.via.step}` : ''}.${m.via.copy ? ' The team worked in the super team; its replies were copied here for reading.' : ' The agents below replied here.'}`
+    return [h('b', {}, 'Supervisor'), h('span', { class: 'chip', title: tip }, `super team: ${m.via.title ?? m.via.superTeam}${m.via.copy ? ' · copy' : ''}`)]
+  }
+
   async function listChats() {
     $('#detail').classList.remove('tasks-on')
     const [rooms] = await Promise.all([api('GET', 'api/chats'), loadProjects()])
@@ -1137,7 +1144,7 @@ body[data-tab="chat"] .detail { display: flex; flex-direction: column; padding: 
     const msgs = h('div', { class: 'msgs' }, r.messages.length ? r.messages.map(m => {
       const user = m.from === 'user'
       return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}` },
-        h('div', { class: 'who' }, user ? h('b', {}, 'You') : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
+        h('div', { class: 'who' }, user ? userWho(m) : [avatar(m.from), h('b', {}, m.from), h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null], m.status && m.status !== 'done' ? h('span', { class: `st ${m.status === 'pending' ? 'running' : 'failed'}` }, m.status === 'pending' ? 'thinking…' : m.status) : null, m.durationMs ? h('span', {}, `${Math.round(m.durationMs / 1000)}s`) : null),
         h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
         !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null)
     }) : emptyState('No messages yet', `Say hello to ${r.agents.map(a => '@' + a).join(', ')}`))

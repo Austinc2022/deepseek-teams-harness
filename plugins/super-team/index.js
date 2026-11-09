@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { shared } from '../agent-forge/lib/shared.js'
-import { SuperTeams, SUPER_MODES, TEAM_MODES, DEFAULT_SUPERVISOR } from './lib/super.js'
+import { SuperTeams, SUPER_MODES, TEAM_MODES, CHAT_LINKS, DEFAULT_SUPERVISOR } from './lib/super.js'
 
 export const name = 'super-team'
 export const inject = ['webServer', 'connection']
@@ -61,7 +61,7 @@ export function apply(ctx) {
   function meta() {
     const { registry, engine } = forge
     return {
-      superModes: SUPER_MODES, teamModes: TEAM_MODES, defaultSupervisor: DEFAULT_SUPERVISOR, maxParallel: engine.maxParallel,
+      superModes: SUPER_MODES, teamModes: TEAM_MODES, chatLinks: CHAT_LINKS, defaultSupervisor: DEFAULT_SUPERVISOR, maxParallel: engine.maxParallel,
       agents: registry.listAgents().filter(a => !a.invalid).map(a => ({ name: a.name, description: a.description, model: a.model, backend: a.backend })),
       teams: registry.listTeams().map(t => ({ name: t.name, description: t.description, members: t.members, orchestrations: t.orchestrations ?? [] })),
       workflows: registry.listOrchestrations().filter(o => !o.invalid).map(o => ({ name: o.name, description: o.description, args: Object.keys(o.args ?? {}) })),
@@ -73,6 +73,7 @@ export function apply(ctx) {
     const body = () => readJson(req)
     let r
     if (m === 'GET' && p === '/api/meta') return meta()
+    if (m === 'GET' && p === '/api/team-chats') return supers.teamChats()
     if (p === '/api/chats') {
       if (m === 'GET') return supers.list()
       if (m === 'POST') return supers.create(await body())

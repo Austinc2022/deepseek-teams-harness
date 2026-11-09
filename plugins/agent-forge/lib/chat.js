@@ -24,6 +24,11 @@
  * only: backend, model, effort, stateless/stateful memory (optionally kept separate per project), skills,
  * permission, execution, limits, extra instructions and backup models. Stored in forge/chat-project-agents.json
  * as { "<project id | _general>": { "<agent>": overrides } } and merged over the agent's own definition.
+ *
+ * Super teams use rooms as their teams' chats (plugins/super-team): postAndWait() posts a supervisor brief and
+ * waits for the room's replies (run through the super team's run, so they count in its cost and transcripts);
+ * appendExchange() copies a discussion that ran elsewhere into a room for visibility. Such messages carry
+ * `via: { superTeam, title, step }` so the page can show where they came from.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -353,18 +358,78 @@ export class ChatStore {
 
   /** Append a user message and start agent replies in the background. */
   post(id, text) {
+    this.#start(id, text)
+    return { ok: true }
+  }
+
+  /** Post a message and start replies; returns the user message and a promise for the end of the replies. */
+  #start(id, text, { via, runner } = {}) {
     if (typeof text !== 'string' || !text.trim()) throw new Error('empty message')
     if (this.live.has(id)) throw new Error('agents are still replying; wait or press Stop')
     const room = this.get(id)
     delete room.busy
-    room.messages.push({ id: newId(), from: 'user', text: text.trim(), ts: now() })
+    const userMsg = { id: newId(), from: 'user', text: text.trim(), ts: now() }
+    if (via) userMsg.via = via
+    room.messages.push(userMsg)
     this.#save(room)
     const abort = new AbortController()
     this.live.set(id, { abort })
-    this.#respond(id, abort.signal)
+    const done = this.#respond(id, abort.signal, runner)
       .catch(e => this.log(`chat ${id}: ${e?.message ?? e}`))
       .finally(() => this.live.delete(id))
+    return { userMsg, done }
+  }
+
+  /** Wait until the room is free (nobody replying), up to timeoutMs; throws when it stays busy or signal aborts. */
+  async #whenFree(id, { signal, timeoutMs = 15 * 60_000 } = {}) {
+    const t0 = Date.now()
+    while (this.live.has(id)) {
+      if (signal?.aborted) throw new Error('stopped')
+      if (Date.now() - t0 > timeoutMs) throw new Error(`chat ${id} stayed busy for ${Math.round(timeoutMs / 60000)} minutes`)
+      await new Promise(r => setTimeout(r, 1000))
+    }
+  }
+
+  /**
+   * Post a message from a super team into the room and wait for the replies (room mode, lead, hand-offs,
+   * project agent settings and the room's own history all apply). Waits first if the room is busy.
+   * runner(agentName, { def, prompt, contextNote, cwd, team, signal, onEvent }) replaces runAgent so the replies
+   * run inside the caller's run. Stopping via `signal` stops the room's replies.
+   * Returns { replies: [{ from, ok, text, status }] }.
+   */
+  async postAndWait(id, text, { via, runner, signal, timeoutMs } = {}) {
+    this.get(id) // exists
+    await this.#whenFree(id, { signal, timeoutMs })
+    if (signal?.aborted) throw new Error('stopped')
+    const { userMsg, done } = this.#start(id, text, { via, runner })
+    const onAbort = () => this.cancel(id)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    try { await done } finally { signal?.removeEventListener('abort', onAbort) }
+    const room = this.get(id)
+    const i = room.messages.findIndex(m => m.id === userMsg.id)
+    const replies = (i < 0 ? [] : room.messages.slice(i + 1)).filter(m => m.from !== 'user')
+    return { replies: replies.map(m => ({ from: m.from, ok: m.status === 'done', status: m.status, text: m.text ?? '' })) }
+  }
+
+  /** Copy an exchange that ran elsewhere into the room: the brief as a user message, then the replies (all finished). */
+  async appendExchange(id, { text, via, replies = [] }, { signal } = {}) {
+    await this.#whenFree(id, { signal, timeoutMs: 5 * 60_000 })
+    const room = this.get(id)
+    delete room.busy
+    const user = { id: newId(), from: 'user', text: String(text ?? '').trim() || '(no brief)', ts: now() }
+    if (via) user.via = { ...via, copy: true }
+    room.messages.push(user)
+    for (const r of replies) room.messages.push({ id: newId(), from: r.from, model: r.model, text: r.text ?? '', status: r.ok ? 'done' : 'failed', tools: [], ts: now(), ...(r.durationMs ? { durationMs: r.durationMs } : {}) })
+    this.#save(room)
     return { ok: true }
+  }
+
+  /** The chat project with this name, created (with the folder and description) when missing. */
+  ensureProject({ name, cwd, description }) {
+    name = String(name ?? '').trim().slice(0, 80)
+    if (!name) return undefined
+    const p = this.#readProjects().find(x => x.name.toLowerCase() === name.toLowerCase())
+    return p ?? this.createProject({ name, cwd, description })
   }
 
   #mentions(text, room) {
@@ -373,7 +438,7 @@ export class ChatStore {
     return found
   }
 
-  async #respond(id, signal) {
+  async #respond(id, signal, runner) {
     let room = this.get(id)
     const userMsg = room.messages.at(-1)
     const mentioned = this.#mentions(userMsg.text, room)
@@ -385,9 +450,9 @@ export class ChatStore {
 
     if (room.mode === 'parallel' && first.length > 1) {
       const cut = room.messages.length
-      await Promise.all(first.map(a => this.#reply(id, a, signal, cut)))
+      await Promise.all(first.map(a => this.#reply(id, a, signal, cut, runner)))
     } else {
-      for (const a of first) { if (signal.aborted) return; await this.#reply(id, a, signal) }
+      for (const a of first) { if (signal.aborted) return; await this.#reply(id, a, signal, undefined, runner) }
     }
 
     // hand-offs: an agent reply that @mentions another room agent gives it the floor
@@ -398,7 +463,7 @@ export class ChatStore {
       if (!last || last.from === 'user' || last.status !== 'done') break
       const next = this.#mentions(last.text, room).filter(a => a !== last.from)
       if (!next.length) break
-      for (const a of next) { if (signal.aborted) break; await this.#reply(id, a, signal); hops++ }
+      for (const a of next) { if (signal.aborted) break; await this.#reply(id, a, signal, undefined, runner); hops++ }
       room = this.get(id)
     }
   }
@@ -467,7 +532,14 @@ export class ChatStore {
     return lines.join('\n')
   }
 
-  async #reply(id, agentName, signal, cutoff) {
+  /** When the latest user message came from a super team's supervisor, say so. */
+  #viaNote(room) {
+    const via = room.messages.findLast(m => m.from === 'user')?.via
+    if (!via?.superTeam) return ''
+    return `\n\nThe latest "user" message was posted by the supervisor of super team "${via.title ?? via.superTeam}", which coordinates several agent teams; it holds your team's assignment. Earlier messages in this chat may come from the human user directly.`
+  }
+
+  async #reply(id, agentName, signal, cutoff, runner) {
     let room = this.get(id)
     const def = this.agentDef(room.project, agentName)
     const transcript = this.#transcript(room, cutoff ?? room.messages.length)
@@ -478,18 +550,24 @@ export class ChatStore {
     const patch = fn => { const r = this.get(id); delete r.busy; const m = r.messages.find(x => x.id === msg.id); if (m) { fn(m); this.#save(r) } }
 
     const others = room.agents.filter(a => a !== agentName)
-    const contextNote = `You are agent "${agentName}" in a live group chat with a human user${others.length ? ` and these other agents: ${others.map(a => `@${a}`).join(', ')}` : ''}. Reply to the latest message as yourself. Use your tools when the request needs real work. To hand a question or task to another agent, mention them as @name in your reply; mention an agent only when you want them to respond next. Keep replies focused; use Markdown.${this.#teamNote(room.team)}`
+    const contextNote = `You are agent "${agentName}" in a live group chat with a human user${others.length ? ` and these other agents: ${others.map(a => `@${a}`).join(', ')}` : ''}. Reply to the latest message as yourself. Use your tools when the request needs real work. To hand a question or task to another agent, mention them as @name in your reply; mention an agent only when you want them to respond next. Keep replies focused; use Markdown.${this.#teamNote(room.team)}${this.#viaNote(room)}`
     const prompt = `Group chat transcript so far:\n\n${transcript}\n\n---\nWrite your next message in this chat. Do not start it with your own name; the chat shows who is speaking.`
     let lastFlush = 0
-    const res = await runAgent({
-      def, registry: this.registry, prompt, cwd: room.cwd, team: room.team, label: `chat:${agentName}`, contextNote, signal,
-      onEvent: e => {
-        if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
-        if (e.type !== 'tool' && e.type !== 'fallback') return
-        msg.tools.push(e.brief ?? e.name)
-        if (Date.now() - lastFlush > 800) { lastFlush = Date.now(); const t = [...msg.tools]; patch(m => { m.tools = t }) }
-      },
-    })
+    const onEvent = e => {
+      if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
+      if (e.type !== 'tool' && e.type !== 'fallback') return
+      msg.tools.push(e.brief ?? e.name)
+      if (Date.now() - lastFlush > 800) { lastFlush = Date.now(); const t = [...msg.tools]; patch(m => { m.tools = t }) }
+    }
+    const t0 = Date.now()
+    let res
+    if (runner) {
+      try { res = (await runner(agentName, { def, prompt, contextNote, cwd: room.cwd, team: room.team, signal, onEvent })) ?? { ok: false, error: signal.aborted ? 'Stopped.' : 'not run' } }
+      catch (e) { res = { ok: false, error: e?.message ?? String(e) } }
+      res.durationMs ??= Date.now() - t0
+    } else {
+      res = await runAgent({ def, registry: this.registry, prompt, cwd: room.cwd, team: room.team, label: `chat:${agentName}`, contextNote, signal, onEvent })
+    }
     patch(m => {
       m.tools = msg.tools
       m.durationMs = res.durationMs

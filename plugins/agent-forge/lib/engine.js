@@ -10,6 +10,9 @@
  *   }
  *   agent(name, prompt, opts?) -> final text, or the validated object with opts.schema; null on failure.
  *   opts: { label, schema, cwd, model, effort, overrides: {...partial agent def} }
+ *   host-only opts (callers inside this process, e.g. the super team driving a chat room):
+ *     def (a resolved agent definition instead of the registry's), signal (extra AbortSignal),
+ *     contextNote, onEvent (runner events), full (return the whole runAgent result, even on failure)
  *
  * YAML orchestrations (orchestrations/<name>.yaml): ordered stages; each stage
  * is one agent or a `parallel:` list; prompts use {{args.x}}, {{stages.<id>}},
@@ -137,7 +140,7 @@ export class Engine {
 
     const agent = async (name, prompt, opts = {}) => {
       if (abort.signal.aborted) return null
-      let def = registry.getAgent(name)
+      let def = opts.def ?? registry.getAgent(name)
       const overrides = { ...(opts.overrides ?? {}) }
       if (opts.model) overrides.model = opts.model
       if (opts.effort) overrides.effort = opts.effort
@@ -150,20 +153,22 @@ export class Engine {
       persist()
       await sem.acquire()
       try {
-        if (abort.signal.aborted) { entry.status = 'cancelled'; return null }
+        if (abort.signal.aborted || opts.signal?.aborted) { entry.status = 'cancelled'; return null }
         entry.status = 'running'
         entry.startedAt = new Date().toISOString()
         persist()
         const res = await runAgent({
           def, registry, prompt, schema: opts.schema, cwd: opts.cwd ?? defaultCwd, team: opts.team ?? state.team,
-          runId: state.id, label, signal: abort.signal, transcriptFile: path.join(dir, file),
-          onEvent: e => { if (e.type === 'tool') { entry.tools++; entry.lastTool = e.brief; if (entry.tools % 3 === 1) persist() } },
+          runId: state.id, label, signal: opts.signal ? AbortSignal.any([abort.signal, opts.signal]) : abort.signal, transcriptFile: path.join(dir, file),
+          ...(opts.contextNote ? { contextNote: opts.contextNote } : {}),
+          onEvent: e => { if (e.type === 'tool') { entry.tools++; entry.lastTool = e.brief; if (entry.tools % 3 === 1) persist() } opts.onEvent?.(e) },
         })
         entry.status = res.ok ? 'completed' : 'failed'
         entry.error = res.error ?? null
         entry.costUsd = res.costUsd ?? null
         entry.turns = res.turns
         if (res.costUsd) state.costUsd = Math.round((state.costUsd + res.costUsd) * 10000) / 10000
+        if (opts.full) return res
         if (!res.ok) return null
         if (opts.schema) return res.structured ?? tryJson(res.text)
         return res.text
