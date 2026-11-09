@@ -17,6 +17,18 @@
  * In the agent modes, a reply that @mentions another room agent hands the floor to that
  * agent (bounded by maxHops), so agents can talk to each other.
  *
+ * Channels: parallel conversations of a group chat, so one team can work on several tasks at once with the same
+ * context. A channel holds some or all of the chat's agents and its own mode, messages, tasks and busy state; it
+ * is stored apart (chats/sides/<group id>/, id "<group id>__<channel id>"). Its agents read the main chat and a
+ * digest of the other channels as background, and use the group's project settings, team and folder (or a git
+ * worktree of its own, merged with mergeChannel). When a task in a channel finishes, its final reply is posted
+ * into the main chat as a note (report). Side chats are private one-agent channels that do not report.
+ *
+ * Other teams: claude-code agents get forge_chats tools to list team chats, ask one (ask_team opens a channel in
+ * that chat, origin = the asking chat, and the answer comes back as a tool result and/or a note), and ask the
+ * user to approve opening a new team chat (open_team_chat → room.approvals, decided with decide()). Requests
+ * carry a chain of chats and a depth so they cannot loop (MAX_REQUEST_DEPTH, MAX_OPEN_REQUESTS).
+ *
  * Direct messages: a user message with `to` goes to one agent (or worker) only, and runs even while the
  * rest of the room is busy; if that agent is replying already, the message is queued and delivered as
  * soon as it finishes.
@@ -53,9 +65,12 @@ export const CHAT_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'work
 export const MAX_HOPS = 50
 const GENERAL = '_general'
 const MAX_WAKES = 60
+const MAX_REQUEST_DEPTH = 3 // a request to another team may be passed on at most this many times
+const MAX_OPEN_REQUESTS = 3 // open requests to other teams (or pending approvals) per chat
 const clampHops = v => Math.max(0, Math.min(MAX_HOPS, Number(v) || 0))
 const clampInt = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt }
 const TRANSCRIPT_CHARS = 60000
+const SIDE_CONTEXT_CHARS = 40000 // group chat background given to an agent in a side chat
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
 const now = () => new Date().toISOString()
@@ -190,6 +205,7 @@ export class ChatStore {
     this.log = log
     /** id -> { abort, runs, agents: Map<who, count>, replies: Map<who, Set<AbortController>>, inbox: Map<who, msgId[]>, workers: Map<wid, {task, promise}>, sem, supLock } */
     this.live = new Map()
+    this.waiters = new Map() // room id -> [resolve] for agents waiting on a request's answer
     this.summaries = new Set()
     this.projectsFile = path.join(path.dirname(this.dir), 'chat-projects.json')
     this.overridesFile = path.join(path.dirname(this.dir), 'chat-project-agents.json')
@@ -336,8 +352,283 @@ export class ChatStore {
 
   #file(id) {
     if (!/^[\w-]{1,64}$/.test(id)) throw new Error(`invalid chat id ${id}`)
+    const side = id.indexOf('__')
+    // side chats live next to their group chat: chats/sides/<parent id>/<parent id>__<side id>.json
+    if (side > 0) return path.join(this.dir, 'sides', id.slice(0, side), `${id}.json`)
     return path.join(this.dir, `${id}.json`)
   }
+
+  // ---------------- channels: parallel conversations of a group chat (side chats are one-agent channels)
+
+  #sidesDir(parentId) { return path.join(this.dir, 'sides', parentId) }
+
+  /**
+   * Open a channel in a group chat: a parallel conversation with some or all of its agents, running at the same
+   * time as the main chat and the other channels. It uses the group chat's project agent settings, team and
+   * folder (or a git worktree of its own), and its agents read the main chat as background. When a task in it
+   * finishes, the result is posted into the main chat as a note (report: true, the default for team channels;
+   * side chats, report: false, stay private). origin marks a channel opened by another chat to ask this team.
+   */
+  async createChannel(parentId, { agents, title, mode, lead, maxHops, folder = 'shared', report, origin, kind } = {}) {
+    if (parentId.includes('__')) throw new Error('channels cannot have channels of their own')
+    const parent = this.get(parentId)
+    agents = agents?.length ? agents : parent.agents
+    for (const a of agents) if (!parent.agents.includes(a)) throw new Error(`"${a}" is not an agent in this chat`)
+    agents = [...new Set(agents)]
+    if (!['shared', 'worktree'].includes(folder)) throw new Error('folder must be shared or worktree')
+    mode ??= agents.length === 1 ? 'mention' : parent.mode === 'workflow' ? 'handoff' : parent.mode
+    if (!CHAT_MODES.includes(mode)) throw new Error(`mode must be one of ${CHAT_MODES.join(', ')}`)
+    const side = kind === 'side' || (agents.length === 1 && report === false)
+    const sid = newId()
+    const n = this.sides(parentId).length + 1
+    const room = {
+      id: `${parentId}__${sid}`, parent: parentId,
+      title: String(title ?? '').trim().slice(0, 120) || (side ? `${agents[0]} · side chat` : `Channel ${n}`),
+      agents, mode, team: parent.team, cwd: parent.cwd, maxHops: maxHops !== undefined ? clampHops(maxHops) : parent.maxHops ?? 4,
+      report: report ?? !side, createdAt: now(), messages: [],
+    }
+    if (side) room.kind = 'side'
+    if (lead && agents.includes(lead)) room.lead = lead
+    else if (parent.lead && agents.includes(parent.lead)) room.lead = parent.lead
+    if (parent.supervisor && agents.includes(parent.supervisor)) room.supervisor = parent.supervisor
+    for (const k of ['workflow', 'workflowArgs', 'workerRoles', 'maxWorkers', 'maxConcurrent']) if (parent[k] !== undefined) room[k] = parent[k]
+    if (parent.project) room.project = parent.project
+    if (origin) room.origin = origin
+    if (folder === 'worktree') {
+      const base = this.#roomFolder(parent)
+      room.worktree = await addWorktree(base, path.join(this.registry.home, 'worktrees', parentId, sid), `forge/${parentId}/channel-${sid}`)
+    }
+    fs.mkdirSync(this.#sidesDir(parentId), { recursive: true })
+    this.#save(room)
+    return room
+  }
+
+  /** A private one-to-one side chat with one agent (a channel that does not report to the main chat). */
+  createSide(parentId, agent, { title } = {}) {
+    return this.createChannel(parentId, { agents: [agent], title: title || `${agent} · side chat ${this.sides(parentId).filter(s => s.kind === 'side' && s.agent === agent).length + 1}`, report: false, kind: 'side' })
+  }
+
+  /** The channels (and side chats) of a group chat, newest activity first. */
+  sides(parentId) {
+    const dir = this.#sidesDir(parentId)
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => {
+      try {
+        const r = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
+        const last = r.messages.filter(m => !m.note).at(-1)
+        return {
+          id: r.id, title: r.title, agent: r.agents[0], agents: r.agents, mode: r.mode, kind: r.kind === 'side' ? 'side' : 'channel', report: r.report !== false,
+          busy: this.#isBusy(r.id), messages: r.messages.length, updatedAt: r.updatedAt, createdAt: r.createdAt, pendingApprovals: (r.approvals ?? []).filter(a => a.status === 'pending').length,
+          folder: r.worktree ? 'worktree' : 'shared', branch: r.worktree?.branch, merged: !!r.merged,
+          origin: r.origin ? { room: r.origin.room, title: r.origin.title, agent: r.origin.agent } : undefined,
+          last: last ? { from: last.from, text: clip(String(last.text ?? '').replace(/\s+/g, ' '), 160), status: last.status } : null,
+        }
+      } catch { return null }
+    }).filter(Boolean).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+  }
+
+  /** The group chat a channel belongs to (null when it is gone). */
+  #parentOf(room) {
+    if (!room.parent) return null
+    try { return this.get(room.parent) } catch { return null }
+  }
+
+  /** Merge a worktree channel's branch into the group chat's folder (aborted on conflict). */
+  async mergeChannel(id) {
+    const room = this.get(id)
+    if (!room.worktree) throw new Error('this channel works in the shared folder; nothing to merge')
+    if (room.merged) throw new Error('already merged')
+    if (this.#isBusy(id)) throw new Error('the channel is still working; wait or stop it first')
+    const stat = await finishWorktree({ ...room.worktree, id: `channel ${room.title}` })
+    const r = await mergeWorktree(room.worktree)
+    if (r.ok) this.#mutate(id, x => { x.merged = true; x.mergedAt = now() })
+    return { ok: r.ok, output: r.output, stat }
+  }
+
+  /** What an agent in a channel (or a main chat with channels) is told about the other parallel conversations. */
+  #channelDigest(parentId, selfId) {
+    const others = this.sides(parentId).filter(s => s.id !== selfId && s.kind !== 'side').slice(0, 8)
+    if (!others.length) return ''
+    return others.map(s => `- channel "${s.title}" (${s.agents.map(a => `@${a}`).join(', ')}) ${s.busy ? 'WORKING' : 'idle'}${s.origin ? ` [asked by "${s.origin.title}"]` : ''}${s.last ? ` — latest @${s.last.from === 'user' ? 'user' : s.last.from}: ${s.last.text}` : ''}`).join('\n')
+  }
+
+  // ---------------- results of a channel or a cross-team request
+
+  /**
+   * Called when a room's live work ends. A channel posts its newest finished task into the main chat (as a note
+   * that does not start replies) when report is on; a room opened by another chat (origin) sends its answer
+   * back there as a note and wakes any agent waiting for it.
+   */
+  #taskFinished(id) {
+    let room
+    try { room = this.get(id) } catch { return }
+    if (!room.parent && !room.origin) return
+    const task = room.messages.filter(m => m.from === 'user' && m.task === m.id && !m.note).at(-1)
+    if (!task || room.reported?.includes(task.id)) return
+    const replies = room.messages.filter(m => m.task === task.id && m.from !== 'user' && !m.note)
+    const last = replies.filter(m => m.status === 'done').at(-1) ?? replies.at(-1)
+    const status = !last ? 'no reply' : last.status === 'done' ? 'done' : last.status === 'cancelled' ? 'stopped' : last.status ?? 'done'
+    const answer = last ? String(last.text ?? '') : '(no reply)'
+    this.#mutate(id, r => { r.reported = [...(r.reported ?? []), task.id].slice(-200) })
+    const note = (target, text) => { try { this.#mutate(target, r => { r.messages.push({ id: newId(), from: 'channel', note: true, channel: id, text, status: 'done', ts: now() }) }) } catch {} }
+    const parent = this.#parentOf(room)
+    if (room.parent && room.report !== false && parent) {
+      note(parent.id, `**Channel "${room.title}"** ${status}: ${clip(task.text.replace(/\s+/g, ' '), 200)}${room.origin ? ` _(asked by "${room.origin.title}")_` : ''}\n\n**@${last?.from ?? '?'}:** ${clip(answer, 3000)}`)
+    }
+    if (room.origin?.room && task.via?.fromChat === room.origin.room) {
+      const where = parent ? `team chat "${parent.title}" (channel "${room.title}")` : `team chat "${room.title}"`
+      note(room.origin.room, `**Answer from ${where}** to ${room.origin.agent === 'user' ? 'your' : `@${room.origin.agent}'s`} request (${status}):\n\n${clip(answer, 6000)}`)
+      this.#mutate(room.origin.room, r => { const q = (r.requests ?? []).find(x => x.id === id); if (q) { q.status = status; q.endedAt = now() } })
+    }
+    for (const fn of this.waiters.get(id) ?? []) fn({ status, answer, from: last?.from })
+    this.waiters.delete(id)
+  }
+
+  /** Wait for a room's current work to end; returns its newest answer, or null on timeout. */
+  #waitFor(id, timeoutMs, signal) {
+    return new Promise(resolve => {
+      const done = v => { clearTimeout(t); signal?.removeEventListener('abort', ab); resolve(v) }
+      const t = setTimeout(() => done(null), timeoutMs)
+      const ab = () => done({ status: 'stopped', answer: 'Stopped while waiting.' })
+      signal?.addEventListener('abort', ab, { once: true })
+      if (!this.waiters.has(id)) this.waiters.set(id, [])
+      this.waiters.get(id).push(done)
+    })
+  }
+
+  /** A room's name as other chats see it: "<group chat> · <channel>" for a channel. */
+  #fullTitle(room) { const p = room.parent ? this.#parentOf(room) : null; return p ? `${p.title} · ${room.title}` : room.title }
+
+  /** The chain of chats a request passed through (main chat ids), to stop requests from looping. */
+  #chainOf(room) {
+    const main = room.parent ?? room.id
+    const top = room.origin ?? (room.parent ? this.#parentOf(room)?.origin : undefined)
+    return { main, chain: [...(top?.chain ?? []), main], depth: top?.depth ?? 0 }
+  }
+
+  /**
+   * Ask another team chat: opens a channel in it (never its main chat) with its agents, posts the question there
+   * and links it back to this chat. Returns { id, chat, title }. who: the asking agent, or 'user'.
+   */
+  async askTeam(fromId, { chat, question, agents, title } = {}, { who = 'user', msgId } = {}) {
+    if (!String(question ?? '').trim()) throw new Error('question is required')
+    const src = this.get(fromId)
+    let target = this.get(String(chat ?? '').split('__')[0])
+    const { main, chain, depth } = this.#chainOf(src)
+    if (target.id === main) throw new Error('that is this team chat; to work in parallel here, open a channel instead')
+    if (chain.includes(target.id)) throw new Error(`"${target.title}" is already part of this request chain; asking it again would loop`)
+    if (depth + 1 > MAX_REQUEST_DEPTH) throw new Error(`requests may be passed on at most ${MAX_REQUEST_DEPTH} times`)
+    const open = (src.requests ?? []).filter(q => q.status === 'open' && this.#isBusy(q.id)).length
+    if (who !== 'user' && open >= MAX_OPEN_REQUESTS) throw new Error(`this chat already has ${open} open requests to other teams (limit ${MAX_OPEN_REQUESTS}); wait for one to finish`)
+    const srcTitle = this.#fullTitle(src)
+    const origin = { room: fromId, title: srcTitle, agent: who, msg: msgId, depth: depth + 1, chain }
+    const ch = await this.createChannel(target.id, { agents, title: title || `From ${clip(srcTitle, 40)}: ${clip(question.replace(/\s+/g, ' '), 48)}`, report: true, origin })
+    this.post(ch.id, question, { via: { fromChat: fromId, fromTitle: srcTitle, agent: who } })
+    this.#mutate(fromId, r => { r.requests = [...(r.requests ?? []), { id: ch.id, chat: target.id, chatTitle: target.title, title: ch.title, agent: who, status: 'open', ts: now() }].slice(-100) })
+    this.#mutate(fromId, r => { r.messages.push({ id: newId(), from: 'channel', note: true, channel: ch.id, text: `${who === 'user' ? 'You asked' : `@${who} asked`} team chat **"${target.title}"** in a new channel "${ch.title}":\n\n${clip(question, 1500)}`, status: 'done', ts: now() }) })
+    return { id: ch.id, chat: target.id, title: ch.title }
+  }
+
+  /** Start a new team chat for a task, linked back to this chat (its result returns here as a note). */
+  #openTeamChat(fromId, { team, task, title, agents, mode }, who) {
+    const src = this.get(fromId)
+    const t = this.registry.getTeam(team)
+    const { chain, depth } = this.#chainOf(src)
+    if (depth + 1 > MAX_REQUEST_DEPTH) throw new Error(`requests may be passed on at most ${MAX_REQUEST_DEPTH} times`)
+    const parentSrc = src.parent ? this.#parentOf(src) : src
+    const room = this.create({ title: title || `${team}: ${clip(String(task).replace(/\s+/g, ' '), 50)}`, team, agents: agents?.length ? agents : t.members, mode: mode || 'handoff', project: parentSrc?.project })
+    const srcTitle = this.#fullTitle(src)
+    this.#mutate(room.id, r => { r.origin = { room: fromId, title: srcTitle, agent: who, depth: depth + 1, chain } })
+    this.post(room.id, task, { via: { fromChat: fromId, fromTitle: srcTitle, agent: who } })
+    this.#mutate(fromId, r => {
+      r.requests = [...(r.requests ?? []), { id: room.id, chat: room.id, chatTitle: room.title, title: room.title, agent: who, status: 'open', ts: now(), newChat: true }].slice(-100)
+      r.messages.push({ id: newId(), from: 'channel', note: true, channel: room.id, text: `Opened a new team chat **"${room.title}"** (team ${team}) for ${who === 'user' ? 'your' : `@${who}'s`} task:\n\n${clip(task, 1500)}`, status: 'done', ts: now() })
+    })
+    return room
+  }
+
+  /** The user opens a new team chat from this chat (no approval needed). */
+  openTeamChat(fromId, b = {}) {
+    if (!String(b.task ?? '').trim()) throw new Error('task is required')
+    return this.#openTeamChat(fromId, b, 'user')
+  }
+
+  /** Approve or deny an agent's pending request (opening a new team chat). */
+  decide(id, aid, approve) {
+    const room = this.get(id)
+    const a = (room.approvals ?? []).find(x => x.id === aid)
+    if (!a) throw new Error('no such request')
+    if (a.status !== 'pending') throw new Error(`already ${a.status}`)
+    let opened
+    if (approve) opened = this.#openTeamChat(id, a, a.agent)
+    this.#mutate(id, r => {
+      const x = r.approvals.find(y => y.id === aid)
+      x.status = approve ? 'approved' : 'denied'; x.decidedAt = now(); if (opened) x.chat = opened.id
+      r.messages.push({ id: newId(), from: 'channel', note: true, text: approve ? `Approved: @${a.agent} opened team chat **"${opened.title}"**.` : `Denied: @${a.agent}'s request to open a new ${a.team} team chat.`, status: 'done', ts: now() })
+    })
+    return { ok: true, chat: opened?.id }
+  }
+
+  /** Tools that let an agent ask other team chats or (with the user's approval) open a new one. Claude Code backend. */
+  #chatTools(id, who, getMsgId, signal) {
+    const fmtRoom = r => `- ${r.id} "${r.title}"${r.team ? ` team=${r.team}` : ''} project=${this.#projectName(r.project)} agents=[${r.agents.join(', ')}] ${r.busy ? 'busy' : 'idle'}${r.channels ? ` channels=${r.channels}${r.channelsBusy ? ` (${r.channelsBusy} working)` : ''}` : ''}`
+    const defs = [
+      { name: 'list_team_chats', description: 'List the other team group chats (id, title, team, project, agents, busy or idle, parallel channels) you can ask for help, plus the agent teams that exist.', inputSchema: { type: 'object', properties: { project_only: { type: 'boolean', description: 'only chats in this chat\'s project' } } } },
+      { name: 'ask_team', description: `Ask another team chat a question or hand it a task. It opens a new parallel channel in that chat (its main conversation is not interrupted) where its agents work on it with their own context, then their answer comes back. wait=true (default) waits for the answer (up to timeoutSec, default 900, max 1800) and returns it; wait=false returns at once and the answer is posted into this chat as a note when ready (check_request to look). Make the request self-contained. At most ${MAX_OPEN_REQUESTS} open requests per chat; requests cannot loop back to a chat already in the chain.`,
+        inputSchema: { type: 'object', properties: { chat: { type: 'string', description: 'chat id from list_team_chats' }, question: { type: 'string' }, agents: { type: 'array', items: { type: 'string' }, description: 'optional subset of that chat\'s agents' }, wait: { type: 'boolean' }, timeoutSec: { type: 'number' } }, required: ['chat', 'question'] } },
+      { name: 'open_team_chat', description: 'Ask the user to approve opening a NEW group chat for an agent team (from list_team_chats) to handle a separate task. Returns at once: the user approves or denies it in this chat; if approved, the new team chat starts on the task and its result is posted into this chat as a note. Use it only for substantial separate work no existing chat fits.',
+        inputSchema: { type: 'object', properties: { team: { type: 'string' }, task: { type: 'string', description: 'the full, self-contained task' }, title: { type: 'string' }, reason: { type: 'string', description: 'one line for the user on why' } }, required: ['team', 'task'] } },
+      { name: 'check_request', description: 'Status and (when finished) the answer of a request you made with ask_team or open_team_chat, by id. Without id, lists this chat\'s requests.', inputSchema: { type: 'object', properties: { id: { type: 'string' } } } },
+    ]
+    const handle = async (name, a) => {
+      switch (name) {
+        case 'list_team_chats': {
+          const me = this.get(id), main = me.parent ?? me.id
+          const project = (me.parent ? this.#parentOf(me) : me)?.project
+          const rooms = this.list().filter(r => r.id !== main && (!a.project_only || (r.project ?? '') === (project ?? '')))
+          const teams = this.registry.listTeams?.().filter(t => !t.invalid).map(t => `- ${t.name}: ${clip(t.description ?? '', 120)} [${(t.members ?? []).join(', ')}]`) ?? []
+          return `Team chats:\n${rooms.map(fmtRoom).join('\n') || '(none)'}\n\nAgent teams (for open_team_chat):\n${teams.join('\n') || '(none)'}`
+        }
+        case 'ask_team': {
+          const q = await this.askTeam(id, { chat: a.chat, question: a.question, agents: a.agents }, { who, msgId: getMsgId() })
+          if (a.wait === false) return `Asked "${q.title}" (request ${q.id}). The answer will be posted into this chat as a note; check_request("${q.id}") to look.`
+          const res = await this.#waitFor(q.id, clampInt(a.timeoutSec, 30, 1800, 900) * 1000, signal)
+          if (!res) return `Still working after the timeout. Request ${q.id}: the answer will be posted into this chat as a note; check_request("${q.id}") later.`
+          return `Answer (${res.status}) from @${res.from ?? '?'}:\n\n${clip(res.answer, 20000)}`
+        }
+        case 'open_team_chat': {
+          this.registry.getTeam(a.team)
+          if (!String(a.task ?? '').trim()) throw new Error('task is required')
+          const me = this.get(id)
+          const { depth } = this.#chainOf(me)
+          if (depth + 1 > MAX_REQUEST_DEPTH) throw new Error(`requests may be passed on at most ${MAX_REQUEST_DEPTH} times`)
+          if ((me.approvals ?? []).filter(x => x.status === 'pending').length >= MAX_OPEN_REQUESTS) throw new Error('several requests are already waiting for the user; wait for a decision')
+          const aid = newId()
+          this.#mutate(id, r => { r.approvals = [...(r.approvals ?? []), { id: aid, kind: 'open_team_chat', team: a.team, task: String(a.task).trim(), title: a.title ? String(a.title).trim() : undefined, reason: a.reason ? String(a.reason) : undefined, agent: who, status: 'pending', ts: now() }].slice(-50) })
+          return `Waiting for the user's approval (request ${aid}) to open a new ${a.team} team chat. You do not need to wait: carry on; if approved, its result is posted into this chat as a note.`
+        }
+        case 'check_request': {
+          const me = this.get(id)
+          if (!a.id) {
+            const qs = [...(me.requests ?? []).map(q => `- ${q.id} → "${q.chatTitle}" ${this.#isBusy(q.id) ? 'working' : q.status}${q.agent !== who ? ` (by ${q.agent === 'user' ? 'the user' : '@' + q.agent})` : ''}`), ...(me.approvals ?? []).map(x => `- ${x.id} open ${x.team} team chat: ${x.status}${x.chat ? ` → ${x.chat}` : ''}`)]
+            return qs.join('\n') || 'no requests yet'
+          }
+          const ap = (me.approvals ?? []).find(x => x.id === a.id)
+          if (ap && ap.status !== 'approved') return `request ${a.id}: ${ap.status}`
+          const rid = ap?.chat ?? a.id
+          let r
+          try { r = this.get(rid) } catch { return `request ${a.id}: its chat was deleted` }
+          if (this.#isBusy(rid)) return `request ${a.id}: still working (${r.messages.filter(m => m.status === 'done' && m.from !== 'user').length} replies so far)`
+          const last = r.messages.filter(m => m.from !== 'user' && !m.note && m.status === 'done').at(-1)
+          return last ? `request ${a.id} finished. Answer from @${last.from}:\n\n${clip(last.text, 20000)}` : `request ${a.id}: finished without an answer`
+        }
+      }
+      throw new Error(`unknown tool ${name}`)
+    }
+    return toolsMcp('forge_chats', defs, handle)
+  }
+
+  #projectName(id) { return id ? this.#readProjects().find(p => p.id === id)?.name ?? id : 'General' }
 
   #save(room) {
     delete room.busy
@@ -375,7 +666,7 @@ export class ChatStore {
     l.runs++
     return (async () => fn(l.abort.signal))()
       .catch(e => this.log(`chat ${id}: ${e?.message ?? e}`))
-      .finally(() => { if (--l.runs === 0 && this.live.get(id) === l) this.live.delete(id) })
+      .finally(() => { if (--l.runs === 0 && this.live.get(id) === l) { this.live.delete(id); this.#taskFinished(id) } })
   }
 
   list() {
@@ -387,7 +678,10 @@ export class ChatStore {
         const t = tasks.at(-1)
         const task = t ? { n: t.n, status: t.status, progress: t.progress, current: t.current, waitingOn: t.waitingOn, done: t.done } : null
         const workers = Object.values(r.workers ?? {})
-        return { id: r.id, title: r.title, project: r.project, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy, messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task, workers: workers.length, workersActive: busy ? workers.filter(w => w.status === 'running' || w.status === 'queued').length : 0 }
+        let channels = 0
+        try { channels = fs.readdirSync(this.#sidesDir(r.id)).filter(x => x.endsWith('.json')).length } catch {}
+        const channelsBusy = channels ? [...this.live.keys()].filter(k => k.startsWith(`${r.id}__`) && this.#isBusy(k)).length : 0
+        return { id: r.id, title: r.title, project: r.project, channels, channelsBusy, pendingApprovals: (r.approvals ?? []).filter(a => a.status === 'pending').length, origin: r.origin ? { title: r.origin.title } : undefined, agents: r.agents, mode: r.mode, team: r.team, workflow: r.workflow, busy, messages: r.messages.length, updatedAt: r.updatedAt, tasks: tasks.length, task, workers: workers.length, workersActive: busy ? workers.filter(w => w.status === 'running' || w.status === 'queued').length : 0 }
       } catch { return null }
     }).filter(Boolean).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
   }
@@ -397,7 +691,11 @@ export class ChatStore {
     const room = this.get(id)
     const l = this.live.get(id)
     if (!room.busy) for (const w of Object.values(room.workers ?? {})) if (w.status === 'running' || w.status === 'queued') w.status = 'interrupted'
-    return { ...room, tasks: summarizeTasks(room, room.busy), activeAgents: l ? [...l.agents.keys()] : [], inbox: l ? Object.fromEntries([...l.inbox].map(([k, v]) => [k, v.length])) : {}, supervisorAgent: room.mode === 'supervisor' ? this.#supervisor(room) : undefined, workerRolesResolved: room.mode === 'supervisor' ? this.#roles(room) : undefined }
+    const parent = room.parent ? this.#parentOf(room) : null
+    const side = room.parent
+      ? { parentTitle: parent?.title ?? '(group chat deleted)', parentAgents: parent?.agents ?? room.agents, sides: this.sides(room.parent), kind: room.kind === 'side' ? 'side' : 'channel' }
+      : { sides: this.sides(id) }
+    return { ...room, ...side, tasks: summarizeTasks(room, room.busy), activeAgents: l ? [...l.agents.keys()] : [], inbox: l ? Object.fromEntries([...l.inbox].map(([k, v]) => [k, v.length])) : {}, supervisorAgent: room.mode === 'supervisor' ? this.#supervisor(room) : undefined, workerRolesResolved: room.mode === 'supervisor' ? this.#roles(room) : undefined }
   }
 
   get(id) {
@@ -439,6 +737,12 @@ export class ChatStore {
   update(id, patch) {
     const room = this.get(id)
     if (patch.title !== undefined) room.title = String(patch.title).trim() || room.title
+    if (room.parent) {
+      // a channel keeps the group chat's project and folder; its agents are some of the group chat's agents
+      delete patch.project; delete patch.cwd
+      if (patch.agents !== undefined) { const pa = this.#parentOf(room)?.agents ?? room.agents; for (const a of patch.agents ?? []) if (!pa.includes(a)) throw new Error(`"${a}" is not an agent in the group chat`) }
+      if (patch.report !== undefined) room.report = !!patch.report
+    }
     if (patch.agents !== undefined) room.agents = this.#validate(patch.agents)
     if (patch.mode !== undefined) { if (!CHAT_MODES.includes(patch.mode)) throw new Error('bad mode'); room.mode = patch.mode }
     if (patch.cwd !== undefined) room.cwd = patch.cwd || undefined
@@ -477,7 +781,9 @@ export class ChatStore {
 
   /** The shared room folder: the chat's working directory, else the supervisor's (or first agent's) default folder. */
   #roomFolder(room) {
-    return resolveCwd(this.registry, this.agentDef(room.project, room.mode === 'supervisor' ? this.#supervisor(room) : room.agents[0]), room.cwd)
+    const parent = room.parent ? this.#parentOf(room) : null
+    const cwd = room.worktree?.cwd ?? (parent ? parent.cwd : room.cwd)
+    return resolveCwd(this.registry, this.agentDef(parent ? parent.project : room.project, room.mode === 'supervisor' ? this.#supervisor(room) : room.agents[0]), cwd)
   }
 
   delete(id) {
@@ -485,7 +791,12 @@ export class ChatStore {
     try { room = this.get(id) } catch {}
     this.cancel(id)
     for (const w of Object.values(room?.workers ?? {})) if (w.worktree && !w.merged) removeWorktree(w.worktree).catch(() => {})
+    if (room?.worktree && !room.merged) removeWorktree(room.worktree).catch(() => {})
     fs.rmSync(this.#file(id), { force: true })
+    if (!id.includes('__')) {
+      for (const s of this.sides(id)) { this.cancel(s.id); if (s.folder === 'worktree' && !s.merged) { try { removeWorktree(this.get(s.id).worktree).catch(() => {}) } catch {} } }
+      fs.rmSync(this.#sidesDir(id), { recursive: true, force: true })
+    }
   }
 
   cancel(id) {
@@ -511,15 +822,26 @@ export class ChatStore {
    * Append a user message and start replies in the background.
    * With `to`, only that agent or worker answers (queued if it is mid-reply); otherwise the room mode decides.
    */
-  post(id, text, { to } = {}) {
+  post(id, text, { to, via } = {}) {
     if (typeof text !== 'string' || !text.trim()) throw new Error('empty message')
     const room = this.get(id)
+    if (room.parent && room.agents.length === 1) {
+      // one-agent channel (side chat): every message goes to its agent, queued while it is still replying
+      const msg = { id: newId(), from: 'user', text: text.trim(), ts: now() }
+      msg.task = msg.id
+      if (via) msg.via = via
+      room.messages.push(msg)
+      this.#save(room)
+      const queued = this.#deliver(id, room.agents[0], [msg.id]) === 'queued'
+      return { ok: true, id: msg.id, queued }
+    }
     if (to && !speakers(room).includes(to)) throw new Error(`"${to}" is not an agent or worker in this chat`)
     const busy = this.#isBusy(id)
-    if (!to && busy && room.mode !== 'supervisor') throw new Error('agents are still replying: message one agent directly, wait, or press Stop')
+    if (!to && busy && room.mode !== 'supervisor') throw new Error(`agents are still replying: open a ${room.parent ? 'new ' : ''}channel to run another task in parallel, message one agent directly, wait, or press Stop`)
     const msg = { id: newId(), from: 'user', text: text.trim(), ts: now() }
     msg.task = msg.id
     if (to) msg.to = to
+    if (via) msg.via = via
     room.messages.push(msg)
     this.#save(room)
     if (to) this.#deliver(id, to, [msg.id])
@@ -828,7 +1150,14 @@ export class ChatStore {
    */
   async #reply(id, who, signal, opts = {}) {
     let room = this.get(id)
-    const def = this.agentDef(room.project, opts.role ?? who)
+    // a side chat follows its group chat's current project, folder and team
+    const parent = this.#parentOf(room)
+    const inherit = r => { if (parent) { r.project = parent.project; r.cwd = r.worktree?.cwd ?? parent.cwd; r.team = parent.team } }
+    inherit(room)
+    let def = this.agentDef(room.project, opts.role ?? who)
+    // a resumable (session-memory) agent gets a session of its own per side chat, so it neither continues
+    // nor overwrites the conversation it has in the group chat; note-based memory stays shared
+    if (room.parent && def.memory?.mode === 'session') def = { ...def, memory: { ...def.memory, namespace: `side-${id.slice(id.indexOf('__') + 2)}-${who}` } }
     const l = this.#liveOf(id)
     const ac = new AbortController()
     const onAbort = () => ac.abort()
@@ -843,6 +1172,7 @@ export class ChatStore {
     const patch = fn => { try { this.#mutate(id, r => { const m = r.messages.find(x => x.id === msg.id); if (m) fn(m) }) } catch {} }
     try {
       room = this.#mutate(id, r => { r.messages.push(msg); return r })
+      inherit(room)
       if (opts.supervisorTask && def.backend !== 'claude-code') throw new Error(`supervisor "${who}" uses the ${def.backend} backend; supervisor mode needs a Claude Code (claude-code backend) agent to get its worker tools`)
       const cwd = resolveCwd(this.registry, def, opts.cwd ?? room.cwd)
       const before = await snapshot(cwd)
@@ -855,7 +1185,9 @@ export class ChatStore {
       const t0 = Date.now()
       const res = await run({
         def, registry: this.registry, prompt, cwd, team: room.team, label: `chat:${who}`, contextNote, signal: ac.signal,
-        extraMcp: opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : undefined,
+        extraMcp: def.backend === 'claude-code' && !opts.worker
+          ? { ...(opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : {}), forge_chats: this.#chatTools(id, who, () => msg.id, ac.signal) }
+          : opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : undefined,
         onEvent: e => {
           if (e.type === 'fallback') { const model = e.model; patch(m => { m.model = model; m.fallback = true }) }
           if (e.type !== 'tool' && e.type !== 'fallback') return
@@ -912,6 +1244,38 @@ export class ChatStore {
     const transcript = this.#transcript(room, opts.cutoff ?? room.messages.length - 1)
     const directMsgs = (opts.direct ?? []).map(i => room.messages.find(m => m.id === i)).filter(Boolean)
     const directText = directMsgs.length ? `\n\nMessages addressed to you directly (answer these):\n${directMsgs.map(m => `[${m.from === 'user' ? 'user' : '@' + m.from} → you]\n${m.text}`).join('\n\n')}` : ''
+    const tools = def.backend === 'claude-code' && !opts.worker ? '\n\nOther teams: with the forge_chats tools you can list the other team chats, ask one of them (ask_team opens a parallel channel there and returns its answer), or ask the user to approve opening a new team chat (open_team_chat). Use them when part of the work clearly belongs to another team; do not hand off what you can do yourself.' : ''
+    const originNote = room.origin ? `\n\nThis conversation was opened by ${room.origin.agent === 'user' ? 'the user' : `@${room.origin.agent}`} in team chat "${room.origin.title}" to ask your team for help. Your final reply to each task is sent back to them as the answer, so make it complete and self-contained.` : ''
+    const parent = room.parent ? this.#parentOf(room) : null
+    const folderNote = room.worktree ? ` This channel works in its own git worktree on branch ${room.worktree.branch} (folder ${room.worktree.cwd}); commit your work there with clear messages, the user merges it.` : ' Other channels may be working in the same folder at the same time: stay within this channel\'s task, do not revert changes you did not make, and avoid broad reformatting.'
+    if (room.parent && room.agents.length === 1 && !opts.worker) {
+      const others = parent ? parent.agents.filter(a => a !== who) : []
+      const group = parent ? this.#transcript(parent, parent.messages.length, SIDE_CONTEXT_CHARS) : ''
+      const digest = parent ? this.#channelDigest(parent.id, room.id) : ''
+      const latest = directMsgs.length ? directMsgs.map(m => m.text).join('\n\n') : ''
+      const solo = room.kind === 'side' && !room.origin
+      return {
+        contextNote: `You are agent "${who}" in a ${solo ? 'private one-to-one side conversation with the human user' : `one-agent channel "${room.title}"`}. It runs alongside your team's group chat${parent ? ` "${parent.title}"${others.length ? ` (with ${others.map(a => `@${a}`).join(', ')})` : ''}` : ''}, which carries on independently: nothing said here is posted there${room.report !== false ? ' (except that each finished task\'s final reply is posted into the main chat as a summary)' : ''}, and the other agents do not see this conversation. The group chat transcript is background context only; do not hand off to or @mention other agents, since nobody else answers here. Do what is asked, using your tools when the request needs real work.${folderNote} Keep replies focused; use Markdown.${this.#teamNote(room.team)}${originNote}${tools}`,
+        prompt: `${group ? `Background: your team's group chat so far (read-only, latest at the end):\n\n${group}\n\n---\n` : ''}${digest ? `Other parallel channels of the team right now:\n${digest}\n\n---\n` : ''}This ${solo ? 'side conversation' : 'channel'} so far:\n\n${transcript || '(just started)'}${latest ? `\n\n---\nThe latest message to you:\n${latest}` : ''}\n\n---\nReply in this ${solo ? 'side conversation' : 'channel'}. Do not start with your own name.`,
+      }
+    }
+    const p = this.#promptCore(room, who, def, opts, msg, directMsgs, directText, transcript)
+    if (opts.worker) return p
+    if (room.parent) {
+      const group = parent ? this.#transcript(parent, parent.messages.length, SIDE_CONTEXT_CHARS) : ''
+      const digest = parent ? this.#channelDigest(parent.id, room.id) : ''
+      p.contextNote += `\n\nThis conversation is channel "${room.title}" of your team's group chat${parent ? ` "${parent.title}"` : ''}: one of several conversations the team runs in parallel. Only this channel's agents (${room.agents.map(a => `@${a}`).join(', ')}) answer here. The main chat and the other channels are background: read them for context, but nothing said here appears there${room.report !== false ? ', except that when a task here finishes, its final reply is posted into the main chat as a summary' : ''}.${folderNote}${originNote}`
+      p.prompt = `${group ? `Background: the team's main chat so far (read-only, latest at the end):\n\n${group}\n\n---\n` : ''}${digest ? `Other parallel channels right now:\n${digest}\n\n---\n` : ''}${p.prompt.replace(/^Group chat transcript so far:/, 'This channel so far:')}`
+    } else {
+      const digest = this.#channelDigest(room.id, null)
+      if (digest) p.contextNote += `\n\nParallel channels of this chat (other conversations of your team running alongside; their final results are posted here as notes):\n${digest}`
+      p.contextNote += originNote
+    }
+    p.contextNote += tools
+    return p
+  }
+
+  #promptCore(room, who, def, opts, msg, directMsgs, directText, transcript) {
     if (opts.worker) {
       const w = opts.worker
       const sup = w.spawnedBy
@@ -984,10 +1348,11 @@ export class ChatStore {
     }
   }
 
-  #transcript(room, uptoIndex) {
+  #transcript(room, uptoIndex, max = TRANSCRIPT_CHARS) {
     const msgs = room.messages.slice(0, uptoIndex).filter(m => m.status !== 'failed' && m.status !== 'pending' && !m.dropped)
-    let out = msgs.map(m => `[${m.from === 'user' ? 'user' : `@${m.from}`}${m.to ? ` → @${m.to}` : ''}]\n${m.text}`).join('\n\n')
-    if (out.length > TRANSCRIPT_CHARS) out = `[earlier messages omitted]\n…${out.slice(-TRANSCRIPT_CHARS)}`
+    const who = m => m.from === 'user' ? (m.via?.fromChat ? `request from ${m.via.agent === 'user' ? 'the user' : `@${m.via.agent}`} in team chat "${m.via.fromTitle}"` : 'user') : m.note ? 'note' : `@${m.from}`
+    let out = msgs.map(m => `[${who(m)}${m.to ? ` → @${m.to}` : ''}]\n${m.text}`).join('\n\n')
+    if (out.length > max) out = `[earlier messages omitted]\n…${out.slice(-max)}`
     return out
   }
 

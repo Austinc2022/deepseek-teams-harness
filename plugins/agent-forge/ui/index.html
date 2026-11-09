@@ -299,6 +299,69 @@ body[data-tab="chat"] .detail { position: relative; }
 .dm-compose { display: flex; align-items: flex-end; gap: 8px; margin: 10px 12px 14px; border: .5px solid var(--line-3); border-radius: var(--r-xl); background: var(--surface); padding: 8px 8px 8px 12px; }
 .dm-compose textarea { flex: 1; min-height: 40px; max-height: 200px; border: 0; background: transparent; box-shadow: none; resize: none; font-size: 13.5px; padding: 2px 0; }
 .chat-roles { flex: 1 1 100%; }
+
+/* ---------- channels: parallel conversations of a team chat ---------- */
+.ch-strip { flex: 1 1 100%; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.chtab { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 28px; max-width: 240px; padding: 0 11px; border: .5px solid var(--line); border-radius: 14px; background: none; color: var(--ink-2); font: inherit; font-size: 12.5px; cursor: pointer; }
+.chtab > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: hover) { .chtab:hover { background: var(--hover); color: var(--ink); } }
+.chtab.on { background: var(--ink); border-color: var(--ink); color: var(--ink-inv); font-weight: 500; }
+.chtab .n { font-size: 11px; opacity: .7; }
+.chtab .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.chtab .alert { width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--warn); color: #fff; font-size: 10px; font-weight: 600; flex: none; }
+.chtab.add { border-style: dashed; color: var(--ink-3); }
+.chtab.side { color: var(--ink-3); }
+.ch-sep { width: .5px; height: 18px; background: var(--line-3); flex: none; margin: 0 2px; }
+.ch-crumb { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+.ch-crumb a { cursor: pointer; color: var(--ink-2); }
+@media (hover: hover) { .ch-crumb a:hover { text-decoration: underline; } }
+.approvals { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; }
+.approval { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 10%, var(--bg)); border: .5px solid color-mix(in srgb, var(--warn) 40%, transparent); font-size: 13px; }
+.approval .q { flex: 1 1 260px; min-width: 0; }
+.approval .q div { color: var(--ink-2); font-size: 12px; margin-top: 3px; white-space: pre-wrap; max-height: 90px; overflow: auto; }
+.msg.chnote { max-width: 760px; }
+.msg.chnote .bubble { padding: 8px 12px 8px 14px !important; border-left: 2px solid var(--info); background: color-mix(in srgb, var(--info) 6%, transparent); border-radius: 0 var(--r-md) var(--r-md) 0; font-size: 13px; line-height: 21px; }
+.msg.chnote .who a { cursor: pointer; color: var(--ink-2); }
+@media (hover: hover) { .msg.chnote .who a:hover { text-decoration: underline; } }
+.msg .who .chip.link { cursor: pointer; }
+.pop { position: fixed; z-index: 45; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: var(--bg); border-radius: var(--r-md); box-shadow: var(--dsw-elevation-prominent), 0 8px 28px #00000024; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.pop h3 { margin: 0 0 2px; font-size: 14px; font-weight: 500; }
+.pop label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-3); }
+.pop .checks { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.pop .checks label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink); }
+.pop .checks input { width: auto; }
+.pop .seg { display: flex; gap: 6px; }
+.pop .seg button { flex: 1; height: 30px; }
+.pop .seg button.on { background: var(--active); border-color: var(--ink-2); }
+.pop .hint { font-size: 11.5px; color: var(--ink-3); }
+.pop .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* ---------- side chats: floating one-to-one windows, separate from the group chat ---------- */
+.mentions .who-chip button.side { padding: 0 8px; border-left: .5px solid var(--line); color: var(--ink-3); gap: 3px; }
+.mentions .who-chip button.side b { font-weight: 500; font-size: 11px; }
+.sidewin { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 320px; min-height: 120px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); background: var(--bg); border-radius: var(--r-lg); box-shadow: var(--dsw-elevation-prominent), 0 12px 40px #0000002e; overflow: hidden; resize: both; }
+.sidewin.min { height: auto !important; min-height: 0; resize: none; }
+.sidewin.min > :not(.sw-head) { display: none; }
+.sw-head { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 12px; border-bottom: .5px solid var(--line); cursor: grab; user-select: none; touch-action: none; }
+.sw-head:active { cursor: grabbing; }
+.sw-head .sw-title { display: flex; flex-direction: column; min-width: 0; margin-right: auto; line-height: 17px; }
+.sw-head .sw-title b { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-head .sw-title span { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.sw-head .ib { width: 26px; height: 26px; display: inline-grid; place-items: center; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink-3); cursor: pointer; font: inherit; font-size: 15px; line-height: 1; }
+@media (hover: hover) { .sw-head .ib:hover { background: var(--hover); color: var(--ink); } }
+.sw-head .b { height: 26px; padding: 0 10px; font-size: 12px; }
+.sw-note { padding: 6px 12px; font-size: 11.5px; color: var(--ink-3); border-bottom: .5px solid var(--line); background: var(--surface); }
+.sidewin .dm-msgs { padding: 14px; gap: 14px; }
+.sidewin .dm-compose { margin: 8px 10px 10px; }
+.sw-menu { position: fixed; z-index: 45; width: min(380px, calc(100vw - 24px)); max-height: min(460px, calc(100vh - 24px)); overflow: auto; background: var(--bg); border-radius: var(--r-md); box-shadow: var(--dsw-elevation-prominent), 0 8px 28px #00000024; padding: 6px; }
+.sw-menu .sw-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--r-sm); cursor: pointer; }
+@media (hover: hover) { .sw-menu .sw-row:hover { background: var(--hover); } }
+.sw-menu .sw-row .t { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; line-height: 17px; }
+.sw-menu .sw-row .t span { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-menu .sw-row .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.sw-menu .sw-new { display: flex; gap: 6px; padding: 8px; border-top: .5px solid var(--line); margin-top: 4px; }
+.sw-menu .sw-new select { flex: 1; height: 30px; }
+.sw-menu .sw-empty { padding: 10px 8px; color: var(--ink-3); font-size: 12.5px; }
 .ctag.queued { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .cbar.queued > i { background: var(--warn); }
 
@@ -479,6 +542,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
     chat: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
     folder: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
     send: ['M12 19V5', 'M5 12l7-7 7 7'],
+    popout: ['M14 4h6v6', 'M20 4l-8 8', 'M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4'],
   }
   const icon = (name, size = 18) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('width', size); svg.setAttribute('height', size); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.6'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round'); for (const d of ICON_PATHS[name] ?? []) { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); svg.append(p) } return svg }
   const SINGULAR = { agents: 'agent', teams: 'team', orchestrations: 'workflow', runs: 'run', skills: 'skill', mcp: 'MCP server', chat: 'chat' }
@@ -932,6 +996,8 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
   const chatItem = r => {
     const el = item(r.id, r.title, `${r.agents.length} agents · ${MODE_LABEL[r.mode]?.split(':')[0] ?? r.mode}${r.tasks ? ` · ${r.tasks} task${r.tasks > 1 ? 's' : ''}` : ''}${r.workers ? ` · ${r.workersActive ? `${r.workersActive}/` : ''}${r.workers} worker${r.workers > 1 ? 's' : ''}` : ''}`, [`${r.messages} msgs`, ...(r.team ? [r.team] : [])], () => showChat(r.id))
     el.append(taskStat(r.task ? { ...r.task, status: r.busy ? 'working' : r.task.status } : null))
+    if (r.channels || r.pendingApprovals || r.origin) el.querySelector('.chips')?.append(...[r.channels ? h('span', { class: `chip${r.channelsBusy ? ' info' : ''}`, title: 'Parallel channels (working now)' }, `${r.channels} channel${r.channels > 1 ? 's' : ''}${r.channelsBusy ? ` · ${r.channelsBusy} working` : ''}`) : null, r.pendingApprovals ? h('span', { class: 'chip', style: 'background:var(--warn);color:#fff' }, 'needs approval') : null, r.origin ? h('span', { class: 'chip', title: `Opened by ${r.origin.title}` }, 'requested') : null].filter(Boolean))
+    if (state.sel?.startsWith(`${r.id}__`)) el.classList.add('on')
     return el
   }
   const svg = (tag, attrs = {}, ...kids) => {
@@ -1147,6 +1213,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
 
   /** Who wrote a "user" message: you, or a super team's supervisor (its brief, or a discussion copied from it). */
   function userWho(m) {
+    if (m.via?.fromChat) return [h('b', {}, m.via.agent === 'user' ? 'You (from another chat)' : `@${m.via.agent}`), h('span', { class: 'chip info link', title: 'This request came from another team chat; the final reply goes back there. Click to open it.', onclick: () => goChat(m.via.fromChat) }, `request from ${m.via.fromTitle}`)]
     if (!m.via?.superTeam) return h('b', {}, 'You')
     const tip = `Posted by the supervisor of super team "${m.via.title ?? m.via.superTeam}"${m.via.step ? `, step ${m.via.step}` : ''}.${m.via.copy ? ' The team worked in the super team; its replies were copied here for reading.' : ' The agents below replied here.'}`
     return [h('b', {}, 'Supervisor'), h('span', { class: 'chip', title: tip }, `super team: ${m.via.title ?? m.via.superTeam}${m.via.copy ? ' · copy' : ''}`)]
@@ -1160,12 +1227,19 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
   const fmtWhen = ts => ts ? new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
   const roomFiles = r => new Set(r.messages.flatMap(m => (m.files ?? []).map(f => f.path)))
 
-  function msgEl(m, r) {
+  function msgEl(m, r, side = false) {
+    if (m.from === 'channel' && m.note) {
+      return h('div', { class: 'msg note chnote' },
+        h('div', { class: 'who' }, icon('chat', 15), h('b', {}, 'Channel update'),
+          m.channel ? h('a', { title: 'Open that conversation', onclick: () => goChat(m.channel) }, 'open') : null,
+          h('span', {}, fmtTime(m.ts))),
+        h('div', { class: 'bubble' }, md(m.text)))
+    }
     const user = m.from === 'user'
     const w = r.workers?.[m.from]
     return h('div', { class: `msg ${user ? 'user' : ''} ${m.status ?? ''}${m.note ? ' note' : ''}` },
       h('div', { class: 'who' },
-        user ? userWho(m) : [avatar(m.from), h('b', { class: 'link', title: `Message @${m.from} directly`, onclick: () => openDm(r, m.from) }, m.from),
+        user ? userWho(m) : [avatar(m.from), side ? h('b', {}, m.from) : h('b', { class: 'link', title: `Message @${m.from} directly`, onclick: () => openDm(r, m.from) }, m.from),
           m.worker || w ? h('span', { class: 'chip' }, `worker · ${m.role ?? w?.role}`) : h('span', {}, m.model ?? ''), m.fallback ? h('span', { class: 'chip', title: (m.attempts ?? []).map(x => `${x.backend}/${x.model}: ${x.ok ? 'ok' : x.reason}`).join('\n') }, 'backup model') : null],
         m.to ? h('span', { class: 'to' }, `→ @${m.to}`) : null,
         m.queued ? h('span', { class: 'st running', title: 'Delivered when the agent finishes its current reply' }, 'queued') : null,
@@ -1175,7 +1249,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       h('div', { class: 'bubble' }, m.status === 'pending' && !m.text ? (m.tools?.length ? `working: ${m.tools.at(-1)}` : 'thinking…') : md(m.text)),
       !user && m.tools?.length ? h('details', { class: 'tools' }, h('summary', {}, `${m.tools.length} tool calls`), m.tools.map(t => `> ${t}`).join('\n')) : null,
       !user && m.files?.length ? h('div', { class: 'msg-files' },
-        h('a', { onclick: () => { state.chatTab = 'files'; state.fileSel = { msg: m.id, path: m.files[0].path }; showChat(r.id) } }, `${m.files.length} file${m.files.length > 1 ? 's' : ''} changed`),
+        side ? h('span', { title: m.files.map(f => f.path).join('\n') }, `${m.files.length} file${m.files.length > 1 ? 's' : ''} changed`) : h('a', { onclick: () => { state.chatTab = 'files'; state.fileSel = { msg: m.id, path: m.files[0].path }; showChat(r.id) } }, `${m.files.length} file${m.files.length > 1 ? 's' : ''} changed`),
         m.files.slice(0, 4).map(f => h('code', { title: f.path }, f.path.split('/').pop())), m.files.length > 4 ? `+${m.files.length - 4}` : null) : null)
   }
 
@@ -1185,7 +1259,8 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       const w = r.workers?.[a], st = agentState(r, a)
       return h('span', { class: `who-chip ${st}${state.dm === a ? ' on' : ''}`, 'data-agent': a, title: `${a}${w ? ` (worker, ${w.role}): ${clipText(w.assignment, 200)}` : ''}\n${st === 'active' ? 'replying now' : st === 'queued' ? 'messages queued' : 'idle'}. Click to message directly.` },
         h('button', { onclick: () => openDm(r, a) }, avatar(a), h('i', { class: 'dot' }), a, a === r.supervisorAgent ? h('span', { class: 'wst' }, 'supervisor') : w ? h('span', { class: 'wst' }, w.status) : null),
-        h('button', { class: 'at', onclick: () => insert(a), title: `Mention @${a}` }, '@'))
+        h('button', { class: 'at', onclick: () => insert(a), title: `Mention @${a}` }, '@'),
+        !w ? (() => { const n = (r.sides ?? []).filter(x => x.kind === 'side' && x.agent === a).length; return h('button', { class: 'side', title: `Chat with @${a} in a new window: a side chat of its own, alongside this group chat, that never posts here or waits for it.${n ? `\n${n} side chat${n > 1 ? 's' : ''} with @${a} so far (reopen them from "Side chats" above).` : ''}`, onclick: guard(() => newSideChat(r, a)) }, icon('popout', 13), n ? h('b', {}, n) : null) })() : null)
     }))
   }
 
@@ -1236,6 +1311,216 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
     const l = next.querySelector('.dm-msgs'); l.scrollTop = l.scrollHeight
     next.querySelector('textarea').focus()
   }
+
+  // ----- Side chats: floating one-to-one windows. Each is its own chat on the server (with the group chat as
+  // background), so it never posts into the group chat, never waits for it, and any number can run at once.
+  state.sw = new Map() // side chat id -> { el, timer, z }
+  let swZ = 40
+  const SW_KEY = 'forgeSideWins'
+  const swSave = () => { try { localStorage.setItem(SW_KEY, JSON.stringify([...state.sw.entries()].map(([id, w]) => ({ id, ...w.geo, min: w.el.classList.contains('min') })))) } catch {} }
+  const swGeo = el => ({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight })
+  async function newSideChat(r, a) {
+    const s = await api('POST', `api/chats/${r.parent ?? r.id}/sides`, { agent: a })
+    openSideWin(s.id)
+    if (state.sel === r.id) showChat(r.id, true)
+  }
+  /** Open any chat or channel (possibly in another project) in the main pane; side chats open in a window. */
+  function goChat(id) {
+    const side = state.lastRoom?.sides?.find(x => x.id === id)
+    if (side?.kind === 'side') return openSideWin(id)
+    clearTimeout(state.chatPoll)
+    state.sel = id; state.chatTab = 'chat'
+    if (state.tab !== 'chat') return goto('chat', id)
+    listChats()
+  }
+  /** Pending requests from agents that need the user's OK (opening a new team chat). */
+  function approvalsEl(r, done) {
+    // the chat header is not refreshed while it holds focus, so let go of the clicked button first
+    const after = x => { document.activeElement?.blur?.(); done(x) }
+    const ps = (r.approvals ?? []).filter(a => a.status === 'pending')
+    if (!ps.length) return null
+    return h('div', { class: 'approvals' }, ps.map(a => h('div', { class: 'approval' },
+      avatar(a.agent),
+      h('div', { class: 'q' }, h('b', {}, `@${a.agent} wants to open a new team chat with team ${a.team}`), a.reason ? h('span', {}, ` — ${a.reason}`) : null, h('div', {}, a.task)),
+      h('button', { class: 'b', onclick: guard(async () => { await api('POST', `api/chats/${r.id}/approvals/${a.id}`, { approve: false }); toast('Denied'); after() }) }, 'Deny'),
+      h('button', { class: 'b p', onclick: guard(async () => { const x = await api('POST', `api/chats/${r.id}/approvals/${a.id}`, { approve: true }); toast(`Opened a new ${a.team} team chat; its result will be posted here`); after(x) }) }, 'Approve'))))
+  }
+  const popAt = (el, anchor) => {
+    document.querySelectorAll('.pop, .sw-menu').forEach(x => x.remove())
+    document.body.append(el)
+    const b = anchor.getBoundingClientRect()
+    el.style.top = `${Math.max(8, Math.min(b.bottom + 6, innerHeight - el.offsetHeight - 8))}px`
+    el.style.left = `${Math.max(8, Math.min(b.left, innerWidth - el.offsetWidth - 8))}px`
+    setTimeout(() => document.addEventListener('pointerdown', function off(e) { if (!el.contains(e.target)) { el.remove(); document.removeEventListener('pointerdown', off) } }), 0)
+    el.querySelector('textarea, input:not([type=checkbox])')?.focus()
+  }
+  /** New channel: a parallel conversation of this team chat. */
+  function newChannelForm(r, anchor) {
+    const mainId = r.parent ?? r.id
+    const agents = r.parentAgents ?? r.agents
+    const title = h('input', { placeholder: 'e.g. auth bug fix' })
+    const checks = h('div', { class: 'checks' }, agents.map(a => h('label', {}, h('input', { type: 'checkbox', value: a, checked: true }), a)))
+    const mode = h('select', {}, state.meta.chatModes.filter(m => m !== 'workflow').map(m => h('option', { value: m, selected: m === (r.mode === 'workflow' ? 'handoff' : r.mode) ? true : false }, MODE_LABEL[m] ?? m)))
+    const folder = h('select', {}, h('option', { value: 'shared' }, 'Shared folder (same as the main chat)'), h('option', { value: 'worktree' }, 'Own git worktree (merge when done)'))
+    const report = h('input', { type: 'checkbox', checked: true })
+    const text = h('textarea', { rows: 3, placeholder: 'First task for this channel (optional)' })
+    const el = h('div', { class: 'pop', role: 'dialog' },
+      h('h3', {}, 'New channel'),
+      h('div', { class: 'hint' }, 'A parallel conversation of this team: it runs at the same time as the main chat and other channels, and its agents read the main chat for context.'),
+      h('label', { class: 'f' }, 'Name', title),
+      h('label', { class: 'f' }, 'Agents', checks),
+      h('label', { class: 'f' }, 'Mode', mode),
+      h('label', { class: 'f' }, 'Folder', folder),
+      h('div', { class: 'checks' }, h('label', {}, report, 'Post each finished task\'s result to Main')),
+      text,
+      h('div', { class: 'btns' }, h('button', { class: 'b', onclick: () => el.remove() }, 'Cancel'), h('button', { class: 'b p', onclick: guard(async () => {
+        const picked = [...checks.querySelectorAll('input:checked')].map(i => i.value)
+        if (!picked.length) throw new Error('pick at least one agent')
+        const ch = await api('POST', `api/chats/${mainId}/channels`, { title: title.value.trim(), agents: picked, mode: mode.value, folder: folder.value, report: report.checked, text: text.value })
+        el.remove(); toast(`Channel "${ch.title}" opened`); goChat(ch.id)
+      }) }, 'Open channel')))
+    popAt(el, anchor)
+  }
+  /** Ask another team: a channel in an existing team chat, or a new team chat. */
+  async function askTeamForm(r, anchor) {
+    const rooms = (await api('GET', 'api/chats')).filter(x => x.id !== (r.parent ?? r.id))
+    let kind = rooms.length ? 'chat' : 'new'
+    const chatSel = h('select', {}, rooms.map(x => h('option', { value: x.id }, `${x.title}${x.team ? ` (${x.team})` : ''} · ${projName(x.project ?? '')}${x.busy ? ' · busy' : ''}`)))
+    const teamSel = h('select', {}, state.teams.filter(t => !t.invalid).map(t => h('option', { value: t.name }, t.name)))
+    const text = h('textarea', { rows: 4, placeholder: 'What should the other team do or answer? Make it self-contained.' })
+    const body = h('div', {})
+    const segBtn = (k, label) => h('button', { class: `b${kind === k ? ' on' : ''}`, onclick: () => { kind = k; draw() } }, label)
+    const seg = h('div', { class: 'seg' })
+    const draw = () => {
+      seg.replaceChildren(segBtn('chat', 'Existing team chat'), segBtn('new', 'New team chat'))
+      body.replaceChildren(kind === 'chat' ? h('label', { class: 'f' }, 'Team chat', chatSel) : h('label', { class: 'f' }, 'Team', teamSel),
+        h('div', { class: 'hint' }, kind === 'chat' ? 'Opens a new channel in that chat (its main conversation is not interrupted). The answer is posted back here.' : 'Starts a new group chat for that team in this project. Its result is posted back here.'))
+    }
+    draw()
+    const el = h('div', { class: 'pop', role: 'dialog' }, h('h3', {}, 'Ask another team'), seg, body, text,
+      h('div', { class: 'btns' }, h('button', { class: 'b', onclick: () => el.remove() }, 'Cancel'), h('button', { class: 'b p', onclick: guard(async () => {
+        if (!text.value.trim()) throw new Error('write the request first')
+        if (kind === 'chat') { if (!chatSel.value) throw new Error('no other team chats yet'); await api('POST', `api/chats/${r.id}/ask-team`, { chat: chatSel.value, question: text.value }) }
+        else await api('POST', `api/chats/${r.id}/open-team-chat`, { team: teamSel.value, task: text.value })
+        el.remove(); toast('Sent: the answer will be posted here'); showChat(r.id, true)
+      }) }, 'Send')))
+    popAt(el, anchor)
+  }
+  /** Main · channels · side chats of a team chat, + new channel, ask another team. */
+  function channelStrip(r) {
+    const mainId = r.parent ?? r.id
+    const sides = r.sides ?? []
+    const chans = sides.filter(x => x.kind !== 'side'), solos = sides.filter(x => x.kind === 'side')
+    const tab = (id, label, extra, title) => h('button', { class: `chtab${r.id === id ? ' on' : ''}`, title, onclick: () => { if (r.id !== id) goChat(id) } }, h('span', {}, label), ...extra)
+    const mainBusy = r.parent ? null : r.busy
+    return h('div', { class: 'ch-strip', role: 'tablist' },
+      tab(mainId, 'Main', [mainBusy ? h('i', { class: 'dot' }) : null], 'The team\'s main conversation'),
+      chans.map(c => tab(c.id, `# ${c.title}`, [c.agents.length < (r.parentAgents ?? r.agents).length ? h('span', { class: 'n' }, c.agents.length) : null, c.origin ? h('span', { class: 'n', title: `asked by ${c.origin.title}` }, '↘') : null, c.busy ? h('i', { class: 'dot' }) : null, c.pendingApprovals ? h('i', { class: 'alert', title: 'waiting for your approval' }, '!') : null],
+        `${c.title}\n${c.agents.map(a => '@' + a).join(', ')} · ${c.folder === 'worktree' ? `worktree ${c.branch}${c.merged ? ' (merged)' : ''}` : 'shared folder'}${c.origin ? `\nAsked by ${c.origin.title}` : ''}${c.last ? `\nLatest: ${c.last.text}` : ''}`)),
+      h('button', { class: 'chtab add', title: 'Run another task of this team in parallel, with the same context', onclick: e => newChannelForm(r, e.currentTarget) }, '+ Channel'),
+      solos.length ? h('i', { class: 'ch-sep' }) : null,
+      solos.map(c => h('button', { class: 'chtab side', title: `Side chat with @${c.agent} (opens in a window)${c.last ? `\nLatest: ${c.last.text}` : ''}`, onclick: () => openSideWin(c.id) }, icon('popout', 12), h('span', {}, c.title), c.busy ? h('i', { class: 'dot' }) : null, c.pendingApprovals ? h('i', { class: 'alert' }, '!') : null)),
+      h('i', { class: 'ch-sep' }),
+      h('button', { class: 'chtab', title: 'Ask another team chat, or start a new team chat, from here', onclick: e => askTeamForm(r, e.currentTarget) }, 'Ask another team'))
+  }
+  function closeSideWin(id) {
+    const w = state.sw.get(id); if (!w) return
+    clearTimeout(w.timer); w.el.remove(); state.sw.delete(id); swSave()
+  }
+  function openSideWin(id, geo) {
+    const have = state.sw.get(id)
+    if (have) { have.el.classList.remove('min'); have.el.style.zIndex = ++swZ; have.el.querySelector('textarea')?.focus(); return }
+    const n = state.sw.size
+    const W = Math.min(440, innerWidth - 24), H = Math.min(560, innerHeight - 24)
+    geo ??= { left: Math.max(8, innerWidth - W - 24 - (n % 6) * 28), top: Math.max(8, 72 + (n % 6) * 28), width: W, height: H }
+    const el = h('div', { class: 'sidewin', 'data-id': id, style: `left:${geo.left}px;top:${geo.top}px;width:${geo.width}px;height:${geo.height}px;z-index:${++swZ}` })
+    const w = { el, timer: null, geo, draft: '' }
+    state.sw.set(id, w)
+    el.addEventListener('pointerdown', () => { el.style.zIndex = ++swZ }, true)
+    new ResizeObserver(() => { if (!el.classList.contains('min') && el.isConnected) { w.geo = swGeo(el); swSave() } }).observe(el)
+    document.body.append(el)
+    swSave()
+    refreshSideWin(id, true)
+  }
+  /** Drag a window by its header, kept inside the viewport. */
+  function swDrag(el, head, w) {
+    head.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('button, input, select, textarea')) return
+      const x0 = e.clientX - el.offsetLeft, y0 = e.clientY - el.offsetTop
+      head.setPointerCapture(e.pointerId)
+      const move = ev => { el.style.left = `${Math.max(0, Math.min(innerWidth - 80, ev.clientX - x0))}px`; el.style.top = `${Math.max(0, Math.min(innerHeight - 40, ev.clientY - y0))}px` }
+      const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); w.geo = { ...w.geo, left: el.offsetLeft, top: el.offsetTop }; swSave() }
+      head.addEventListener('pointermove', move); head.addEventListener('pointerup', up)
+    })
+  }
+  async function refreshSideWin(id, first) {
+    const w = state.sw.get(id); if (!w) return
+    clearTimeout(w.timer)
+    let r
+    try { r = await api('GET', `api/chats/${id}`) } catch (e) {
+      if (/no such file|ENOENT|invalid chat/i.test(e.message)) { closeSideWin(id); toast('That side chat was deleted'); return }
+      w.timer = setTimeout(() => refreshSideWin(id), 4000); return
+    }
+    if (!state.sw.has(id)) return
+    const el = w.el, a = r.agents[0], busy = r.busy
+    const st = r.activeAgents?.includes(a) ? 'replying' : r.inbox?.[a] ? `${r.inbox[a]} queued` : 'idle'
+    const title = h('span', { title: 'Double-click to rename' }, r.title)
+    title.addEventListener('dblclick', () => {
+      const inp = h('input', { value: r.title, style: 'height:22px;font-size:12px;width:100%' })
+      let done = false
+      const fin = guard(async save => { if (done) return; done = true; if (save && inp.value.trim() && inp.value.trim() !== r.title) await api('PUT', `api/chats/${id}`, { title: inp.value.trim() }); refreshSideWin(id) })
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) fin(true); else if (e.key === 'Escape') fin(false) })
+      inp.addEventListener('blur', () => fin(true))
+      clearTimeout(w.timer); title.replaceWith(inp); inp.focus(); inp.select()
+    })
+    const head = h('div', { class: 'sw-head' }, avatar(a),
+      h('div', { class: 'sw-title' }, h('b', {}, `@${a}`), title),
+      h('span', { class: `ctag ${st === 'replying' ? 'working' : st === 'idle' ? '' : 'queued'}` }, st),
+      busy ? h('button', { class: 'b d', title: 'Stop this reply (the group chat is not affected)', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast(`Stopping @${a} in the side chat`) }) }, 'Stop') : null,
+      h('button', { class: 'ib', title: 'Delete this side chat', 'aria-label': 'Delete', onclick: guard(async () => { if (!confirm(`Delete side chat "${r.title}"?`)) return; await api('DELETE', `api/chats/${id}`); closeSideWin(id); if (state.sel === r.parent) showChat(r.parent, true) }) }, '🗑'),
+      h('button', { class: 'ib', title: 'Minimize', 'aria-label': 'Minimize', onclick: () => { el.classList.toggle('min'); swSave() } }, '–'),
+      h('button', { class: 'ib', title: 'Close the window (the side chat is kept: reopen it from the channel strip)', 'aria-label': 'Close', onclick: () => closeSideWin(id) }, '×'))
+    const oldHead = el.querySelector('.sw-head')
+    if (!oldHead?.querySelector('input')) { if (oldHead) oldHead.replaceWith(head); else { el.append(head) } swDrag(el, head, w) }
+    el.querySelector('.approvals')?.remove()
+    const aps = approvalsEl(r, () => refreshSideWin(id))
+    const note = `Side chat with @${a} · group chat "${r.parentTitle}" is background only · replies stay here`
+    if (aps) { aps.style.padding = '8px 10px'; (el.querySelector('.sw-note') ?? head).after(aps) }
+    if (!el.querySelector('.sw-note')) el.append(h('div', { class: 'sw-note', title: 'The agent reads the group chat for context, with the same project settings and folder. Nothing here is posted to the group chat, and it runs alongside it.' }, note))
+    else el.querySelector('.sw-note').textContent = note
+    const list = h('div', { class: 'dm-msgs' }, r.messages.length ? r.messages.map(m => msgEl(m, r, true)) : h('p', { class: 'muted' }, `Ask @${a} a question or give it a task. It knows what the group chat has discussed, but this conversation stays here. Messages sent while it is replying wait until it finishes.`))
+    const old = el.querySelector('.dm-msgs')
+    if (old) {
+      const atB = old.scrollHeight - old.scrollTop - old.clientHeight < 40, top = old.scrollTop
+      const sel = window.getSelection()
+      if (!(sel && !sel.isCollapsed && old.contains(sel.anchorNode))) {
+        const openD = [...old.querySelectorAll('details')].map(d => d.open)
+        old.replaceChildren(...list.childNodes)
+        old.querySelectorAll('details').forEach((d, i) => { if (openD[i]) d.open = true })
+        old.scrollTop = atB ? old.scrollHeight : top
+      }
+    } else {
+      el.append(list)
+      const ta = h('textarea', { rows: 2, placeholder: `Message @${a} (only this window)…`, value: w.draft, oninput: () => { w.draft = ta.value } })
+      const send = guard(async () => {
+        const text = ta.value.trim(); if (!text) return
+        const res = await api('POST', `api/chats/${id}/messages`, { text })
+        ta.value = ''; w.draft = ''
+        if (res.queued) toast(`Queued for @${a}: sent when it finishes its current reply`)
+        refreshSideWin(id)
+      })
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
+      el.append(h('div', { class: 'dm-compose' }, ta, h('button', { class: 'send', title: 'Send', 'aria-label': 'Send', onclick: send }, icon('send', 16))))
+      list.scrollTop = list.scrollHeight
+      if (first) ta.focus()
+    }
+    if (busy) w.timer = setTimeout(() => refreshSideWin(id), 1500)
+    // keep the group chat's side-chat counts current when a side chat finishes
+    else if (w.wasBusy && state.tab === 'chat' && state.sel === r.parent) showChat(r.parent, true)
+    w.wasBusy = busy
+  }
+  // reopen the windows that were open before a reload
+  try { for (const g of JSON.parse(localStorage.getItem(SW_KEY) ?? '[]')) if (g?.id) { openSideWin(g.id, g.width ? { left: Math.min(g.left, innerWidth - 120), top: Math.min(g.top, innerHeight - 60), width: g.width, height: g.height } : undefined); if (g.min) state.sw.get(g.id)?.el.classList.add('min') } } catch {}
 
   // ----- Files tab: changes by task timeline, with per-step diffs
   const diffEl = d => h('pre', { class: 'diff' }, d ? d.split('\n').map(l => h('span', { class: l.startsWith('+++') || l.startsWith('---') || l.startsWith('diff ') || l.startsWith('index ') ? 'dh' : l[0] === '+' ? 'da' : l[0] === '-' ? 'dd' : l.startsWith('@@') ? 'dhunk' : '' }, l + '\n')) : '(no text difference: binary file or mode change)')
@@ -1488,9 +1773,10 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
     $('#detail').classList.remove('tasks-on')
     const [rooms] = await Promise.all([api('GET', 'api/chats'), loadProjects()])
     const mine = rooms.filter(inProject)
-    if (state.sel && !mine.some(r => r.id === state.sel)) {
+    const selMain = state.sel?.split('__')[0]
+    if (state.sel && !mine.some(r => r.id === selMain)) {
       // opened by link or from another tab: switch to the chat's project
-      const r = rooms.find(x => x.id === state.sel)
+      const r = rooms.find(x => x.id === selMain)
       if (r) { setProject(r.project ?? ''); return listChats() }
       state.sel = null
     }
@@ -1581,7 +1867,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       h('div', { class: 'checks' }, state.agents.filter(a => !a.invalid).map(a => h('label', { title: a.description }, h('input', { type: 'checkbox', value: a.name, checked: (r.workerRoles ?? []).includes(a.name) }), a.name))),
       h('div', { class: 'btns' }, h('button', { class: 'b p', onclick: guard(async () => { await put({ workerRoles: [...rolesBox.querySelectorAll('input:checked')].map(i => i.value) }, 'Worker roles saved'); rolesBox.hidden = true; showChat(id) }) }, 'Save roles')))
     const opts = h('div', { class: 'chat-opts' },
-      opt('Project', projSel, 'Move this chat to another project tab'),
+      r.parent ? null : opt('Project', projSel, 'Move this chat to another project tab'),
       r.mode === 'supervisor'
         ? [opt('Supervisor', supSel, 'Plans the work and spawns workers'),
            h('button', { class: 'b', title: 'Which agents workers are copied from', onclick: () => { rolesBox.hidden = !rolesBox.hidden } }, `Worker roles: ${(r.workerRolesResolved ?? []).join(', ') || '?'}`),
@@ -1639,8 +1925,18 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
         h('button', { class: 'b', onclick: editAgents }, 'Agents'),
         h('button', { class: 'b', title: `Model, memory, skills and backup models for these agents in ${projName(r.project)}`, onclick: () => projectAgentsView(r.project ?? '', r.agents) }, 'Agent settings'),
         r.busy ? h('button', { class: 'b d', onclick: guard(async () => { await api('POST', `api/chats/${id}/cancel`); toast('Stopping') }) }, 'Stop') : null,
-        h('button', { class: 'b d', onclick: guard(async () => { if (!confirm('Delete this chat?')) return; await api('DELETE', `api/chats/${id}`); state.sel = null; load() }) }, 'Delete'))
-    const poll = () => { syncDm(r); if (r.busy || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500); else listChatsQuiet() }
+        h('button', { class: 'b d', onclick: guard(async () => { if (!confirm(r.parent ? `Delete channel "${r.title}"?` : 'Delete this chat and all its channels?')) return; await api('DELETE', `api/chats/${id}`); state.sel = r.parent ?? null; load() }) }, 'Delete'))
+    const strip = channelStrip(r)
+    const crumb = r.parent ? h('div', { class: 'ch-crumb' }, h('a', { onclick: () => goChat(r.parent) }, `← ${r.parentTitle}`), h('span', {}, '·'),
+      h('span', {}, `channel · ${r.agents.map(a => '@' + a).join(', ')}`),
+      r.origin ? h('span', { class: 'chip info link', title: 'Opened by another team chat; each finished task\'s answer goes back there', onclick: () => goChat(r.origin.room) }, `asked by ${r.origin.title}`) : null,
+      h('label', { style: 'display:inline-flex;align-items:center;gap:5px;margin-left:auto', title: 'Post each finished task\'s final reply into the main chat as a summary' },
+        h('input', { type: 'checkbox', checked: r.report !== false, style: 'width:auto', onchange: guard(async e => { await put({ report: e.target.checked }, e.target.checked ? 'Results will be posted to Main' : 'Results stay in this channel') }) }), 'Report to Main'),
+      r.worktree ? h('span', { class: 'chip', title: r.worktree.cwd }, `worktree ${r.worktree.branch}${r.merged ? ' · merged' : ''}`) : null,
+      r.worktree && !r.merged ? h('button', { class: 'b', style: 'height:26px', title: 'Merge this channel\'s branch into the main chat\'s folder', onclick: guard(async () => { if (!confirm(`Merge branch ${r.worktree.branch} into the main folder?`)) return; const x = await api('POST', `api/chats/${id}/merge`); toast(x.ok ? 'Merged' : 'Merge failed (aborted): see the console'); if (!x.ok) console.warn(x.output); showChat(id, true) }) }, 'Merge') : null) : null
+    const aps = approvalsEl(r, () => showChat(id, true))
+    const others = (r.sides ?? []).some(x => x.busy)
+    const poll = () => { syncDm(r); if (r.busy || others || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500); else listChatsQuiet() }
     state.chatTab ??= 'chat'
     const tabBtn = (key, label) => h('button', { class: state.chatTab === key ? 'on' : '', onclick: () => { if (state.chatTab === key) return; state.chatTab = key; state.taskNode = null; showChat(id) } }, label)
     const nFiles = roomFiles(r).size
@@ -1658,7 +1954,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
           const focus = document.activeElement?.closest?.('.tab-view') === prevView ? document.activeElement.className : null
           if (!focus || state.chatTab === 'overview') { prevView.replaceWith(next); next.scrollTop = top; next.querySelectorAll('.files-list, .diff-pane').forEach((e, i) => { e.scrollTop = tops[i] ?? 0 }) }
         }
-        head.append(opts, tabs)
+        head.append(...[crumb, strip, aps, opts, tabs].filter(Boolean))
         const oldHead = $('#detail .chat-head')
         if (keepHead(oldHead)) oldHead.replaceWith(head)
         const oldStrip = $('#detail .composer .mentions'); if (oldStrip) oldStrip.replaceWith(teamStrip(r, insert))
@@ -1675,7 +1971,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
         const set = (sel, top, left) => { const e = next.querySelector(sel); if (e) { if (top != null) e.scrollTop = top; if (left != null) e.scrollLeft = left } }
         set('.task-list', lt); set('.task-flow', ft); set('.flow-wrap', null, gl)
         const oldStrip = $('#detail .composer .mentions'); if (oldStrip) oldStrip.replaceWith(teamStrip(r, insert))
-        head.append(opts, tabs)
+        head.append(...[crumb, strip, aps, opts, tabs].filter(Boolean))
         const oldHead = $('#detail .chat-head')
         if (keepHead(oldHead)) oldHead.replaceWith(head)
         return poll()
@@ -1694,7 +1990,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       prevBox.scrollTop = atBottom ? prevBox.scrollHeight : top
       const oldHead = $('#detail .chat-head')
       // keep the header while the user is editing it (rename box, an option field, or open workflow settings)
-      head.append(opts, tabs)
+      head.append(...[crumb, strip, aps, opts, tabs].filter(Boolean))
       if (keepHead(oldHead)) oldHead.replaceWith(head)
       const oldTa = $('#detail .composer textarea')
       if (oldTa) oldTa.placeholder = ta.placeholder
@@ -1703,7 +1999,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       return poll()
     }
     msgs.addEventListener('pointerdown', () => { state.msgsPointerDown = true })
-    head.append(opts, tabs)
+    head.append(...[crumb, strip, aps, opts, tabs].filter(Boolean))
     let view = msgs
     if (state.chatTab === 'tasks') view = tasksView(r)
     else if (PANE_TABS.includes(state.chatTab)) {
@@ -1723,7 +2019,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
     else msgs.scrollTop = prevBox.scrollTop
     if (hadFocus) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
     syncDm(r)
-    if (r.busy || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500)
+    if (r.busy || others || (state.chatTab === 'overview' && state.ovPending)) state.chatPoll = setTimeout(() => showChat(id, true), r.busy ? 1500 : 2500)
     else if (prevBox && keepDraft) listChatsQuiet()
   }
   window.addEventListener('pointerup', () => { state.msgsPointerDown = false })

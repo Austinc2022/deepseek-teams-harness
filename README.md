@@ -27,7 +27,7 @@ In the Web UI sidebar you get four Agent Forge pages:
 
 | Page | What you do there |
 |---|---|
-| **Agent chat** | Group chat with any agents you pick (or a whole team). Reply modes: `sequential` (each agent replies in turn and sees earlier replies), `parallel` (all at once), `mention` (only `@name`d agents reply). An agent that writes `@other-agent` hands the floor to it, up to the room's hand-off limit. |
+| **Agent chat** | Group chat with any agents you pick (or a whole team). Reply modes: `sequential` (each agent replies in turn and sees earlier replies), `parallel` (all at once), `mention` (only `@name`d agents reply). An agent that writes `@other-agent` hands the floor to it, up to the room's hand-off limit. **Channels** run several tasks of the same team in parallel: each channel has some or all of the chat's agents, reads the main chat as context, can work in its own git worktree, and posts each finished task's result back to Main. **Side chats** (the pop-out button on an agent) are private one-to-one windows that never post to the group chat. **Ask another team** (or an agent's `ask_team` tool) opens a channel in another team chat and brings the answer back; an agent's `open_team_chat` starts a new team chat only after you approve it. |
 | **Agents** | Create, edit, clone, delete and test-run agents (model, effort, memory, skills, sub-agents, permission, host/sandbox/container/VM). Skills tab: install from GitHub or a folder. |
 | **Agent teams** | Group agents into teams, start a chat with a team, or start a new workflow from a team. |
 | **Workflows** | Visual stage builder (single or parallel agents per stage) or code orchestrations; run them and watch live progress, per-agent transcripts and results on the Runs tab. |

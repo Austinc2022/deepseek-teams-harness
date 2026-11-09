@@ -114,6 +114,17 @@ export function createForgeHandler({ registry, engine, chats }) {
     ['GET', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => chats.view(id)],
     ['PUT', /^\/api\/chats\/([\w-]+)$/, (b, [id]) => chats.update(id, b)],
     ['DELETE', /^\/api\/chats\/([\w-]+)$/, (_, [id]) => (chats.delete(id), { ok: true })],
+    ['GET', /^\/api\/chats\/([\w-]+)\/sides$/, (_, [id]) => chats.sides(id)],
+    ['POST', /^\/api\/chats\/([\w-]+)\/sides$/, (b, [id]) => chats.createSide(id, b.agent, { title: b.title })],
+    ['POST', /^\/api\/chats\/([\w-]+)\/channels$/, async (b, [id]) => {
+      const ch = await chats.createChannel(id, { agents: b.agents, title: b.title, mode: b.mode || undefined, folder: b.folder, report: b.report !== false })
+      if (b.text?.trim()) chats.post(ch.id, b.text)
+      return ch
+    }],
+    ['POST', /^\/api\/chats\/([\w-]+)\/merge$/, (_, [id]) => chats.mergeChannel(id)],
+    ['POST', /^\/api\/chats\/([\w-]+)\/ask-team$/, (b, [id]) => chats.askTeam(id, { chat: b.chat, question: b.question, agents: b.agents })],
+    ['POST', /^\/api\/chats\/([\w-]+)\/open-team-chat$/, (b, [id]) => chats.openTeamChat(id, { team: b.team, task: b.task, title: b.title })],
+    ['POST', /^\/api\/chats\/([\w-]+)\/approvals\/([\w-]+)$/, (b, [id, aid]) => chats.decide(id, aid, !!b.approve)],
     ['POST', /^\/api\/chats\/([\w-]+)\/messages$/, (b, [id]) => chats.post(id, b.text, { to: b.to || undefined })],
     ['POST', /^\/api\/chats\/([\w-]+)\/cancel$/, (b, [id]) => ({ cancelled: b?.agent ? chats.cancelAgent(id, b.agent) : chats.cancel(id) })],
     ['GET', /^\/api\/chats\/([\w-]+)\/overview$/, (_, [id]) => chats.overview(id)],
