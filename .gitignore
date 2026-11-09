@@ -46,3 +46,11 @@ forge/skills/ros-*/
 # Super team chats (your conversations and their configuration)
 forge/super-teams/
 forge/super-team-projects.json
+
+# Private crypto quant engine and its agent teams - kept local, never published
+quant/
+forge/agents/quant-*.yaml
+forge/teams/quant-*.yaml
+forge/orchestrations/quant-*.js
+forge/skills/quant-*/
+scripts/schedule-interval.sh
