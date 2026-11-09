@@ -12,7 +12,7 @@
  *   opts: { label, schema, cwd, model, effort, overrides: {...partial agent def} }
  *   host-only opts (callers inside this process, e.g. the super team driving a chat room):
  *     def (a resolved agent definition instead of the registry's), signal (extra AbortSignal),
- *     contextNote, onEvent (runner events), full (return the whole runAgent result, even on failure)
+ *     contextNote, extraMcp, onEvent (runner events), full (return the whole runAgent result, even on failure)
  *
  * YAML orchestrations (orchestrations/<name>.yaml): ordered stages; each stage
  * is one agent or a `parallel:` list; prompts use {{args.x}}, {{stages.<id>}},
@@ -161,6 +161,7 @@ export class Engine {
           def, registry, prompt, schema: opts.schema, cwd: opts.cwd ?? defaultCwd, team: opts.team ?? state.team,
           runId: state.id, label, signal: opts.signal ? AbortSignal.any([abort.signal, opts.signal]) : abort.signal, transcriptFile: path.join(dir, file),
           ...(opts.contextNote ? { contextNote: opts.contextNote } : {}),
+          ...(opts.extraMcp ? { extraMcp: opts.extraMcp } : {}),
           onEvent: e => { if (e.type === 'tool') { entry.tools++; entry.lastTool = e.brief; if (entry.tools % 3 === 1) persist() } opts.onEvent?.(e) },
         })
         entry.status = res.ok ? 'completed' : 'failed'

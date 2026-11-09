@@ -719,7 +719,7 @@ function chatBrief({ cfg, entry, brief, request, prior, others, n }) {
  * this run's api.agent (so it counts in the run's cost and transcripts) with the room's agent settings.
  */
 async function runLinkedTeam({ chats, chatId, api, text, via, n, team }) {
-  const runner = (agent, o) => api.agent(agent, o.prompt, { def: o.def, contextNote: o.contextNote, cwd: o.cwd, team: o.team ?? team, signal: o.signal, onEvent: o.onEvent, full: true, label: `${n}:${team}:${agent}` })
+  const runner = (agent, o) => api.agent(agent, o.prompt, { def: o.def, contextNote: o.contextNote, extraMcp: o.extraMcp, cwd: o.cwd, team: o.team ?? team, signal: o.signal, onEvent: o.onEvent, full: true, label: `${n}:${team}:${agent}` })
   const { replies } = await chats.postAndWait(chatId, text, { via, runner, signal: api.signal })
   const ok = replies.some(r => r.ok)
   const out = replies.length === 0 ? '(the team chat produced no reply)' : replies.length === 1 ? replies[0].text : replies.map(r => `### @${r.from}\n\n${r.text}`).join('\n\n')
