@@ -22,6 +22,9 @@ import { profile as P } from '../../company/lib/profile.js'
 import { gatherFacts, gate } from '../../company/lib/cycle.js'
 import { Store, now, today, newId, str, clip, slug } from './store.js'
 import { Org, seedSuper, WORKER } from './org.js'
+import { EngineOps, Changes, NullOps, NullChanges } from './engineops.js'
+import { progress, rightNow } from './views.js'
+import { recordMetrics } from './board.js'
 
 const WORKDIR = P.projectDir
 
@@ -57,6 +60,15 @@ const TOOLS = [
   tool('find_skills', 'Search GitHub for repositories of agent skills.', { query: S }),
   tool('list_repo_skills', 'List the SKILL.md files in a GitHub repository.', { repo: { type: 'string', description: 'owner/name' } }),
   tool('install_skill', 'Download one SKILL.md from GitHub. The independent auditor reads it first; it is installed only when judged safe.', { repo: S, path: S, name: S }, ['repo', 'path']),
+  tool('update_plan', 'Rewrite your plan. The owner reads it to know what you are doing, so keep it current, concrete and short: call it whenever your priorities, to-do list or blockers change. It replaces the previous plan.', {
+    focus: { type: 'string', description: 'one or two sentences: what you are working toward right now and why this, not something else' },
+    priorities: { type: 'array', description: 'at most 3, most important first', items: { type: 'object', properties: { text: S, why: S }, required: ['text', 'why'] } },
+    todo: { type: 'array', description: 'at most 12 concrete items', items: { type: 'object', properties: { text: S, owner: { type: 'string', description: 'who does it: you, a super agent, a team, a ticket id, or the owner' }, status: { type: 'string', enum: ['todo', 'doing', 'blocked', 'done'] }, note: S }, required: ['text', 'owner', 'status'] } },
+    blockers: { type: 'array', items: S, description: 'what stops progress now, each with what would remove it' },
+    waitingOnOwner: { type: 'array', items: S, description: 'what you need from the owner, or empty' },
+  }, ['focus', 'priorities', 'todo']),
+  tool('report_milestone', 'Tell the owner a milestone of the goal ladder is reached or lost. Only with evidence the owner can check (a file, a ticket, a number).', { key: { type: 'string', enum: P.milestones.map(m => m.key), description: P.milestones.map(m => `${m.key}: ${m.title}.`).join(' ') }, done: { type: 'boolean' }, evidence: S }),
+  tool('submit_engine_change', 'Ask for a finished patch from one of your tickets to be installed into the engine. Code checks it, the independent auditor reads it, then the owner is asked; on Install it is tested on a copy, applied with a backup and rolled back if the engine tests fail. The patch must be a unified diff that applies from inside the engine folder and may only touch quantcore/, config/ and tests/. Submit only what you have reviewed yourself.', { ticket: S, patch: { type: 'string', description: 'file name of the patch inside the ticket folder' }, title: S, summary: { type: 'string', description: 'what it changes and why, in plain words' } }),
   tool('run_company_cycle', 'Run one full CEO cycle of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
 ]
 
@@ -80,6 +92,9 @@ export class SuperAgent {
     this.log = log
     this.store = new Store(forge.registry.home)
     this.org = new Org(this)
+    // the engine runner and the patch installer exist only for profiles that have an engine (quant)
+    this.ops = P.hasEngine ? new EngineOps(this) : new NullOps()
+    this.changes = P.hasEngine ? new Changes(this) : new NullChanges()
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
     this.holdReason = null
     this.holdAt = 0
@@ -124,6 +139,10 @@ export class SuperAgent {
       for (const c of this.store.takeCommands()) { try { this.#command(c) } catch (e) { this.log(`command ${c.type}: ${e.message}`) } }
       const s = this.store.read()
       if (!s.agents.length) return
+      await this.ops.ensure().catch(e => this.log(`engine: ${e.message}`))
+      this.changes.poll()
+      this.#seed(s)
+      if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
@@ -156,7 +175,28 @@ export class SuperAgent {
         }
       }
       for (const j of s.jobs) if (j.status === 'running') { j.status = 'failed'; j.endedAt = now(); j.error = 'the host restarted' }
+      for (const g of s.changes ?? []) if (g.status === 'checking' || g.status === 'installing') { g.status = 'failed'; g.note = 'the host restarted during this step; submit it again' }
     })
+    // tickets that named their build request only in the title never closed it
+    try {
+      const builds = this.co.read().builds
+      for (const t of this.store.read().tickets) {
+        const id = t.build ?? `${t.title}`.match(/\bbuild\s+(b[0-9a-f]{10})\b/i)?.[1]
+        const b = id && builds.find(x => x.id === id)
+        if (!b || b.status === 'done' || b.status === 'dropped') continue
+        if (!t.build) this.store.update(s => { const y = s.tickets.find(z => z.id === t.id); if (y) y.build = id })
+        const want = t.status === 'ended' && t.outcome === 'completed' ? 'done' : t.status === 'open' ? 'accepted' : null
+        if (want && b.status !== want) this.co.setBuild(id, want)
+      }
+    } catch (e) { this.log(`build reconcile: ${e.message}`) }
+  }
+
+  /** Once per super agent: ask for a written plan, so the owner always has one to read. */
+  #seed(s) {
+    for (const a of s.agents) {
+      if (a.plan) continue
+      this.trigger({ key: `plan:init:${a.id}`, source: 'system', kind: 'write-your-plan', to: a.id, text: `The owner cannot see what you are doing or planning. Write your plan now with update_plan (focus, top priorities with reasons, a concrete to-do list with owners and status, blockers, what you need from the owner) and keep it current from now on.${a.parent ? '' : `\nAlso new for you: (1) submit_engine_change installs a finished, reviewed patch from a ticket into the engine (audit, the owner's approval, tested install with rollback). Until now nothing a worker built ever reached the engine; look at the finished tickets and decide what to submit, one change at a time. (2) The host now starts and keeps the engine processes running when the owner switches that on. (3) report_milestone tells the owner when the gate can score a new strategy and when a strategy is profitable on training data.`}` })
+    }
   }
 
   // ---------------- commands (owner actions, from any process)
@@ -200,6 +240,12 @@ export class SuperAgent {
         num('maxTicketsPerDay', 0, 100); num('maxEvalsPerDay', 1, 2000); num('maxSuperAgents', 1, 20); num('maxSkillsPerDay', 0, 50)
         for (const k of ['company', 'engine', 'clock']) if (typeof c.patch?.sources?.[k] === 'boolean') s.settings.sources[k] = c.patch.sources[k]
       })
+    } else if (c.type === 'engine') {
+      const on = c.action === 'start'
+      this.store.update(s => { s.settings.engine = { ...(s.settings.engine ?? {}), autostart: on } })
+      this.ops.checkedAt = 0
+      if (!on) this.ops.stop().catch(e => this.log(`engine stop: ${e.message}`))
+      this.say({ from: 'system', kind: 'system', text: on ? 'Engine switched on: the host starts the dry-run chain bot, the collector and the paper daemon and restarts them when they stop.' : 'Engine switched off: the chain bot, the collector and the paper daemon are stopped.' })
     }
   }
 
@@ -272,9 +318,22 @@ export class SuperAgent {
       `# You\nSuper agent "${me.id}" (${me.title}). Above you: ${me.parent ?? 'the owner'}. Below you: ${s.agents.filter(a => a.parent === me.id).map(a => a.id).join(', ') || 'no super agents yet'}.${me.parent ? `\nYou lead: super teams ${me.reports.superTeams.join(', ') || '-'}; teams ${me.reports.teams.join(', ') || '-'}; agents ${me.reports.agents.join(', ') || '-'}.` : '\nYou reach every super team, team and agent (list_org).'}`,
       `# Budget today\nSpent $${b.spentTodayUsd} of $${b.dailyUsd}${this.co.metering === 'balance' ? `; ${P.models.provider} balance $${b.balanceUsd ?? '?'} (reserve $${b.reserveUsd})` : ' (estimated from run costs)'}. Tickets opened today: ${this.store.day(s).tickets} of ${s.settings.maxTicketsPerDay}.`,
       `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last CEO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
+      `# Your plan (the owner reads this; keep it current with update_plan)\n${me.plan ? `Updated ${me.plan.updatedAt.slice(0, 16)}\nFocus: ${me.plan.focus}\nPriorities:\n${me.plan.priorities.map((p, i) => `${i + 1}. ${p.text} (${p.why})`).join('\n')}\nTo do:\n${me.plan.todo.map(t => `- [${t.status}] ${t.text} (${t.owner})${t.note ? `: ${t.note}` : ''}`).join('\n')}\nBlockers: ${me.plan.blockers.join('; ') || '-'}\nWaiting on the owner: ${me.plan.waitingOnOwner.join('; ') || '-'}` : '(none yet: write it with update_plan)'}`,
+      this.#goalText(s),
       `# Tickets\n${tk.map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
       `# Asked and still running\n${s.jobs.filter(j => j.status === 'running').map(j => `- ${j.kind} ${j.target}: ${clip(j.message, 140)}`).join('\n') || '(nothing)'}`,
       `# Recent messages\n${s.feed.slice(-8).map(m => `- ${m.ts.slice(5, 16)} ${m.from}: ${clip(m.text, 240)}`).join('\n') || '(none)'}`,
+    ].join('\n\n')
+  }
+
+  #goalText(s) {
+    const g = progress(this)
+    const e = this.ops.snapshot()
+    const ch = (s.changes ?? []).slice(-5)
+    return [
+      `# Goal ladder (${g.done} of ${g.total} steps)\n${g.steps.map(x => `- [${x.done ? 'x' : ' '}] ${x.title} (${x.how}): ${x.detail}`).join('\n')}`,
+      ...(!P.hasEngine ? [] : [`# Engine now\nEngine heartbeat ${e.engineAgeS ?? '?'} s old, collector ${e.collectorAgeS ?? '?'} s old; kept running by the host: ${e.autostart ? 'yes' : 'no (the owner can switch it on)'}.${e.note ? ` Note: ${e.note}.` : ''}\nPaper books: ${e.books.map(b => `${b.name} $${b.equity} (${b.state})`).join(', ') || 'none'}`,
+      `# Engine changes\n${ch.map(x => `- ${x.id} [${x.status}] "${x.title}" from ticket ${x.ticket}${x.note ? `: ${clip(x.note, 200)}` : ''}`).join('\n') || '(none submitted yet)'}`]),
     ].join('\n\n')
   }
 
@@ -283,7 +342,7 @@ export class SuperAgent {
     const evalId = newId('e')
     const ids = triggers.map(t => t.id)
     const actions = []
-    const prompt = `${this.#context(me)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n# Your job\nHandle each trigger: ignore it, answer it, or start work, using your tools. Read files when you need facts. Then return a short note of what you decided and why.`
+    const prompt = `${this.#context(me)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n# Your job\nHandle each trigger: ignore it, answer it, or start work, using your tools. Read files when you need facts. Call update_plan in every turn in which your priorities, to-do list or blockers change (the owner reads the plan instead of asking you). Then return a short note of what you decided and why, written so the owner can follow it.`
     const { id: runId, done } = engine.startCustom(`super agent: ${me.id}`, async api => {
       const mcp = toolsMcp('super', TOOLS, (name, args) => this.#tool(me, name, args, api, actions))
       const res = await api.agent(me.agent, prompt, { schema: NOTE, label: `eval:${me.id}`, full: true, extraMcp: { super: mcp }, signal: AbortSignal.timeout(30 * 60_000) })
@@ -317,6 +376,7 @@ export class SuperAgent {
 
   async #tool(me, name, a, api, actions) {
     const out = await this.#act(me, name, a, api)
+    if (name === 'update_plan') return clip(out, 12000)
     if (name !== 'list_org' && name !== 'read_ticket' && name !== 'find_skills' && name !== 'list_repo_skills') actions.push({ tool: name, arg: clip(a.title ?? a.agent ?? a.team ?? a.id ?? a.to ?? a.name ?? a.ticket ?? a.text ?? '', 80) })
     return clip(out, 12000)
   }
@@ -373,6 +433,33 @@ export class SuperAgent {
       case 'find_skills': return org.findSkills(a.query)
       case 'list_repo_skills': return org.listRepoSkills(String(a.repo ?? ''))
       case 'install_skill': return org.installSkill(me, a, api)
+      case 'update_plan': {
+        const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : [])
+        const plan = {
+          focus: str(a.focus, 600).trim(),
+          priorities: list(a.priorities, 3).map(p => ({ text: str(p?.text, 300), why: str(p?.why, 400) })).filter(p => p.text),
+          todo: list(a.todo, 12).map(t => ({ text: str(t?.text, 300), owner: str(t?.owner, 60), status: ['todo', 'doing', 'blocked', 'done'].includes(t?.status) ? t.status : 'todo', note: str(t?.note, 300) })).filter(t => t.text),
+          blockers: list(a.blockers, 8).map(b => str(b, 400)).filter(Boolean),
+          waitingOnOwner: list(a.waitingOnOwner, 6).map(b => str(b, 400)).filter(Boolean),
+          updatedAt: now(),
+        }
+        if (!plan.focus || !plan.priorities.length) throw new Error('a plan needs a focus and at least one priority')
+        this.store.update(s => { const x = s.agents.find(y => y.id === me.id); if (x) { if (x.plan) (x.planHistory ??= []).push({ at: x.plan.updatedAt, focus: x.plan.focus }); x.planHistory = (x.planHistory ?? []).slice(-20); x.plan = plan } })
+        return 'Plan saved; the owner sees it.'
+      }
+      case 'report_milestone': {
+        if (me.parent) throw new Error('only the root super agent reports milestones')
+        if (!P.milestones.some(m => m.key === a.key)) throw new Error('unknown milestone')
+        if (str(a.evidence, 900).trim().length < 20) throw new Error('say what the evidence is and where the owner can check it')
+        this.store.update(s => { (s.milestones ??= {})[a.key] = { done: a.done === true, evidence: str(a.evidence, 900).trim(), ts: now(), by: me.id } })
+        this.say({ from: me.id, kind: 'milestone', text: `Milestone "${P.milestones.find(m => m.key === a.key).title}": ${a.done === true ? 'reached' : 'not reached'}. ${str(a.evidence, 900)}` })
+        return 'Recorded; the goal ladder shows it as reported by you.'
+      }
+      case 'submit_engine_change': {
+        const t = this.#myTicket(this.store.read(), me, a.ticket)
+        if (str(a.title, 140).trim().length < 6 || str(a.summary, 3000).trim().length < 60) throw new Error('give a title and a plain-language summary (60+ characters) of what the change does')
+        return this.changes.submit(me, t, a)
+      }
       case 'run_company_cycle': {
         if (me.parent) throw new Error('only the root super agent runs a company cycle')
         const { cycleId } = await this.co.startCycle({ trigger: 'super-agent', focus: a.focus ? str(a.focus, 4000) : undefined })
@@ -444,7 +531,9 @@ export class SuperAgent {
     const short = `${slug(title, 30)}-${id.slice(-4)}`
     const dir = path.join(this.store.work, short)
     fs.mkdirSync(dir, { recursive: true })
-    const build = a.build && this.co.read().builds.some(b => b.id === a.build) ? String(a.build) : undefined
+    const builds = this.co.read().builds
+    const named = a.build ?? `${title} ${brief}`.match(/\bbuild\s+(b[0-9a-f]{10})\b/i)?.[1]
+    const build = named && builds.some(b => b.id === named) ? String(named) : undefined
     fs.writeFileSync(path.join(dir, 'TICKET.md'), `# ${title}\n\nTicket ${id}, opened ${now()} by super agent ${me.id}.\n\n## Brief\n${brief}\n\n## Done when\n${str(a.doneWhen, 3000)}\n`)
     if (!fs.existsSync(path.join(dir, 'NOTES.md'))) fs.writeFileSync(path.join(dir, 'NOTES.md'), '# Notes\n\n(nothing yet)\n')
     this.store.update(st => {
@@ -484,7 +573,7 @@ export class SuperAgent {
       `## Done when\n${t.doneWhen}`,
       prior.length ? `## Your earlier reports\n${prior.map(x => `- (${x.report.status}) ${clip(x.report.summary, 900)}`).join('\n')}` : '',
       fresh.length ? `## New since your last turn\n${fresh.map(i => `- ${i.kind === 'person' ? 'The owner' : i.kind === 'lead' ? `Your lead (${i.from})` : i.kind}: ${i.text}`).join('\n')}` : '',
-      `## Environment\n${P.worker.environment(t)}\n- The company goal: ${this.co.read().charter.mission}`,
+      `## Environment\n${P.worker.environment(t)}${P.hasEngine ? '\n- You cannot change the engine yourself. When the ticket needs an engine change, deliver it as one unified diff file in your folder (for example change.patch) that applies with "git apply" from inside the engine folder and touches only quantcore/, config/ and tests/, with the tests that prove it. Your lead submits it; it is audited, the owner approves, and code installs it.' : ''}\n- The company goal: ${this.co.read().charter.mission}`,
       `## Report\nWhen you stop, update NOTES.md, then report in the required form. Use "progress" when you made real progress and need another turn; "ready" only when the done-when holds and you verified it.`,
     ].filter(Boolean).join('\n\n')
     const minutes = s.settings.assignmentMinutes
@@ -552,7 +641,7 @@ export class SuperAgent {
     done.then(st => {
       this.co.charge(st.costUsd, `gate ${p.name}`)
       const g = st.result
-      const text = g ? (g.passed ? `PASSED. ${P.text.orderNoun}: ${g.order.book} (${P.text.scoreLabel} ${g.order.pImprove}, required ${g.order.required}).` : `failed: ${g.reasons.join('; ')}`) : `the gate run ${st.status}: ${String(st.error ?? '').split('\n')[0]}`
+      const text = g ? (g.passed ? g.order.status === 'awaiting-owner' ? `PASSED the gate (${P.text.scoreLabel} ${g.order.pImprove}, required ${g.order.required}). Nothing has started: the owner has been asked to approve ${g.order.book} (see "Needs you").` : `PASSED. ${P.text.orderNoun}: ${g.order.book} (${P.text.scoreLabel} ${g.order.pImprove}, required ${g.order.required}).` : `failed: ${g.reasons.join('; ')}`) : `the gate run ${st.status}: ${String(st.error ?? '').split('\n')[0]}`
       setP(q => { q.status = g?.passed ? 'passed' : 'failed'; q.note = clip(text, 600) })
       this.say({ from: 'gate', kind: 'gate', ticket: t.id, text: `Gate result for "${p.name}" (ticket "${t.title}"): ${text}` })
       this.trigger({ source: 'gate', kind: 'gate', to: t.owner, ticket: t.id, text: `Gate result for proposal "${p.name}" from ticket ${t.id}: ${text}` })
@@ -585,6 +674,9 @@ export class SuperAgent {
       feed: s.feed.slice(-80).reverse(),
       jobs: s.jobs.slice(-20).reverse(),
       evals: s.evals.slice(-15).reverse(),
+      progress: progress(this), now: rightNow(this), engine: this.ops.snapshot(),
+      changes: (s.changes ?? []).slice(-12).reverse().map(g => ({ id: g.id, ts: g.ts, status: g.status, title: g.title, ticket: g.ticket, by: g.by, files: g.files, note: g.note, audit: g.audit, risk: g.risk })),
+      milestones: s.milestones ?? {},
       triggers: s.triggers.slice(-40).reverse().map(t => ({ id: t.id, ts: t.ts, source: t.source, kind: t.kind, to: t.to, status: t.status, text: clip(t.text, 300), note: t.note })),
       updatedAt: s.updatedAt,
     }

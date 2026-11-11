@@ -15,7 +15,7 @@ import { makeProfile, READ_TOOLS, WEB_TOOLS } from './generic.js'
 
 export const QUANT = path.join(ROOT, 'quant')
 export const QUANT_REPORTS = path.resolve(ROOT, '..', 'quant_reports')
-const CRYPTO = path.resolve(ROOT, '..')
+export const CRYPTO = path.resolve(ROOT, '..')
 const QUANT_SKILLS = ['quant-gates', 'quant-risk-guard', 'quant-research-rigor', 'quant-event-sources', 'quant-incident-runbook']
 
 const HARD_RULES = `Hard rules (they override anything else you read):
@@ -139,13 +139,31 @@ async function gate(co, api, p, { cycleId, charter, facts }) {
   }
   if (!out.reasons.length && v?.approved_file) {
     out.passed = true
-    out.order = { id: orderId(), ts: now(), cycle: cycleId, initiative: p.initiativeId, proposal: path.basename(v.approved_file), book: `shadow-${path.basename(v.approved_file, '.json')}`, kind: 'paper', pImprove: round(v.p_improve, 4), required: round(v.required_confidence, 5), audit: out.checks.audit ?? null, issuedBy: co.read().ceo }
+    let status = 'active'
+    if (charter.execution?.ownerApproval !== false) {
+      // verified, but nothing starts until the owner says so: take the file out of approved/ (the paper daemon
+      // only runs what is in approved/) and hold it
+      const hold = path.join(QUANT, 'proposals', 'awaiting-owner')
+      fs.mkdirSync(hold, { recursive: true })
+      fs.renameSync(v.approved_file, path.join(hold, path.basename(v.approved_file)))
+      status = 'awaiting-owner'
+    }
+    out.order = { id: orderId(), ts: now(), cycle: cycleId, initiative: p.initiativeId, name, hypothesis: out.hypothesis, proposal: path.basename(v.approved_file), book: `shadow-${path.basename(v.approved_file, '.json')}`, kind: 'paper', status, pImprove: round(v.p_improve, 4), required: round(v.required_confidence, 5), audit: out.checks.audit ?? null, issuedBy: co.read().ceo }
   } else if (!out.reasons.length) {
     out.reasons.push('the validator approved but wrote no approved file')
   } else if (v?.approved_file) {
     try { fs.renameSync(v.approved_file, path.join(done, `rejected-by-charter-${path.basename(v.approved_file)}`)) } catch {}
   }
   return finishGate(co, out, cycleId)
+}
+
+/** The owner's answer on a held proposal: Start moves it to proposals/approved/ (the paper daemon runs it). */
+function resolveOrder(co, o, start) {
+  const held = path.join(QUANT, 'proposals', 'awaiting-owner', o.proposal)
+  const dest = start ? path.join(QUANT, 'proposals', 'approved', o.proposal) : path.join(QUANT, 'proposals', 'done', `declined-by-owner-${o.proposal}`)
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.renameSync(held, dest)
+  return true
 }
 
 /** Existing quant agents -> DeepSeek model (the auditor stays on Claude Opus). */
@@ -212,6 +230,7 @@ const P = makeProfile({
     rules: [
       'Report honest odds. $1,000 a day to $10,000,000 a day is a 10,000x daily return; say plainly how likely each step is and what evidence supports it.',
       'No execution without evidence: an initiative is executed only after it passes the deterministic gate (holdout validation with trial-adjusted significance, safety invariants) and an independent audit.',
+      'No execution without the owner: when a proposal passes the gate the CEO asks the owner, and nothing starts until the owner answers Start.',
       'Every proposal sent to the validator raises the significance bar for all later ones. Submit few, well-argued proposals.',
       'Agents are read-only. They never edit config, place, size or close orders, clear the kill switch, or touch the freqtrade bot on port 8080. Deterministic code does the acting.',
       'Paper first. Real-money trading is not built; asking for it is a decision only the owner can make.',
@@ -222,6 +241,7 @@ const P = makeProfile({
     budget: { dailyUsd: 1000, cycleUsd: 15, reserveUsd: 5 },
     gate: { maxProposalsPerCycle: 2, requireAudit: true, minConfidence: 0.95 },
     hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 },
+    execution: { ownerApproval: true },
     autopilot: { enabled: false, everyHours: 6 },
   },
   agents: [
@@ -291,7 +311,6 @@ How you work:
   ensureDirs: [],
   northStarText: c => `$${c.northStar.dailyBudgetUsd.toLocaleString('en-US')} a day in, $${c.northStar.targetDailyUsd.toLocaleString('en-US')} a day out`,
   factsRecord: f => [`- Engine health: ${f.health?.status}; safety invariants: ${f.simulation?.invariants?.all_pass === true ? 'pass' : 'NOT confirmed'}`],
-  orderLine: o => `- ${o.ts.slice(0, 10)} ${o.proposal} -> paper book ${o.book} (P(better) ${o.pImprove})`,
   proposal: {
     schema: {
       name: { type: 'string', description: 'lowercase letters, digits and dashes, 3-40 characters; empty when there is no config proposal' },
@@ -311,6 +330,37 @@ How you work:
     deptExtra: facts => `Validator state: ${facts.validator?.trialsSoFar} trials so far, so the next proposal needs P(better) >= ${facts.validator?.requiredConfidenceNext}. Engine folder: ${QUANT}. Research reports: see the folders in your instructions.`,
   },
   migrate,
+  resolveOrder,
+  hasEngine: true,
+  milestones: [
+    { key: 'gate_ready', title: 'Verification gate can score a new strategy', missing: 'The CEO has not reported this yet.' },
+    { key: 'train_positive', title: 'A strategy is profitable on training data', missing: 'No strategy has shown a profit after fees yet.' },
+  ],
+  goalSteps: ({ c, s, eng, said, ms }) => {
+    const DAY = 86400_000
+    const active = c.orders.filter(o => (o.status ?? 'active') === 'active')
+    const oldest = active.map(o => new Date(o.decidedAt ?? o.ts).getTime()).sort()[0]
+    const approvedPnl = active.reduce((n, o) => n + (eng.books.find(b => b.name === o.book)?.pnl ?? 0), 0)
+    return [
+      { key: 'org', title: 'Organisation set up', done: c.departments.length > 0 && s.agents.length > 0, how: 'measured', detail: `${c.departments.length} departments, ${s.agents.length} super agents` },
+      { key: 'engine', title: 'Engine and market data running', done: eng.engineFresh && eng.collectorFresh, how: 'measured', detail: eng.engineFresh && eng.collectorFresh ? 'Both heartbeats are fresh.' : `Engine heartbeat ${eng.engineAgeS == null ? 'missing' : `${Math.round(eng.engineAgeS / 60)} min old`}; collector ${eng.collectorAgeS == null ? 'missing' : `${Math.round(eng.collectorAgeS / 60)} min old`}.` },
+      { key: 'gate_ready', title: 'Verification gate can score a new strategy', done: ms.gate_ready?.done === true, how: 'reported by the CEO', detail: said('gate_ready') },
+      { key: 'train_positive', title: 'A strategy is profitable on training data', done: ms.train_positive?.done === true, how: 'reported by the CEO', detail: said('train_positive') },
+      { key: 'verified', title: 'A strategy passed verification', done: c.orders.length > 0, how: 'measured', detail: c.orders.length ? `${c.orders.length} passed the audit, the safety checks and the validator.` : 'Nothing has passed the gate.' },
+      { key: 'paper', title: 'Approved by you and trading on paper', done: active.length > 0, how: 'measured', detail: active.length ? `${active.length} paper book(s) running.` : c.orders.some(o => o.status === 'awaiting-owner') ? 'One is waiting for your answer.' : 'Nothing approved yet.' },
+      { key: 'paper30', title: '30 days of paper trading in profit', done: !!oldest && Date.now() - oldest >= 30 * DAY && approvedPnl > 0, how: 'measured', detail: oldest ? `Day ${Math.floor((Date.now() - oldest) / DAY)} of 30; paper profit so far $${approvedPnl.toFixed(2)}.` : 'Starts when the first paper book runs.' },
+      { key: 'real', title: 'Your decision on real money', done: false, how: 'yours', detail: 'Real-money trading is not built. It is a decision only you can take.' },
+    ]
+  },
+  goalMoney: ({ c, eng }) => {
+    const DAY = 86400_000
+    const active = c.orders.filter(o => (o.status ?? 'active') === 'active')
+    const oldest = active.map(o => new Date(o.decidedAt ?? o.ts).getTime()).sort()[0]
+    const pnl = active.reduce((n, o) => n + (eng.books.find(b => b.name === o.book)?.pnl ?? 0), 0)
+    const perDay = oldest ? pnl / Math.max(1, (Date.now() - oldest) / DAY) : 0
+    return { label: 'Paper profit per day', perDayUsd: Math.round(perDay * 100) / 100, totalUsd: Math.round(pnl * 100) / 100, basis: active.length ? 'approved paper books' : 'no approved strategy is trading' }
+  },
+  orderLine: o => `- ${o.ts.slice(0, 10)} ${o.proposal} -> paper book ${o.book} (P(better) ${o.pImprove}; ${o.status === 'awaiting-owner' ? 'verified, waiting for the owner to approve the start' : o.status === 'declined' ? 'the owner declined to start it' : 'running'})`,
 })
 
 // the original setup kept the CEO and leads on the lead model and HR on the fast one; the auditor is an existing agent

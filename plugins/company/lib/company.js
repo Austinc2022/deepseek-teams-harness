@@ -28,6 +28,7 @@ export { ROOT, today, newId }
 /** The active profile's charter (profiles/<id>.js); the owner edits it on the Company page. */
 export const DEFAULT_CHARTER = {
   hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 }, // auto | observe (ask the owner) | off
+  execution: { ownerApproval: false }, // true: a proposal that passed the gate is held until the owner says Start (the quant profile turns it on)
   autopilot: { enabled: false, everyHours: 6 },
   ...P.charter,
   models: { lead: P.models.lead, worker: P.models.worker, auditor: P.models.auditor },
@@ -55,7 +56,7 @@ export class Company {
     let s
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { s = {} }
     s.charter = { ...DEFAULT_CHARTER, ...(s.charter ?? {}) }
-    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
+    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
     for (const k of ['departments', 'initiatives', 'decisions', 'hires', 'orders', 'cycles', 'builds']) s[k] ??= []
     s.days ??= {}
     return s
@@ -265,6 +266,7 @@ export class Company {
         c.hiring.maxPerDay = num(patch.hiring.maxPerDay, 0, 20, c.hiring.maxPerDay)
         c.hiring.maxAgents = num(patch.hiring.maxAgents, 1, 200, c.hiring.maxAgents)
       }
+      if (patch.execution?.ownerApproval !== undefined) c.execution.ownerApproval = patch.execution.ownerApproval !== false
       if (patch.gate) {
         c.gate.maxProposalsPerCycle = num(patch.gate.maxProposalsPerCycle, 0, 5, c.gate.maxProposalsPerCycle)
         c.gate.minConfidence = num(patch.gate.minConfidence, 0.5, 0.9999, c.gate.minConfidence)
@@ -298,7 +300,29 @@ export class Company {
         else this.update(s => { const h = s.hires.find(x => x.id === rec.id); if (h) { h.status = 'declined'; delete h.def } })
       }
     }
+    if (d.kind === 'execute') this.#resolveOrder(d.order, /^start$/i.test(d.choice))
     return d
+  }
+
+  /**
+   * The owner's answer on a proposal the gate held (charter.execution.ownerApproval). What "start" does to the
+   * world is the profile's business (profile.resolveOrder, e.g. the quant profile moves the proposal file).
+   */
+  #resolveOrder(orderId, start) {
+    const o = this.read().orders.find(x => x.id === orderId)
+    if (!o || o.status !== 'awaiting-owner') return
+    if (P.resolveOrder && P.resolveOrder(this, o, start) === false) return
+    this.update(s => {
+      const x = s.orders.find(y => y.id === orderId)
+      x.status = start ? 'active' : 'declined'; x.decidedAt = now()
+      const i = s.initiatives.find(y => y.id === x.initiative)
+      if (i) {
+        delete i.awaitingOwner
+        if (start) i.stage = P.gatedStage
+        i.history.push({ ts: now(), stage: i.stage, note: start ? `the owner approved: ${x.book} started` : 'the owner declined to start it' })
+      }
+    })
+    this.ledger({ kind: 'order', usd: 0, note: start ? `owner approved: ${P.text.orderNoun} ${o.book}` : `owner declined ${o.book}` })
   }
 
   /** Mark a build request as accepted, done or dropped (the owner or a developer does the building). */

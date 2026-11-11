@@ -441,6 +441,35 @@ ${P.superRules}`,
     ...(spec.prompts ?? {}),
   }
   P.migrate = spec.migrate ?? null
+  P.resolveOrder = spec.resolveOrder ?? null
+  /** true only for a profile with a long-running engine that code keeps alive and patches (quant). */
+  P.hasEngine = spec.hasEngine === true
+  /** Milestones only the CEO can report (with evidence); they appear as steps of the goal ladder. */
+  P.milestones = spec.milestones ?? [
+    { key: 'plan_ready', title: 'A plan to reach the goal exists', missing: 'The CEO has not reported a plan yet.' },
+    { key: 'first_build', title: 'A first deliverable is built and runs', missing: 'Nothing has been built yet.' },
+  ]
+  /** The goal ladder the owner reads: steps measured by code where code can measure them. */
+  P.goalSteps = spec.goalSteps ?? (({ c, s, said, ms }) => {
+    const day = today()
+    const per = c.charter.northStar.deliveriesPerDay ?? 1
+    const todays = c.orders.filter(o => o.ts.slice(0, 10) === new Date().toISOString().slice(0, 10) || String(o.book).includes(day))
+    const delivered = s.tickets.filter(t => t.outcome === 'completed').length
+    const days = [...new Set(c.orders.map(o => o.ts.slice(0, 10)))].sort()
+    let streak = 0
+    for (let d = new Date(); days.includes(d.toISOString().slice(0, 10)); d = new Date(d.getTime() - 86400_000)) streak++
+    return [
+      { key: 'org', title: 'Organisation set up', done: c.departments.length > 0 && s.agents.length > 0, how: 'measured', detail: `${c.departments.length} departments, ${s.agents.length} super agents` },
+      ...P.milestones.map(m => ({ key: m.key, title: m.title, done: ms[m.key]?.done === true, how: 'reported by the CEO', detail: said(m.key) })),
+      { key: 'built', title: 'A builder delivered a ticket', done: delivered > 0, how: 'measured', detail: delivered ? `${delivered} ticket(s) delivered.` : 'No ticket has been delivered yet.' },
+      { key: 'accepted', title: `First ${P.text.orderNoun} passed the gate`, done: c.orders.length > 0, how: 'measured', detail: c.orders.length ? `${c.orders.length} passed the checks, the rebuild and the audit.` : 'Nothing has passed the gate.' },
+      { key: 'daily', title: `${per} ${P.text.orderNoun}${per === 1 ? '' : 's'} today`, done: todays.length >= per, how: 'measured', detail: `${todays.length} of ${per} today.` },
+      { key: 'streak', title: 'Seven days in a row', done: streak >= 7, how: 'measured', detail: `${streak} day(s) in a row with something accepted.` },
+      { key: 'release', title: 'Your decision to release', done: false, how: 'yours', detail: 'Publishing, pricing and selling are decisions only you can take.' },
+    ]
+  })
+  /** The money line under the goal ladder. A company that has released nothing has earned nothing. */
+  P.goalMoney = spec.goalMoney ?? (({ c }) => ({ label: `${P.text.ordersTitle}`, perDayUsd: 0, totalUsd: 0, count: c.orders.length, basis: 'nothing is released, so there is no revenue to measure; releasing is your decision' }))
   P.ensureDirs = [P.projectDir, path.join(P.projectDir, P.gateSpec.outDir), ...(spec.ensureDirs ?? [])]
   return P
 }

@@ -108,6 +108,27 @@ dialog .db { padding: 16px; overflow: auto }
 .tk { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow: auto }
 .tk .card { cursor: pointer }
 .tree { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.goalrow { display: flex; gap: 16px; align-items: center; flex-wrap: wrap }
+.goalrow .big { font: 600 34px/1 var(--mono); font-variant-numeric: tabular-nums }
+.goalrow .grow { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 5px }
+.bar.tall { height: 12px; border-radius: 6px }
+.ladder { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 5px }
+.ladder li { overflow-wrap: anywhere }
+.ladder li.done strong { color: var(--good) }
+.ladder li.later { color: var(--muted) }
+.facts { display: grid; gap: 6px 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) }
+.facts div { display: flex; flex-direction: column }
+.facts .v { font: 600 16px/1.2 var(--mono); font-variant-numeric: tabular-nums }
+.rows { display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow: auto }
+button.chip { border: 0; cursor: pointer; font-size: 12px; padding: 1px 7px; color: var(--ink) }
+button.chip:hover { outline: 1px solid var(--muted) }
+button.chip.claude { border: 1px dashed var(--info); color: var(--info) }
+button.chip.busy { outline: 2px solid var(--accent) }
+.orgline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.indent { margin-left: 18px; border-left: 2px solid var(--line); padding-left: 12px; display: flex; flex-direction: column; gap: 8px }
+.tl-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end }
+.tl-controls label { flex: 1 1 200px }
+.todo-done { text-decoration: line-through; color: var(--muted) }
 @media (max-width: 520px) { .stat .big { font-size: 20px } }
 </style>
 </head>
@@ -117,6 +138,7 @@ dialog .db { padding: 16px; overflow: auto }
     <div class="who">
       <h1 id="coName">Company desk</h1>
       <p class="mission" id="mission">Loading…</p>
+      <p class="small"><a href="board.html" style="color:var(--info)">Open the dashboard: units, charts and trends</a></p>
     </div>
     <div class="controls">
       <span class="pill" id="state">…</span>
@@ -128,6 +150,13 @@ dialog .db { padding: 16px; overflow: auto }
   </header>
 
   <section class="panel need" id="need"><div class="head"><h2>Needs you</h2></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+
+  <section class="panel" id="goal"><div class="head"><h2>Goal and progress</h2></div><div id="goalBody"><p class="empty">Loading…</p></div></section>
+
+  <div class="grid">
+    <section class="panel live"><div class="head"><h2>Right now</h2><span class="small muted" id="nowAt"></span></div><div class="rows" id="now"><p class="empty">Loading…</p></div></section>
+    <section class="panel"><div class="head"><h2>Plan</h2><select id="planWho" aria-label="Whose plan" style="width:auto"></select></div><div id="plan"><p class="empty">Loading…</p></div></section>
+  </div>
 
   <section class="panel live" id="super">
     <div class="head"><h2>Super agent</h2><span class="controls"><span class="pill" id="saState">…</span><button id="saToggle">Proactive mode</button></span></div>
@@ -155,10 +184,22 @@ dialog .db { padding: 16px; overflow: auto }
 
   <div class="grid">
     <section class="panel"><div class="head"><h2 id="ordersT">Accepted</h2></div><div class="scroll" id="orders"></div></section>
-    <section class="panel"><div class="head"><h2 id="engineT">Measured now</h2><span class="small muted" id="engineAt"></span></div><div id="engine"><p class="empty">Reading the facts…</p></div></section>
+    <section class="panel"><div class="head"><h2 id="engineT">Measured now</h2><span class="controls"><span class="small muted" id="engineAt"></span><button id="engToggle" hidden>Engine</button></span></div><div id="engProcs"></div><div id="engine"><p class="empty">Reading the facts…</p></div></section>
   </div>
 
-  <section class="panel"><div class="head"><h2>Organisation</h2><span class="small muted" id="orgCount"></span></div><div class="org" id="org"></div></section>
+  <section class="panel" id="changesPanel" hidden><div class="head"><h2>Engine changes (patches built by workers)</h2><span class="small muted">Audited, approved by you, tested on a copy, installed with a backup.</span></div><div class="scroll" id="changes"></div></section>
+
+  <section class="panel"><div class="head"><h2>Organisation</h2><span class="small muted" id="orgCount"></span></div><p class="small muted">Click anyone to see what it is, who it reports to, what it is doing now and what it did. An outlined name is working right now.</p><div class="org" id="org"></div></section>
+
+  <section class="panel">
+    <div class="head"><h2>Timeline</h2><span class="small muted">Everything that happened, newest first.</span></div>
+    <div class="tl-controls">
+      <label>Show<select id="tlWho"><option value="">Everyone</option></select></label>
+      <label>Up to this moment (empty = now)<input id="tlBefore" type="datetime-local"></label>
+      <button id="tlNow">Now</button>
+    </div>
+    <div class="rows" id="tl"><p class="empty">Loading…</p></div>
+  </section>
 
   <section class="panel"><div class="head"><h2>Cycles</h2></div><div class="scroll" id="cycles"></div></section>
 
@@ -200,7 +241,8 @@ const usd = (n, d = 2) => n == null || Number.isNaN(Number(n)) ? '–' : '$' + N
 const pct = n => n == null ? '–' : (Number(n) * 100).toFixed(1) + '%'
 const when = t => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
 const mins = (a, b) => a && b ? Math.max(1, Math.round((new Date(b) - new Date(a)) / 60000)) + ' min' : '–'
-let O = null, E = null, SA = null, charterDirty = false
+let O = null, E = null, SA = null, ORG = null, charterDirty = false
+const ago = t => { if (!t) return ''; const m = Math.max(0, Math.round((Date.now() - new Date(t)) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago' }
 
 async function api(path, method = 'GET', body) {
   const r = await fetch('api/' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
@@ -300,13 +342,7 @@ function showInitiative(id) {
 function renderTables() {
   const T = O.profile.text
   $('ordersT').textContent = T.ordersTitle; $('buildsT').textContent = T.buildsTitle
-  $('orders').innerHTML = O.orders.length ? `<table><tr><th>When</th><th>${esc(T.orderNoun)}</th><th class="r">${esc(T.scoreLabel)}</th><th class="r">Bar</th><th>Audit</th></tr>${O.orders.map(o => `<tr><td>${when(o.ts)}</td><td class="num">${esc(o.book)}</td><td class="r num">${o.pImprove == null ? '–' : Number(o.pImprove).toFixed(3)}</td><td class="r num">${o.required == null ? '–' : Number(o.required).toFixed(3)}</td><td>${o.audit ? (o.audit.fatal ? 'fatal' : 'no fatal objection') : 'not required'}</td></tr>`).join('')}</table>` : `<p class="empty">${esc(T.ordersEmpty)}</p>`
-
-  const agents = new Set(); O.departments.forEach(d => d.teams.forEach(t => t.members.forEach(m => agents.add(m.name))))
-  $('orgCount').textContent = `${O.departments.length} departments · ${O.departments.reduce((n, d) => n + d.teams.length, 0)} teams · ${agents.size + O.departments.length + 1} agents`
-  const chip = a => `<span class="chip${a.provider === 'deepseek' ? '' : ' claude'}${a.hired ? ' hired' : ''}" title="${esc(a.description || '')}">${esc(a.name)} · ${esc(a.model || '?')}</span>`
-  $('org').innerHTML = `<div class="ceo"><strong>CEO</strong> ${O.ceo ? chip(O.ceo) : '<span class="empty">not set up</span>'} <strong>Independent auditor</strong> ${O.auditor ? chip(O.auditor) : ''} <span class="small muted">${O.profile.provider === 'claude-code' ? 'All agents run on your Claude subscription; the auditor uses a different model from the builders.' : 'Dashed = Claude subscription, kept for the audit so the checker is a different model.'} Green border = hired by HR.</span></div>` +
-    O.departments.map(d => `<div class="dep"><div><strong>${esc(d.name)}</strong> <span class="muted">· lead</span> ${chip(d.leadInfo)} <span class="small muted">${esc(d.mission)}</span></div>${d.teams.map(t => `<div class="team"><span class="small muted" style="min-width:150px">${esc(t.name)}</span>${t.members.map(chip).join('')}</div>`).join('')}</div>`).join('')
+  $('orders').innerHTML = O.orders.length ? `<table><tr><th>When</th><th>${esc(T.orderNoun)}</th><th class="r">${esc(T.scoreLabel)}</th><th class="r">Bar</th><th>Audit</th><th>Status</th></tr>${O.orders.map(o => `<tr><td>${when(o.ts)}</td><td class="num">${esc(o.book)}</td><td class="r num">${o.pImprove == null ? '–' : Number(o.pImprove).toFixed(3)}</td><td class="r num">${o.required == null ? '–' : Number(o.required).toFixed(3)}</td><td>${o.audit ? (o.audit.fatal ? 'fatal' : 'no fatal objection') : 'not required'}</td><td><span class="pill ${o.status === 'awaiting-owner' ? 'warn' : o.status === 'declined' ? '' : 'good'}">${o.status === 'awaiting-owner' ? 'waiting for your approval' : o.status === 'declined' ? 'declined' : 'accepted'}</span></td></tr>`).join('')}</table>` : `<p class="empty">${esc(T.ordersEmpty)}</p>`
 
   $('cycles').innerHTML = O.cycles.length ? `<table><tr><th>Started</th><th>Status</th><th>Took</th><th class="r">Spend</th><th>Summary</th><th>Brief</th><th>Runs</th></tr>${O.cycles.map(c => `<tr><td>${when(c.startedAt)}<div class="small muted">${esc(c.trigger)}</div></td><td><span class="pill ${c.status === 'completed' ? 'good' : c.status === 'running' ? 'info' : 'bad'}">${esc(c.status)}</span></td><td class="num">${mins(c.startedAt, c.endedAt)}</td><td class="r num">${usd(c.spendUsd)}</td><td>${esc(c.summary || c.error || c.assessment || '')}</td><td>${c.report ? `<button class="link" data-report="${esc(c.report)}">Read</button>` : '–'}</td><td><button class="link" data-run="${esc(c.runId)}">CEO</button>${(c.subRuns || []).map(s => ` <button class="link" data-run="${esc(s.runId)}">${esc(s.department)}</button>`).join('')}</td></tr>`).join('')}</table>` : '<p class="empty">No cycle yet. Run one to see the CEO plan, the departments work and the gate decide.</p>'
 
@@ -380,6 +416,135 @@ function renderSuper() {
     ${jobs.map(j => `<span class="pill info">asked ${esc(j.kind)} ${esc(j.target)}</span>`).join(' ')}
     ${SA.evals.filter(e => e.status !== 'running').slice(0, 1).map(e => `<span class="small muted">Last decision ${when(e.endedAt)}: <button class="link" data-run="${esc(e.runId)}">${esc((e.note || e.status).slice(0, 120))}</button></span>`).join('')}`
 }
+// ---------------- goal, right now, plan
+function renderGoal() {
+  if (!SA || !SA.progress) return
+  const g = SA.progress, m = g.money, e = g.effort
+  const firstOpen = g.steps.findIndex(x => !x.done)
+  $('goalBody').innerHTML = `<p>${esc(g.mission)}</p>
+    <div class="goalrow"><div class="big">${g.percent}%</div><div class="grow"><div class="bar tall"><i style="width:${g.percent}%"></i></div>
+      <div class="small muted">${g.done} of ${g.total} steps done${g.next ? ` · next: ${esc(g.next.title)}` : ''}. The percentage counts steps, not money; the profit line below is the real measure.</div></div></div>
+    <ol class="ladder">${g.steps.map((x, i) => `<li class="${x.done ? 'done' : i === firstOpen ? 'next' : 'later'}"><strong>${esc(x.title)}</strong> <span class="pill ${x.done ? 'good' : i === firstOpen ? 'warn' : ''}">${x.done ? 'done' : i === firstOpen ? 'next' : 'later'}</span> <span class="small muted">${esc(x.how)} · ${esc(x.detail)}</span></li>`).join('')}</ol>
+    <div class="facts">
+      <div><span class="small muted">${esc(m.label || 'Paper profit per day')}</span><span class="v">${usd(m.paperProfitPerDayUsd)}</span><span class="small muted">${esc(m.basis)}</span></div>
+      <div><span class="small muted">Target per day</span><span class="v">${usd(m.targetDailyUsd, 0)}</span><span class="small muted">${(m.shareOfTarget * 100).toFixed(4)}% reached</span></div>
+      <div><span class="small muted">Spent so far</span><span class="v">${usd(e.spentUsd)}</span><span class="small muted">over ${e.days} day${e.days === 1 ? '' : 's'}</span></div>
+      <div><span class="small muted">Work done</span><span class="v">${e.tickets} tickets</span><span class="small muted">${e.workerTurns} worker turns · ${e.cycles} cycles · ${e.decisions} decisions</span></div>
+      <div><span class="small muted">Ideas</span><span class="v">${e.ideasTried} tried</span><span class="small muted">${e.ideasKilled} killed · ${e.gateRuns} gate runs</span></div>
+      ${SA.engine && !SA.engine.none ? `<div><span class="small muted">Engine changes</span><span class="v">${e.engineChanges} installed</span><span class="small muted">${SA.changes.filter(c => c.status === 'awaiting-owner').length} waiting for you</span></div>` : ''}
+    </div>
+    ${g.odds ? `<p class="small"><strong>The CEO's honest odds${g.oddsAt ? ` (${when(g.oddsAt)})` : ''}.</strong> ${esc(g.odds)}</p>` : ''}`
+}
+function renderNow() {
+  if (!SA || !SA.now) return
+  const n = SA.now
+  $('nowAt').textContent = n.nextCycle ? 'next company cycle ' + when(n.nextCycle) : ''
+  const items = n.items.map(i => `<div class="msg ${i.kind === 'deciding' ? 'owner' : ''}"><div class="by">${i.whoId ? `<button class="link" data-who="${esc(i.whoId)}">${esc(i.who)}</button>` : esc(i.who)} · ${esc(i.kind)} · started ${ago(i.since)}${i.runId ? ` · <button class="link" data-run="${esc(i.runId)}">watch</button>` : ''}${i.ticket ? ` · <button class="link" data-ticket="${esc(i.ticket)}">ticket</button>` : ''}</div>${esc(i.what)}${i.detail ? `<div class="small muted">${esc(i.detail)}</div>` : ''}${i.activity ? `<div class="small muted num">${i.activity.tools} tool calls · last: ${esc((i.activity.last || '').slice(0, 140))}</div>` : ''}</div>`).join('')
+  const dec = n.decisions.map(d => `<div class="msg"><div class="by"><button class="link" data-who="super-agent:${esc(d.agent)}">${esc(d.agent)}</button> decided ${ago(d.at)} · <button class="link" data-run="${esc(d.runId)}">full reasoning</button></div>${esc(d.note.length > 520 ? d.note.slice(0, 520) + '…' : d.note)}${d.actions.length ? `<div class="small muted">Did: ${esc(d.actions.map(a => a.tool.replace(/_/g, ' ') + (a.arg ? ` (${a.arg})` : '')).join(' · '))}</div>` : ''}</div>`).join('')
+  $('now').innerHTML = (items || `<p>${esc(n.idle || 'Nothing is running.')}</p>`) + `<h2 style="margin-top:6px">Last decisions and why</h2>` + (dec || '<p class="empty">No decision yet.</p>')
+}
+const TODO_PILL = { todo: '', doing: 'info', blocked: 'bad', done: 'good' }
+function renderPlan() {
+  if (!SA) return
+  const sel = $('planWho'), cur = sel.value
+  sel.innerHTML = SA.agents.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join(''); if (cur) sel.value = cur
+  const a = SA.agents.find(x => x.id === sel.value) || SA.agents[0]
+  if (!a) { $('plan').innerHTML = '<p class="empty">No super agent yet.</p>'; return }
+  const p = a.plan
+  $('plan').innerHTML = !p ? `<p class="empty">${esc(a.title)} has not written a plan yet. It was asked to; it appears after its next turn.</p>` : `<div class="md">
+    <p class="small muted">Written by ${esc(a.title)} · updated ${ago(p.updatedAt)}</p>
+    <p><strong>Focus.</strong> ${esc(p.focus)}</p>
+    <h3>Priorities</h3><ol style="margin:0 0 8px;padding-left:20px">${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong><br><span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol>
+    <h3>To do</h3><div class="scroll"><table>${p.todo.map(t => `<tr><td><span class="pill ${TODO_PILL[t.status] || ''}">${esc(t.status)}</span></td><td class="${t.status === 'done' ? 'todo-done' : ''}">${esc(t.text)}${t.note ? `<div class="small muted">${esc(t.note)}</div>` : ''}</td><td class="small muted">${esc(t.owner)}</td></tr>`).join('')}</table></div>
+    ${p.blockers.length ? `<h3>Blocked by</h3><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
+    ${p.waitingOnOwner.length ? `<h3>Needs from you</h3><ul>${p.waitingOnOwner.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}</div>`
+}
+$('planWho').onchange = renderPlan
+
+// ---------------- engine processes and changes
+function renderEngineOps() {
+  if (!SA || !SA.engine || SA.engine.none) return   // this company has no engine to run or patch
+  $('changesPanel').hidden = false
+  const e = SA.engine, b = $('engToggle')
+  b.hidden = false; b.textContent = e.autostart ? 'Stop the engine' : 'Start the engine'; b.className = e.autostart ? '' : 'primary'
+  const mins = s => s == null ? 'never' : s < 120 ? s + ' s ago' : Math.round(s / 60) + ' min ago'
+  $('engProcs').innerHTML = `<p><span class="pill ${e.engineFresh ? 'good' : 'bad'}">paper daemon: last beat ${mins(e.engineAgeS)}</span> <span class="pill ${e.collectorFresh ? 'good' : 'bad'}">collector: last beat ${mins(e.collectorAgeS)}</span> <span class="pill ${e.autostart ? 'good' : ''}">${e.autostart ? 'kept running by the host' : 'not kept running'}</span>${e.kill ? ' <span class="pill bad">kill switch set</span>' : ''}</p>
+    ${e.note ? `<p class="small" style="color:var(--bad)">${esc(e.note)}</p>` : ''}
+    ${e.books.length ? `<div class="scroll"><table><tr><th>Paper book</th><th>Profile</th><th class="r">Equity</th><th class="r">Profit</th><th>State</th></tr>${e.books.map(k => `<tr><td>${esc(k.name)}</td><td>${esc(k.profile)}</td><td class="r num">${usd(k.equity)}</td><td class="r num">${usd(k.pnl)}</td><td>${esc(k.state)}${k.open ? ' · position open' : ''}</td></tr>`).join('')}</table></div>` : ''}`
+  const P = { checking: 'info', 'awaiting-owner': 'warn', installing: 'info', installed: 'good', rejected: 'bad', failed: 'bad', 'rolled-back': 'bad', declined: '' }
+  const T = { checking: 'being checked and audited', 'awaiting-owner': 'waiting for your answer', installing: 'installing', installed: 'installed', rejected: 'rejected', failed: 'failed', 'rolled-back': 'rolled back', declined: 'declined by you' }
+  $('changes').innerHTML = SA.changes.length ? `<table><tr><th>When</th><th>Change</th><th>Status</th><th>What happened</th></tr>${SA.changes.map(c => `<tr><td>${when(c.ts)}</td><td><strong>${esc(c.title)}</strong><div class="small muted">${c.files.length} files · by ${esc(c.by)} · <button class="link" data-ticket="${esc(c.ticket)}">ticket</button></div></td><td><span class="pill ${P[c.status] || ''}">${esc(T[c.status] || c.status)}</span></td><td>${esc(c.note || (c.audit ? c.audit.summary : ''))}${c.risk && c.risk.changes.length ? `<div class="small muted">Risk settings: ${esc(c.risk.changes.slice(0, 6).join('; '))}</div>` : ''}</td></tr>`).join('')}</table>` : '<p class="empty">No engine change yet. When a worker finishes a patch, the super agent submits it here; nothing is installed without your answer.</p>'
+}
+$('engToggle').onclick = () => act(() => api('super/engine', 'POST', { on: !SA.engine.autostart }), SA.engine.autostart ? 'Stopping the engine' : 'Starting the engine; allow a minute')
+
+// ---------------- organisation
+function renderOrg() {
+  if (!ORG) return
+  const busy = ORG.busy || {}
+  const chip = a => !a ? '' : `<button class="chip${a.provider === 'deepseek' ? '' : ' claude'}${busy[a.name] ? ' busy' : ''}" data-who="agent:${esc(a.name)}" title="${esc(a.description || '')}">${esc(a.name)} · ${esc(a.model || '?')}${busy[a.name] ? ' · working' : ''}</button>`
+  const kids = id => ORG.superAgents.filter(a => a.parent === id)
+  const sup = a => `<div><div class="orgline"><button class="chip${a.busy ? ' busy' : ''}" data-who="super-agent:${esc(a.id)}"><strong>${esc(a.title)}</strong> · super agent${a.busy ? ' · deciding' : ''}</button>${a.focus ? `<span class="small muted">${esc(a.focus.slice(0, 180))}</span>` : '<span class="small muted">no plan written yet</span>'}</div>${kids(a.id).length ? `<div class="indent" style="margin-top:8px">${kids(a.id).map(sup).join('')}</div>` : ''}</div>`
+  const c = ORG.company
+  const nAgents = new Set([c.ceo && c.ceo.name, c.auditor && c.auditor.name, ...c.departments.flatMap(d => [d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))]), ...ORG.others.map(a => a.name)].filter(Boolean)).size
+  $('orgCount').textContent = `${ORG.superAgents.length} super agents · ${c.departments.length} departments · ${c.departments.reduce((n, d) => n + d.teams.length, 0)} teams · ${nAgents} agents`
+  $('org').innerHTML = `<div class="orgline"><strong>You</strong> <span class="small muted">set the goal, answer questions, approve what starts</span></div>
+    <div class="indent">${ORG.superAgents.filter(a => !a.parent).map(sup).join('')}
+      <div><div class="orgline"><button class="chip" data-who="company:company"><strong>The company</strong> · runs a full cycle on a timer</button> <span class="small muted">CEO</span> ${chip(c.ceo)} <span class="small muted">independent auditor</span> ${chip(c.auditor)}</div>
+        <div class="indent" style="margin-top:8px">${c.departments.map(d => `<div class="dep"><div class="orgline"><button class="chip" data-who="department:${esc(d.id)}"><strong>${esc(d.name)}</strong> · department</button> <span class="small muted">lead</span> ${chip(d.lead)} ${d.superTeam ? `<button class="chip${d.superTeam.busy ? ' busy' : ''}" data-who="super-team:${esc(d.superTeam.id)}">its super team${d.superTeam.busy ? ' · working' : ''}</button>` : ''} <span class="small muted">${esc(d.mission)}</span></div>
+          ${d.teams.map(t => `<div class="team"><button class="chip" data-who="team:${esc(t.name)}" style="min-width:150px;text-align:left">${esc(t.name)} · team</button>${t.members.map(chip).join('')}</div>`).join('')}</div>`).join('')}</div></div>
+      ${ORG.others.length ? `<div><div class="orgline"><strong>Workers and others</strong> <span class="small muted">called by the super agents: ticket workers, the models behind super agents</span></div><div class="orgline" style="margin-top:6px">${ORG.others.map(chip).join('')}</div></div>` : ''}</div>
+    <p class="small muted">${O && O.profile && O.profile.provider === 'claude-code' ? 'All agents run on your Claude subscription; the auditor uses a different model from the builders.' : 'Dashed = Claude subscription (kept for the audit, so the checker is a different model). Everything else runs on DeepSeek.'}</p>`
+}
+const evRow = e => `<div class="msg ${e.kind === 'you wrote' || e.kind === 'you answered' ? 'owner' : /question/.test(e.kind) ? 'q' : /gate|verification|installed/.test(e.kind) ? 'gate' : ''}"><div class="by">${when(e.ts)} · ${esc(e.who.filter((w, i, a) => a.indexOf(w) === i).slice(0, 3).join(', '))} · <strong>${esc(e.kind)}</strong>${e.ticket ? ` · <button class="link" data-ticket="${esc(e.ticket)}">ticket</button>` : ''}${e.run && e.file ? ` · <button class="link" data-run="${esc(e.run)}" data-file="${esc(e.file)}">transcript</button>` : e.run ? ` · <button class="link" data-run="${esc(e.run)}">run</button>` : ''}${e.report ? ` · <button class="link" data-report="${esc(e.report)}">brief</button>` : ''}${e.ini ? ` · <button class="link" data-ini="${esc(e.ini)}">initiative</button>` : ''}</div>${esc(e.text)}</div>`
+async function showWho(type, id) {
+  const w = await api(`super/who?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`)
+  const chip = a => `<button class="chip" data-who="agent:${esc(a.name)}">${esc(a.name)}${a.model ? ' · ' + esc(a.model) : ''}${a.now ? ' · working' : ''}</button>`
+  let h = `<div class="md"><p>${esc(w.what)}</p>${w.description ? `<p><strong>${type === 'agent' ? 'Job' : 'Mission'}.</strong> ${esc(w.description)}</p>` : ''}`
+  if (type === 'agent') {
+    h += `<p><span class="pill">${esc(w.provider)} · ${esc(w.model || '?')}</span> <span class="pill ${w.canWrite ? 'warn' : 'good'}">${w.canWrite ? 'can write and run code in a sandboxed ticket folder' : 'read-only'}</span> <span class="small muted">reports to ${esc(w.reportsTo)}${w.teams.length ? ' · teams: ' + esc(w.teams.join(', ')) : ''}</span></p>
+      <h3>Doing right now</h3>${w.now ? `<p>${esc(w.now.label)} in “${esc(w.now.run)}”, started ${ago(w.now.since)} · ${w.now.tools} tool calls · last: ${esc((w.now.last || '').slice(0, 160))} · <button class="link" data-run="${esc(w.now.runId)}">watch</button></p>` : '<p class="empty">Idle. Agents work only when a cycle, a super agent or a ticket calls them.</p>'}
+      <h3>Cost</h3><p class="num">${usd(w.cost.todayUsd)} today · ${usd(w.cost.recentUsd)} over its last ${w.cost.turns} turns</p>
+      <h3>Recent work</h3>${w.recent.length ? `<div class="scroll"><table><tr><th>When</th><th>Task</th><th>Status</th><th class="r">Tools</th><th class="r">Cost</th><th></th></tr>${w.recent.map(r => `<tr><td>${when(r.endedAt || r.startedAt)}</td><td>${esc(r.label)}<div class="small muted">${esc(r.run)}</div></td><td><span class="pill ${r.status === 'completed' ? 'good' : r.status === 'failed' ? 'bad' : 'info'}">${esc(r.status)}</span></td><td class="r num">${r.tools}</td><td class="r num">${usd(r.costUsd)}</td><td><button class="link" data-run="${esc(r.runId)}" data-file="${esc(r.file)}">transcript</button></td></tr>`).join('')}</table></div>` : '<p class="empty">No recorded turn yet.</p>'}
+      <h3>Skills and tools</h3><p class="small">Skills: ${esc(w.skills.join(', ') || 'none')}<br>Tools: ${esc(w.tools.join(', ') || 'none')}</p>
+      <h3>Its instructions</h3><pre class="log" style="max-height:220px">${esc(w.role)}</pre>`
+  } else if (type === 'team') {
+    h += `<h3>Members</h3><p class="orgline">${w.members.map(chip).join('')}</p>${w.asks.length ? `<h3>Recent tasks from a super agent</h3><ul>${w.asks.map(j => `<li>${when(j.startedAt)} · ${esc(j.status)} · asked by ${esc(j.from)}: ${esc(j.message.slice(0, 300))}</li>`).join('')}</ul>` : ''}`
+  } else if (type === 'department') {
+    h += `<p>Lead ${chip(w.lead)} · teams: ${w.teams.map(t => `<button class="chip" data-who="team:${esc(t)}">${esc(t)}</button>`).join(' ')}</p>
+      <h3>Its initiatives</h3>${w.initiatives.length ? `<ul>${w.initiatives.map(i => `<li><span class="pill">${esc(i.stage)}</span> <button class="link" data-ini="${esc(i.id)}">${esc(i.title)}</button>${i.note ? `<br><span class="small muted">${esc(i.note)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="empty">None yet.</p>'}
+      ${w.builds.length ? `<h3>What it asked to be built</h3><ul>${w.builds.map(b => `<li><span class="pill ${b.status === 'done' ? 'good' : 'warn'}">${esc(b.status)}</span> ${esc(b.title)}</li>`).join('')}</ul>` : ''}`
+  } else if (type === 'super-team') {
+    h += `<p>Supervisor ${chip(w.supervisor)} · teams: ${w.teams.map(t => `<button class="chip" data-who="team:${esc(t)}">${esc(t)}</button>`).join(' ')} ${w.busy ? '<span class="pill info">working now</span>' : ''}</p>
+      <h3>Last exchanges</h3>${w.messages.length ? w.messages.map(m => `<div class="msg"><div class="by">${esc(m.from)} · ${when(m.ts)}${m.status ? ' · ' + esc(m.status) : ''}${m.runId ? ` · <button class="link" data-run="${esc(m.runId)}">run</button>` : ''}</div>${esc(m.text)}</div>`).join('') : '<p class="empty">Nothing yet.</p>'}`
+  } else if (type === 'super-agent') {
+    const p = w.plan
+    h += `<p><span class="pill ${w.busy ? 'info' : ''}">${w.busy ? 'deciding now' : 'waiting for an event'}</span> <span class="small muted">reports to ${esc(w.parent || 'you')} · model behind it:</span> ${chip({ name: w.agent })}${w.children.length ? ` <span class="small muted">below it: ${esc(w.children.join(', '))}</span>` : ''}</p>
+      <h3>Plan</h3>${p ? `<p><strong>Focus.</strong> ${esc(p.focus)}</p><ol>${p.priorities.map(x => `<li>${esc(x.text)} <span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol><ul>${p.todo.map(t => `<li><span class="pill ${TODO_PILL[t.status] || ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="empty">No plan written yet.</p>'}
+      <h3>Its decisions and reasons</h3>${w.decisions.length ? w.decisions.map(d => `<div class="msg"><div class="by">${when(d.at)} · <button class="link" data-run="${esc(d.runId)}">full reasoning</button></div>${esc(d.note)}</div>`).join('') : '<p class="empty">None yet.</p>'}
+      ${w.tickets.length ? `<h3>Its tickets</h3><ul>${w.tickets.map(t => `<li><button class="link" data-ticket="${esc(t.id)}">${esc(t.title)}</button> · ${esc(t.outcome || t.status)} · ${t.turns} turns</li>`).join('')}</ul>` : ''}`
+  } else if (type === 'company') {
+    h += `<h3>Last cycles</h3><ul>${w.cycles.map(x => `<li>${when(x.startedAt)} · ${esc(x.status)} · ${usd(x.spendUsd)}${x.report ? ` · <button class="link" data-report="${esc(x.report)}">brief</button>` : ''}<br><span class="small muted">${esc(x.summary)}</span></li>`).join('')}</ul>`
+  }
+  h += `<h3>History</h3>${w.timeline.length ? w.timeline.map(evRow).join('') : '<p class="empty">Nothing recorded for it yet.</p>'}</div>`
+  show(w.name, h)
+}
+async function loadOrg() {
+  try {
+    ORG = await api('super/org'); renderOrg()
+    const sel = $('tlWho')
+    if (sel.options.length < 2) { const ppl = await api('super/people'); sel.innerHTML = '<option value="">Everyone</option>' + ppl.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('') }
+  } catch {}
+}
+async function loadTimeline() {
+  try {
+    const b = $('tlBefore').value
+    const rows = await api(`super/timeline?limit=120${$('tlWho').value ? '&who=' + encodeURIComponent($('tlWho').value) : ''}${b ? '&before=' + encodeURIComponent(new Date(b).toISOString()) : ''}`)
+    $('tl').innerHTML = rows.length ? rows.map(evRow).join('') : '<p class="empty">Nothing recorded for this choice.</p>'
+  } catch (e) { $('tl').innerHTML = `<p class="empty">${esc(e.message)}</p>` }
+}
+$('tlWho').onchange = loadTimeline; $('tlBefore').onchange = loadTimeline
+$('tlNow').onclick = () => { $('tlBefore').value = ''; loadTimeline() }
+
 async function showTicket(id) {
   const t = await api('super/tickets/' + id)
   const reps = t.assignments.filter(a => a.report)
@@ -423,7 +588,7 @@ async function load() {
   try {
     O = await api('overview')
     try { SA = await api('super/overview') } catch { SA = null }
-    renderSuper()
+    renderSuper(); renderGoal(); renderNow(); renderPlan(); renderEngineOps()
     if (!O.setUp) { $('mission').textContent = 'The company is not set up yet.'; $('decisions').innerHTML = '<p>Create the CEO, the department leads, HR and the teams.</p><div class="opts"><button class="primary" id="setup">Set up the company</button></div>'; $('setup').onclick = () => act(() => api('setup', 'POST', {}), 'Company set up'); return }
     renderTop(); renderLive(); renderPipe(); renderTables(); fillCharter()
   } catch (e) { $('mission').textContent = 'Cannot reach the company service: ' + e.message }
@@ -441,13 +606,14 @@ $('stop').onclick = () => act(() => api('cancel', 'POST', {}), 'Stopping the cyc
 $('auto').onclick = () => act(() => api('charter', 'PUT', { autopilot: { enabled: !O.charter.autopilot.enabled } }), O.charter.autopilot.enabled ? 'Autopilot off' : 'Autopilot on')
 $('pause').onclick = () => act(() => api('pause', 'POST', { paused: !O.paused }), O.paused ? 'Resumed' : 'Paused')
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-dec],[data-ini],[data-report],[data-run],[data-build],[data-build-show],[data-file],[data-ticket],[data-tk-act],[data-tfile]'); if (!t) return
+  const t = e.target.closest('[data-dec],[data-ini],[data-report],[data-run],[data-build],[data-build-show],[data-file],[data-ticket],[data-tk-act],[data-tfile],[data-who]'); if (!t) return
   const d = t.dataset
   try {
     if (d.tfile) { const f = await api(`super/tickets/${d.tk}/file?path=${encodeURIComponent(d.tfile)}`); return show(d.tfile, `<p><button class="link" data-ticket="${esc(d.tk)}">Back to the ticket</button></p><pre>${esc(f.text)}</pre>`) }
     if (d.tkAct === 'say') { const text = ($('tkText') || {}).value || ''; if (!text.trim()) return toast('Write a message first'); await api(`super/tickets/${d.tk}/say`, 'POST', { text }); $('dlg').close(); toast('Sent to the worker'); return load() }
     if (d.tkAct) { await api(`super/tickets/${d.tk}/${d.tkAct}`, 'POST', {}); if ($('dlg').open) $('dlg').close(); toast(d.tkAct === 'stop' ? 'Stopping the ticket' : 'Retrying'); return load() }
-    if (d.ticket) return showTicket(d.ticket)
+    if (d.who) { const i = d.who.indexOf(':'); return showWho(d.who.slice(0, i), d.who.slice(i + 1)) }
+    if (d.ticket && !d.tkAct) return showTicket(d.ticket)
     if (d.dec) return act(() => api('decisions/' + d.dec, 'POST', { choice: d.choice }), 'Answer recorded. The CEO sees it in the next cycle.')
     if (d.ini) return showInitiative(d.ini)
     if (d.report) { const r = await api('reports/' + encodeURIComponent(d.report)); return show(d.report, `<div class="md">${md(r.text)}</div>`) }
@@ -458,7 +624,8 @@ document.addEventListener('click', async e => {
   } catch (err) { toast(err.message) }
 })
 
-load(); loadEngine(); loadLedger()
+load(); loadEngine(); loadLedger(); loadOrg(); loadTimeline()
+setInterval(loadOrg, 12000); setInterval(() => { if (!$('tlBefore').value && !$('dlg').open) loadTimeline() }, 20000)
 setInterval(load, 4000); setInterval(loadEngine, 60000); setInterval(loadLedger, 30000)
 </script>
 </body>

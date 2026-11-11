@@ -14,7 +14,8 @@ window.__ModuleLoader__.load({
     const NS = 'company-dashboard'
     const LABEL = { en: 'Company', zh: '公司', ja: 'カンパニー', es: 'Compañía', fr: 'Société', de: 'Firma', ru: 'Компания', pt: 'Empresa' }
     const dictionaries = {}
-    for (const [lang, v] of Object.entries(LABEL)) dictionaries[lang] = { company: v }
+    const BOARD = { en: 'Dashboard', zh: '仪表盘', ja: 'ダッシュボード', es: 'Panel', fr: 'Tableau de bord', de: 'Dashboard', ru: 'Панель', pt: 'Painel' }
+    for (const [lang, v] of Object.entries(LABEL)) dictionaries[lang] = { company: v, board: BOARD[lang] }
 
     const PANEL_ID = 'company-dashboard'
     const src = new URL('company/', document.baseURI).href
@@ -25,6 +26,16 @@ window.__ModuleLoader__.load({
         title: 'Company',
         style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' },
       })
+    }
+    const BOARD_ID = 'company-board'
+    const boardSrc = new URL('company/board.html', document.baseURI).href
+    function BoardPage() {
+      return e('iframe', { src: boardSrc, title: 'Company dashboard', style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' } })
+    }
+    function BoardIcon(props) {
+      const size = props.size ?? 18
+      return e('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+        e('path', { d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' }))
     }
     function CompanyIcon(props) {
       const size = props.size ?? 18
@@ -38,6 +49,10 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.locale.register(NS, dictionaries), 'company-dashboard: dictionaries')
       const t = ctx.locale.bind(NS)
       ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID, locale: NS }, CompanyPage))
+      ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: BOARD_ID, locale: NS }, BoardPage))
+      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        name: 'sidebar.panellist', id: BOARD_ID, order: 16, locale: NS, label: () => t('board'),
+      }, BoardIcon))
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist', id: PANEL_ID, order: 17, locale: NS, label: () => t('company'),
       }, CompanyIcon))

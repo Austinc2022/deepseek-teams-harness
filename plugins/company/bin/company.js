@@ -54,11 +54,12 @@ async function serve() {
       if (!/^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host ?? '')) return send(res, 403, { error: 'forbidden' })
       const cookie = (req.headers.cookie ?? '').split(';').map(s => s.trim()).find(s => s.startsWith('company='))?.slice(8)
       if (url.searchParams.get('token') === token) {
-        res.writeHead(302, { 'set-cookie': `company=${token}; HttpOnly; SameSite=Strict; Path=/`, location: '/' })
+        res.writeHead(302, { 'set-cookie': `company=${token}; HttpOnly; SameSite=Strict; Path=/`, location: url.pathname === '/board.html' ? '/board.html' : '/' })
         return res.end()
       }
       if (cookie !== token) return send(res, 401, 'Open the link with ?token=... printed by "company-cli serve".', 'text/plain; charset=utf-8')
       if (url.pathname === '/' && req.method === 'GET') return send(res, 200, fs.readFileSync(page, 'utf8'), 'text/html; charset=utf-8')
+      if (url.pathname === '/board.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'board.html'), 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname.startsWith('/api/')) {
         if (req.headers['x-company-request'] !== '1') return send(res, 403, { error: 'forbidden' })
         const out = url.pathname.startsWith('/api/super/') ? await handleSuper(sa, req.method, url.pathname, () => readJson(req), url.searchParams) : await handle(co, req.method, url.pathname, () => readJson(req), url.searchParams)

@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS = {
   maxSuperAgents: 8,
   maxSkillsPerDay: 5,
   sources: { company: true, engine: true, clock: true },
+  engine: { autostart: false }, // the host starts and keeps the paper engine's processes running
 }
 
 const LISTS = ['agents', 'triggers', 'tickets', 'jobs', 'evals', 'feed']
@@ -62,6 +63,7 @@ export class Store {
     s.feed = s.feed.slice(-400)
     s.evals = s.evals.slice(-200)
     s.jobs = s.jobs.slice(-200)
+    if (s.changes) s.changes = s.changes.slice(-60)
     s.updatedAt = now()
     const tmp = `${this.file}.${process.pid}.tmp`
     fs.writeFileSync(tmp, JSON.stringify(s, null, 1))

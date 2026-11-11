@@ -149,7 +149,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     for (const d of answered) { const x = s.decisions.find(y => y.id === d.id); if (x) x.seenByCeo = true }
     for (const k of plan.kills ?? []) {
       const i = s.initiatives.find(x => x.id === k.initiativeId)
-      if (i && i.stage !== P.gatedStage && i.stage !== 'killed') { i.stage = 'killed'; i.note = str(k.reason, 600); i.history.push({ ts: now(), cycle: cycleId, stage: 'killed', note: i.note }); summary.killed.push(i.title) }
+      if (i && i.stage !== P.gatedStage && !i.awaitingOwner && i.stage !== 'killed') { i.stage = 'killed'; i.note = str(k.reason, 600); i.history.push({ ts: now(), cycle: cycleId, stage: 'killed', note: i.note }); summary.killed.push(i.title) }
     }
     for (const d of plan.decisions ?? []) co.addDecision(s, { from: s.ceo, cycle: cycleId, question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4), recommendation: str(d.recommendation, 300), why: str(d.why, 1200) })
     const c = s.cycles.find(x => x.id === cycleId)
@@ -221,7 +221,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
   co.update(s => {
     for (const r of reports) {
       const i = s.initiatives.find(x => x.id === r.initiativeId)
-      if (!i || i.stage === P.gatedStage) continue
+      if (!i || i.stage === P.gatedStage || i.awaitingOwner) continue
       if (P.agentStages.includes(r.report.recommendedStage) && r.report.recommendedStage !== 'killed') i.stage = r.report.recommendedStage
       i.confidence = Number.isFinite(r.report.confidence) ? round(Math.min(1, Math.max(0, r.report.confidence)), 3) : i.confidence
       i.confidenceBasis = 'department estimate'
@@ -280,7 +280,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
   co.update(s => {
     for (const u of review?.initiativeUpdates ?? []) {
       const i = s.initiatives.find(x => x.id === u.id)
-      if (!i || i.stage === P.gatedStage || !P.agentStages.includes(u.stage)) continue
+      if (!i || i.stage === P.gatedStage || i.awaitingOwner || !P.agentStages.includes(u.stage)) continue
       i.stage = u.stage
       if (Number.isFinite(u.confidence)) { i.confidence = round(Math.min(1, Math.max(0, u.confidence)), 3); i.confidenceBasis = 'CEO estimate' }
       i.note = str(u.note, 800)

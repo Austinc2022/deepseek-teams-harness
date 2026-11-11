@@ -12,8 +12,22 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/cli-workbench` | A **CLI workbench** page in the web UI: many interactive Claude Code, Codex and OpenCode terminals side by side, each in its own git worktree. |
 | `plugins/super-team` | A **Super team** page: one supervisor agent orchestrates many agent teams, in parallel or in sequence depending on the task, with every Agent chat mode at both levels. |
 | `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. |
-| `plugins/company-dashboard` | A **Company** page: spend against the budget, decisions waiting for you, the initiative pipeline and gate results, execution orders, the organisation, engine health, cycles, hires and the charter. |
+| `plugins/company-dashboard` | Two pages. **Company** (the desk, where you act): decisions waiting for you, goal progress, what is happening now, each super agent's plan, tickets, the initiative pipeline, engine controls, the organisation, a timeline and the charter. **Dashboard** (read-only): every business unit and what it is working on, an activity chart, what happens next, trends and daily operating numbers. |
 | `plugins/super-agent` | An always-on **super agent** (after DeepSeek's dsh-superagent prototype): it reacts to events, opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO. |
+
+### What it looks like
+
+Both screenshots show **invented sample data**, not a real account.
+
+The **Dashboard** page: goal progress, every business unit and what it is working on, when each unit worked, what
+happens next, trends and daily operating numbers.
+
+![Company dashboard with sample data](docs/images/company-dashboard.png)
+
+The **Company** page (the desk): what needs your answer, the goal ladder, what is running now and the last decisions
+with their reasons, and the CEO super agent's plan.
+
+![Company desk with sample data](docs/images/company-desk.png)
 
 DSH's own **Agent Teams** bundle is also enabled in the `web` profile (`spawn_teammate`, a shared task board, and a team UI).
 
@@ -226,6 +240,23 @@ sources ──> trigger ──> super agent decides (tools only) ──┬─> t
 
 State is in `forge/super-agent/` (excluded from git).
 
+
+### Seeing what it does, and letting its work reach the engine
+
+The Company page shows, top to bottom: **Goal and progress** (a ladder of eight steps measured by code where code can
+measure them, paper profit per day against the target, and the effort spent), **Right now** (who is working on what,
+and the last decisions with their reasons), the **Plan** each super agent must keep current (focus, priorities, to-do
+list, blockers, what it needs from you), the **Organisation** (click anyone for its role, who it reports to, what it
+is doing, its recent work and cost) and one **Timeline** you can filter by individual or look back in.
+
+- **Engine runner.** `./super-cli engine on` (or the button on the page) starts the dry-run chain bot, the collector
+  and the paper daemon and restarts them when they stop. It refuses to start the chain bot unless its config is dry-run.
+- **Engine changes.** A worker cannot touch the engine. It delivers a patch; the super agent submits it; code checks
+  that it only touches `quantcore/`, `config/` and `tests/` and loosens no loss limit; the independent auditor reads
+  it; you answer Install or Do not install; then it is tested on a copy, applied with a backup and rolled back when the
+  engine's tests fail.
+- `./super-cli plan` prints the goal ladder, every plan and what is running now.
+
 ## Company: a CEO over departments, with a budget and a gate
 
 The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.
@@ -242,7 +273,7 @@ you (owner)  ->  CEO  ->  department leads  ->  agent teams  ->  agents
 2. **CEO plan.** The CEO picks at most four initiatives, writes a brief and the expected proof for each department, asks for hires, kills what failed, and asks you at most two questions.
 3. **Hiring.** The HR recruiter drafts each agent and the HR reviewer checks it. Code forces the template: read-only tools, no Bash or file edits, DeepSeek model, name starting `quant-`.
 4. **Departments.** Each brief runs in the department's super team. The lead reports evidence (measured, simulated or argued), up to two config proposals, and build specs for work that needs code.
-5. **Gate.** For each proposal, in this order: independent audit, engine safety invariants, then the quant validator on the holdout. A pass writes the proposal to `quant/proposals/approved/`, which the paper daemon runs as a shadow book. That file is the execution order.
+5. **Gate.** For each proposal, in this order: independent audit, engine safety invariants, then the quant validator on the holdout. A proposal that passes is **held** and the CEO asks you: **Start** or **Do not start**. Only Start moves it to `quant/proposals/approved/`, which the paper daemon runs as a shadow book (`charter.execution.ownerApproval`, on by default). Nothing here can reach the main book or real money.
 6. **CEO review.** The CEO updates the initiatives and writes a brief to `forge/company/reports/`.
 
 **What is goal-driven and what is not.** The charter states the goal and the rules; agents get no KPI to chase. Numbers are used only as limits and as proof: the daily budget, the cap per cycle, and the validator's P(better) with a bar that rises with every trial.
@@ -264,6 +295,24 @@ you (owner)  ->  CEO  ->  department leads  ->  agent teams  ->  agents
 ./company-cli serve            # the dashboard on its own port, without the harness
 touch forge/company/PAUSED     # stop new cycles; delete the file to resume
 ```
+
+### Dashboard: status, trend and what happens next
+
+The **Dashboard** sidebar page (`/company/board.html`, linked from the desk) is read-only and answers four questions:
+
+- **Where are we?** Goal progress on the eight-step ladder, paper profit per day against the target, spend today,
+  balance and how many days it lasts at the recent spend, and whether the loop and the engine are running.
+- **Who is doing what?** One card per business unit (each super agent, the company CEO, the auditor, every department,
+  the ticket workers) with its status and current work, and a chart of when each unit worked over the last 6 hours to
+  7 days.
+- **What happens next?** What is in motion, when the next cycle is due, what waits for you, the CEO's priorities and
+  to-do list, and an outlook. The outlook gives no date for the target while paper profit is zero.
+- **How is the operation performing?** Trends for goal progress, paper profit, balance and spend; per-day tickets
+  delivered, worker turns and decisions; delivery rate, time to deliver a ticket, engine uptime, cycle time and cost;
+  ideas by stage; model usage by unit.
+
+The loop writes one line of history to `forge/super-agent/metrics.jsonl` every ten minutes, so the trend lines start
+when you first run it. Every chart has a "Numbers" table under it.
 
 State is in `forge/company/` (excluded from git): `company.json`, `ledger.jsonl`, `reports/`, and `backup/` with the original agent files from before the move to DeepSeek.
 

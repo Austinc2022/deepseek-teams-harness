@@ -34,6 +34,18 @@ async function main() {
   if (cmd === 'say') { const i = rest.indexOf('--to'); const to = i >= 0 ? rest.splice(i, 2)[1] : undefined; return queued(sa.store.command({ type: 'say', text: rest.join(' '), to })) }
   if (cmd === 'answer') return queued(sa.store.command({ type: 'ticket-say', ticket: rest[0], text: rest.slice(1).join(' ') }))
   if (cmd === 'stop' || cmd === 'retry') return queued(sa.store.command({ type: cmd, ticket: rest[0] }))
+  if (cmd === 'engine' && ['on', 'off'].includes(rest[0])) return queued(sa.store.command({ type: 'engine', action: rest[0] === 'on' ? 'start' : 'stop' }))
+  if (cmd === 'plan') {
+    const o = sa.overview(), g = o.progress
+    const out = [`Goal: ${g.mission}`, `Progress: ${g.percent}% (${g.done} of ${g.total} steps)`, ...g.steps.map(x => `  [${x.done ? 'x' : ' '}] ${x.title}: ${x.detail}`), `Paper profit per day: $${g.money.paperProfitPerDayUsd} of $${g.money.targetDailyUsd} (${g.money.basis})`, '']
+    for (const a of o.agents) {
+      out.push(`Plan of ${a.title} (${a.id})${a.plan ? `, updated ${a.plan.updatedAt.slice(0, 16)}` : ': none yet'}`)
+      if (!a.plan) continue
+      out.push(`  Focus: ${a.plan.focus}`, ...a.plan.priorities.map((p, i) => `  ${i + 1}. ${p.text} (${p.why})`), ...a.plan.todo.map(t => `  - [${t.status}] ${t.text} (${t.owner})${t.note ? `: ${t.note}` : ''}`), ...a.plan.blockers.map(b => `  Blocked: ${b}`), ...a.plan.waitingOnOwner.map(b => `  Needs you: ${b}`), '')
+    }
+    out.push('Right now:', ...(o.now.items.length ? o.now.items.map(i => `  ${i.who}: ${i.what}`) : [`  ${o.now.idle}`]))
+    return console.log(out.join('\n'))
+  }
   if (cmd === 'on' || cmd === 'off') return queued(sa.store.command({ type: 'enabled', on: cmd === 'on' }))
   if (cmd === 'run') {
     if (!sa.store.claim()) { console.error(`the loop already runs in pid ${sa.store.holder().pid}`); process.exit(1) }
@@ -44,7 +56,7 @@ async function main() {
     setInterval(() => { const f = sa.store.read().feed; for (const m of f.slice(seen)) console.log(`${m.ts.slice(11, 19)} ${m.from}: ${m.text}`); seen = f.length }, 3000)
     return new Promise(() => {})
   }
-  console.error('usage: super-cli setup|status|say "text" [--to id]|answer <ticket> "text"|stop <ticket>|retry <ticket>|on|off|run')
+  console.error('usage: super-cli setup|status|say "text" [--to id]|answer <ticket> "text"|stop <ticket>|retry <ticket>|on|off|plan|engine on|off|run')
   process.exit(2)
 }
 main().then(() => process.exit(0), e => { console.error(`error: ${e.message}`); process.exit(1) })
