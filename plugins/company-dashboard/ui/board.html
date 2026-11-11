@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company dashboard</title>
+<style>
+/* Layout: a read-only status board. Headline numbers, then the business units and when they worked,
+   then what happens next, then trends, then operating performance. The desk (index.html) is where you act. */
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec; --grid: #e4e9e7;
+  --accent: #8a5a12; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26; --grid: #26302c;
+  --accent: #e0a94a; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26; --grid: #26302c;
+  --accent: #e0a94a; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em }
+h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 }
+h3 { font-size: 14px; margin: 0; font-weight: 650 }
+p { margin: 0 }
+a { color: var(--info) }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) } .small { font-size: 12px }
+header.top { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; justify-content: space-between }
+header.top p { color: var(--muted); max-width: 80ch }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap }
+.kpis { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)) }
+.kpi .big { font: 600 28px/1.1 var(--mono); font-variant-numeric: tabular-nums }
+.bar { height: 10px; background: var(--soft); border-radius: 5px; overflow: hidden }
+.bar > i { display: block; height: 100%; background: var(--accent); min-width: 2px }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted) }
+.pill.good::before { background: var(--good) } .pill.warn::before { background: var(--warn) } .pill.bad::before { background: var(--bad) } .pill.info::before { background: var(--info) }
+.pill.good { border-color: var(--good) } .pill.bad { border-color: var(--bad) } .pill.warn { border-color: var(--warn) } .pill.info { border-color: var(--info) }
+.units { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)) }
+.unit { border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.unit.working { border-color: var(--info) }
+.unit .t { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.unit .w { overflow-wrap: anywhere }
+.grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)) }
+.grid3 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)) }
+.chart { width: 100%; min-width: 0 }
+.chart svg { display: block; width: 100%; overflow: visible }
+.chart text { font: 11px var(--sans); fill: var(--muted) }
+.chart text.v { fill: var(--ink); font-family: var(--mono) }
+.chart .hit { fill: transparent; cursor: default }
+.scroll { overflow-x: auto }
+.empty { color: var(--muted); font-size: 12px }
+details { font-size: 12px } details summary { cursor: pointer; color: var(--muted) }
+table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 6px }
+th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line) } td.r, th.r { text-align: right }
+th { color: var(--muted); font-weight: 600 }
+ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.seg button { font: inherit; font-size: 12px; border: 0; background: var(--panel); color: var(--ink); padding: 3px 10px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--soft); font-weight: 650 }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px }
+.facts { display: grid; gap: 10px 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)) }
+.facts div { display: flex; flex-direction: column }
+.facts .v { font: 600 18px/1.2 var(--mono); font-variant-numeric: tabular-nums }
+#tip { position: fixed; z-index: 5; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: 12px; white-space: pre-line; max-width: 320px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div><h1>Company dashboard</h1><p id="mission">Loading…</p></div>
+    <span class="small muted"><span id="at"></span> · <a href="./">Open the desk to act</a></span>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel">
+    <div class="head"><h2>Business units: what each is working on</h2><span class="small muted" id="unitCount"></span></div>
+    <div class="units" id="units"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>When each unit worked</h2>
+      <span class="seg" role="group" aria-label="Time range"><button data-h="6">6 h</button><button data-h="24" aria-pressed="true">24 h</button><button data-h="72">3 d</button><button data-h="168">7 d</button></span></div>
+    <div class="chart" id="gantt"></div>
+    <details><summary>Numbers</summary><div id="ganttT"></div></details>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>What happens next</h2><span class="small muted" id="nextAt"></span></div>
+    <div class="grid3" id="next"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Goal progress over time</h3><span class="small muted">% of the 8 ladder steps</span></div><div class="chart" id="cProgress"></div><details><summary>Numbers</summary><div id="tProgress"></div></details></section>
+    <section class="panel"><div class="head"><h3>Paper profit over time</h3><span class="small muted">all paper books, USD against starting equity</span></div><div class="chart" id="cPnl"></div><details><summary>Numbers</summary><div id="tPnl"></div></details></section>
+    <section class="panel"><div class="head"><h3>Spend per day</h3><span class="small muted">model spend, USD</span></div><div class="chart" id="cSpend"></div><details><summary>Numbers</summary><div id="tDays"></div></details></section>
+    <section class="panel"><div class="head"><h3>DeepSeek balance</h3><span class="small muted">USD; the real limit on spend</span></div><div class="chart" id="cBalance"></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="head"><h2>Daily operation</h2><span class="small muted">per day, last 30 days</span></div>
+    <div class="grid3">
+      <div><h3>Tickets delivered</h3><div class="chart" id="cDelivered"></div></div>
+      <div><h3>Worker turns</h3><div class="chart" id="cTurns"></div></div>
+      <div><h3>Decisions by super agents</h3><div class="chart" id="cDecisions"></div></div>
+    </div>
+    <div class="facts" id="ops"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Ideas by stage</h3><span class="small muted">only the gate moves an idea to paper</span></div><div class="chart" id="cFunnel"></div></section>
+    <section class="panel"><div class="head"><h3>Model usage by business unit</h3><span class="small muted">share of all recorded usage</span></div><div class="chart" id="cCost"></div></section>
+  </div>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const usd = (n, d = 2) => n == null || Number.isNaN(Number(n)) ? '–' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+const when = t => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
+const ago = t => { if (!t) return 'never'; const m = Math.max(0, Math.round((Date.now() - new Date(t)) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago' }
+const until = t => { const m = Math.round((new Date(t) - Date.now()) / 60000); return m <= 0 ? 'due now' : m < 60 ? 'in ' + m + ' min' : 'in ' + (m / 60).toFixed(1) + ' h' }
+let B = null, hours = 24
+
+async function api(path) {
+  const r = await fetch('api/' + path, { headers: { 'x-company-request': '1' } })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || ('request failed: ' + r.status))
+  return j
+}
+
+// ---------------- chart helpers (inline SVG; text colour comes from tokens, marks from the series tokens)
+const W = el => Math.max(260, Math.floor(el.clientWidth || 600))
+const nice = max => { if (max <= 0) return 1; const p = 10 ** Math.floor(Math.log10(max)); const f = max / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p }
+const fmtN = v => Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 2 : 1)
+const table = (cols, rows) => rows.length ? `<div class="scroll"><table><tr>${cols.map((c, i) => `<th class="${i ? 'r' : ''}">${esc(c)}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${i ? 'r num' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>` : '<p class="empty">No data yet.</p>'
+
+function bars(el, rows, { color = 'var(--s1)', fmt = fmtN, h = 150 } = {}) {
+  if (!rows.length || rows.every(r => !r.value)) { el.innerHTML = '<p class="empty">Nothing recorded yet.</p>'; return }
+  const w = W(el), L = 34, R = 8, T = 14, Bm = 20, pw = w - L - R, ph = h - T - Bm
+  const max = nice(Math.max(...rows.map(r => r.value)))
+  const bw = Math.min(28, Math.max(3, pw / rows.length - 2)), step = pw / rows.length
+  const y = v => T + ph - ph * v / max
+  const every = Math.ceil(rows.length / Math.max(2, Math.floor(pw / 46)))
+  const top = rows.reduce((a, r) => (r.value > a.value ? r : a), rows[0])
+  el.innerHTML = `<svg height="${h}" viewBox="0 0 ${w} ${h}" role="img">
+    ${[0, 0.5, 1].map(f => `<line x1="${L}" x2="${w - R}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 6}" y="${y(max * f) + 4}" text-anchor="end">${esc(fmt(max * f))}</text>`).join('')}
+    ${rows.map((r, i) => { const x = L + step * i + (step - bw) / 2, yy = y(r.value), bh = T + ph - yy, rad = Math.min(4, bw / 2, bh)
+      return `${r.value > 0 ? `<path d="M${x} ${T + ph}V${yy + rad}q0 ${-rad} ${rad} ${-rad}h${bw - 2 * rad}q${rad} 0 ${rad} ${rad}V${T + ph}z" fill="${color}"/>` : ''}
+        ${r === top && r.value > 0 ? `<text class="v" x="${x + bw / 2}" y="${yy - 4}" text-anchor="middle">${esc(fmt(r.value))}</text>` : ''}
+        ${i % every === 0 ? `<text x="${x + bw / 2}" y="${h - 5}" text-anchor="middle">${esc(r.label)}</text>` : ''}
+        <rect class="hit" x="${L + step * i}" y="${T}" width="${step}" height="${ph}" data-tip="${esc(r.tip || (r.label + ': ' + fmt(r.value)))}"/>` }).join('')}
+    <line x1="${L}" x2="${w - R}" y1="${T + ph}" y2="${T + ph}" stroke="var(--line)" stroke-width="1"/></svg>`
+}
+
+function line(el, pts, { color = 'var(--s1)', fmt = fmtN, h = 170, step = false, zero = true, max: fixedMax } = {}) {
+  if (pts.length < 2) { el.innerHTML = `<p class="empty">${pts.length ? `One reading so far (${esc(fmt(pts[0].v))}). ` : ''}The history is recorded every ten minutes from now on; the line fills in as the company runs.</p>`; return }
+  const w = W(el), L = 44, R = 54, T = 12, Bm = 20, pw = w - L - R, ph = h - T - Bm
+  const t0 = new Date(pts[0].t).getTime(), t1 = new Date(pts.at(-1).t).getTime()
+  const vs = pts.map(p => p.v)
+  let lo = zero ? Math.min(0, ...vs) : Math.min(...vs), hi = fixedMax ?? Math.max(...vs)
+  if (hi === lo) { hi = lo + (Math.abs(lo) || 1) }
+  if (!fixedMax) { const pad = (hi - lo) * 0.1; hi += pad; if (!zero || lo < 0) lo -= pad }
+  const x = t => L + pw * (new Date(t).getTime() - t0) / Math.max(1, t1 - t0), y = v => T + ph - ph * (v - lo) / (hi - lo)
+  let d = ''
+  pts.forEach((p, i) => { const px = x(p.t), py = y(p.v); d += i === 0 ? `M${px} ${py}` : step ? `H${px}V${py}` : `L${px} ${py}` })
+  const ticks = [lo, (lo + hi) / 2, hi]
+  const span = t1 - t0, lab = t => new Date(t).toLocaleString([], span > 2 * 86400000 ? { month: 'short', day: 'numeric' } : { hour: '2-digit', minute: '2-digit' })
+  const last = pts.at(-1)
+  const cw = pw / pts.length
+  el.innerHTML = `<svg height="${h}" viewBox="0 0 ${w} ${h}" role="img">
+    ${ticks.map(v => `<line x1="${L}" x2="${w - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${esc(fmt(v))}</text>`).join('')}
+    ${lo < 0 && hi > 0 ? `<line x1="${L}" x2="${w - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)" stroke-width="1"/>` : ''}
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(last.t)}" cy="${y(last.v)}" r="4" fill="${color}" stroke="var(--panel)" stroke-width="2"/>
+    <text class="v" x="${x(last.t) + 8}" y="${y(last.v) + 4}">${esc(fmt(last.v))}</text>
+    ${[pts[0].t, pts[Math.floor(pts.length / 2)].t, last.t].map((t, i) => `<text x="${x(t)}" y="${h - 5}" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}">${esc(lab(t))}</text>`).join('')}
+    ${pts.map(p => `<rect class="hit" x="${x(p.t) - cw / 2}" y="${T}" width="${Math.max(2, cw)}" height="${ph}" data-tip="${esc(when(p.t) + '\n' + fmt(p.v))}"/>`).join('')}</svg>`
+}
+
+function hbars(el, rows, { color = 'var(--s1)', fmt = fmtN } = {}) {
+  if (!rows.length || rows.every(r => !r.value)) { el.innerHTML = '<p class="empty">Nothing recorded yet.</p>'; return }
+  const w = W(el), L = Math.min(170, Math.max(90, w * 0.34)), R = 56, rh = 24, h = rows.length * rh + 6, pw = w - L - R
+  const max = Math.max(...rows.map(r => r.value)) || 1
+  el.innerHTML = `<svg height="${h}" viewBox="0 0 ${w} ${h}" role="img">${rows.map((r, i) => { const bw = Math.max(r.value > 0 ? 2 : 0, pw * r.value / max), yy = 4 + i * rh, rad = Math.min(4, bw)
+    return `<text x="${L - 8}" y="${yy + 13}" text-anchor="end">${esc(r.label.length > 24 ? r.label.slice(0, 23) + '…' : r.label)}</text>
+      ${bw > 0 ? `<path d="M${L} ${yy}h${bw - rad}q${rad} 0 ${rad} ${rad}v${16 - 2 * rad}q0 ${rad} ${-rad} ${rad}H${L}z" fill="${r.color || color}"/>` : ''}
+      <text class="v" x="${L + bw + 6}" y="${yy + 13}">${esc(fmt(r.value))}</text>
+      <rect class="hit" x="0" y="${yy - 3}" width="${w}" height="${rh}" data-tip="${esc(r.tip || (r.label + ': ' + fmt(r.value)))}"/>` }).join('')}
+    <line x1="${L}" x2="${L}" y1="0" y2="${h}" stroke="var(--line)" stroke-width="1"/></svg>`
+}
+
+function gantt(el, A) {
+  const rows = A.rows, w = W(el), L = Math.min(170, Math.max(96, w * 0.26)), R = 64, T = 18, rh = 26, h = T + rows.length * rh + 8, pw = w - L - R
+  const t0 = new Date(A.from).getTime(), t1 = new Date(A.to).getTime(), x = t => L + pw * (t - t0) / (t1 - t0)
+  const n = Math.max(2, Math.min(8, Math.floor(pw / 90))), spanH = (t1 - t0) / 3600000
+  const lab = t => new Date(t).toLocaleString([], spanH > 48 ? { month: 'short', day: 'numeric' } : { hour: '2-digit', minute: '2-digit' })
+  el.innerHTML = `<svg height="${h}" viewBox="0 0 ${w} ${h}" role="img">
+    ${Array.from({ length: n + 1 }, (_, i) => { const t = t0 + (t1 - t0) * i / n; return `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${h - 6}" stroke="var(--grid)" stroke-width="1"/><text x="${x(t)}" y="11" text-anchor="${i === 0 ? 'start' : i === n ? 'end' : 'middle'}">${i === n ? 'now' : esc(lab(t))}</text>` }).join('')}
+    ${rows.map((r, i) => { const yy = T + i * rh + 5
+      return `<text x="${L - 8}" y="${yy + 12}" text-anchor="end">${esc(r.name.length > 24 ? r.name.slice(0, 23) + '…' : r.name)}</text>
+        <rect x="${L}" y="${yy + 7}" width="${pw}" height="2" fill="var(--soft)"/>
+        ${r.spans.map(s => { const sx = x(s.s), sw = Math.max(3, x(s.e) - sx); return `<rect x="${sx}" y="${yy}" width="${sw}" height="16" rx="${Math.min(4, sw / 2)}" fill="var(--s1)" stroke="var(--panel)" stroke-width="1"/><rect class="hit" x="${sx - 2}" y="${yy - 4}" width="${sw + 4}" height="24" data-tip="${esc(r.name + '\n' + when(s.s) + ' to ' + when(s.e) + ' (' + Math.max(1, Math.round((s.e - s.s) / 60000)) + ' min)\n' + s.labels.join(', '))}"/>` }).join('')}
+        <text class="v" x="${w - R + 8}" y="${yy + 12}">${r.busyMin ? r.busyMin + ' min' : '–'}</text>` }).join('')}</svg>`
+}
+
+// ---------------- sections
+const ST = { working: ['info', 'Working now'], waiting: ['', 'Waiting for an event'], queued: ['info', 'Work queued'], blocked: ['bad', 'Blocked'], idle: ['', 'Idle'] }
+function render() {
+  const g = B.goal, m = B.money, h = B.health
+  $('mission').textContent = g.mission
+  $('at').textContent = 'updated ' + when(B.at)
+  const ok = h.loop && !h.hold && h.engineOk
+  $('kpis').innerHTML = `
+    <div class="panel kpi"><h2>Goal progress</h2><div class="big">${g.percent}%</div><div class="bar"><i style="width:${g.percent}%"></i></div><div class="small muted">${g.done} of ${g.total} steps${g.next ? ' · next: ' + esc(g.next.title) : ''}</div></div>
+    <div class="panel kpi"><h2>Paper profit per day</h2><div class="big">${usd(g.money.paperProfitPerDayUsd)}</div><div class="small muted">target ${usd(g.money.targetDailyUsd, 0)} · ${(g.money.shareOfTarget * 100).toFixed(4)}% reached · ${esc(g.money.basis)}</div></div>
+    <div class="panel kpi"><h2>Spend and runway</h2><div class="big">${usd(m.spentTodayUsd)} <span class="small muted">today</span></div><div class="small muted">balance ${usd(m.balanceUsd)} · recent ${usd(m.burnPerDayUsd)} a day · ${m.runwayDays == null ? 'no runway estimate yet' : 'about ' + m.runwayDays + ' days left above the reserve'}</div></div>
+    <div class="panel kpi"><h2>Operation</h2><div><span class="pill ${ok ? 'good' : 'bad'}">${ok ? 'Running' : !h.loop ? 'Loop stopped' : h.hold ? 'On hold' : 'Engine down'}</span></div>
+      <div class="small muted">${h.hold ? esc(h.hold) + '. ' : ''}Engine ${h.engineOk ? 'and data running' : 'not running'}${h.engineKept ? ' (kept running)' : ''} · autopilot ${h.autopilot ? 'on' : 'off'} · proactive ${h.proactive ? 'on' : 'off'}${h.engineNote ? ' · ' + esc(h.engineNote) : ''}</div></div>`
+
+  const working = B.units.filter(u => u.status === 'working').length
+  $('unitCount').textContent = `${B.units.length} units · ${working} working now`
+  $('units').innerHTML = B.units.map(u => { const s = ST[u.status] || ST.idle
+    return `<div class="unit ${u.status === 'working' ? 'working' : ''}"><div class="t"><strong>${esc(u.name)}</strong><span class="pill ${s[0]}">${s[1]}</span></div>
+      <div class="small muted">${esc(u.type)}${u.lead ? ' · ' + esc(u.lead) : ''}${u.teams ? ' · ' + u.teams.length + ' teams' : ''}</div>
+      <div class="w">${esc(u.work || '')}</div>
+      ${u.doing ? `<div class="small"><strong>Now:</strong> ${esc(u.doing)}</div>` : ''}
+      ${u.detail ? `<div class="small muted">${esc(u.detail)}</div>` : ''}
+      <div class="small muted num">${u.turnsToday} turns today · last active ${ago(u.lastActive)}</div></div>` }).join('')
+
+  gantt($('gantt'), B.activity)
+  $('ganttT').innerHTML = table(['Unit', 'Minutes worked', 'Work periods'], B.activity.rows.map(r => [r.name, r.busyMin, r.spans.length]))
+
+  const n = B.next, p = n.plan
+  $('nextAt').textContent = n.nextCycle ? 'next company cycle ' + until(n.nextCycle) + ' (' + when(n.nextCycle) + ')' : 'autopilot is off: no cycle is scheduled'
+  $('next').innerHTML = `
+    <div><h3>In motion</h3>${n.running.length ? `<ul>${n.running.map(r => `<li><strong>${esc(r.who)}</strong>: ${esc(r.what)} <span class="small muted">(${ago(r.since)})</span></li>`).join('')}</ul>` : `<p>${esc(n.idle || 'Nothing is running.')}</p>`}
+      <p class="small muted" style="margin-top:6px">${n.queuedEvents} event(s) and ${n.queuedTickets} ticket(s) queued.</p>
+      <h3 style="margin-top:10px">Needs you</h3>${n.needsYou.length ? `<ul>${n.needsYou.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : '<p class="muted">Nothing is waiting for you.</p>'}</div>
+    <div><h3>The CEO's priorities</h3>${p ? `<p class="small muted">updated ${ago(p.updatedAt)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong><br><span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol>
+      ${p.blockers.length ? `<h3 style="margin-top:10px">Blocked by</h3><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}` : '<p class="muted">The CEO has not written a plan yet.</p>'}</div>
+    <div><h3>Next on the to-do list</h3>${p && p.todo.length ? `<ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="muted">Nothing listed.</p>'}
+      <h3 style="margin-top:10px">Outlook</h3><ul>${n.forecast.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
+
+  const H = B.history
+  line($('cProgress'), H.map(x => ({ t: x.ts, v: x.percent })), { step: true, fmt: v => Math.round(v) + '%', max: 100 })
+  $('tProgress').innerHTML = table(['When', 'Progress'], H.slice(-12).reverse().map(x => [when(x.ts), x.percent + '%']))
+  line($('cPnl'), H.map(x => ({ t: x.ts, v: x.booksPnlUsd })), { color: 'var(--s3)', fmt: v => usd(v) })
+  $('tPnl').innerHTML = table(['When', 'Paper profit'], H.slice(-12).reverse().map(x => [when(x.ts), usd(x.booksPnlUsd)]))
+  line($('cBalance'), H.filter(x => x.balanceUsd != null).map(x => ({ t: x.ts, v: x.balanceUsd })), { color: 'var(--s4)', fmt: v => usd(v, 0) })
+  const D = B.days, dl = d => d.date.slice(5)
+  bars($('cSpend'), D.map(d => ({ label: dl(d), value: d.spendUsd, tip: `${d.date}\n${usd(d.spendUsd)} · ${d.cycles} cycles` })), { color: 'var(--s2)', fmt: v => '$' + fmtN(v) })
+  $('tDays').innerHTML = table(['Day', 'Spend', 'Cycles', 'Tickets opened', 'Delivered', 'Worker turns', 'Decisions', 'New ideas', 'Killed'], D.slice().reverse().map(d => [d.date, usd(d.spendUsd), d.cycles, d.ticketsOpened, d.ticketsDelivered, d.workerTurns, d.decisions, d.ideasNew, d.ideasKilled]))
+  bars($('cDelivered'), D.map(d => ({ label: dl(d), value: d.ticketsDelivered, tip: `${d.date}\n${d.ticketsDelivered} delivered of ${d.ticketsOpened} opened` })), { color: 'var(--s3)', h: 130 })
+  bars($('cTurns'), D.map(d => ({ label: dl(d), value: d.workerTurns })), { h: 130 })
+  bars($('cDecisions'), D.map(d => ({ label: dl(d), value: d.decisions })), { h: 130 })
+
+  const o = B.ops, pc = v => v == null ? '–' : Math.round(v * 100) + '%', mn = v => v == null ? '–' : v < 1 ? Math.max(1, Math.round(v * 60)) + ' s' : v < 90 ? Math.round(v) + ' min' : (v / 60).toFixed(1) + ' h'
+  $('ops').innerHTML = [
+    ['Tickets delivered', `${o.ticketsDelivered} of ${o.ticketsEnded}`, `${pc(o.deliveredRate)} of finished tickets · ${o.ticketsOpen} open`],
+    ['Time to deliver a ticket', mn(o.medianTicketMin), 'median, open to delivered'],
+    ['Worker turns per ticket', o.avgTurns ?? '–', 'average for delivered tickets'],
+    ['Wait before a decision', mn(o.decisionWaitMedianMin), 'median, event to super agent'],
+    ['Engine up, last 24 h', pc(o.engineUptime24h), o.engineUptime24h == null ? 'measured from now on' : 'share of ten-minute checks'],
+    ['Company cycle', mn(o.cycleAvgMin), `average · ${usd(o.cycleAvgUsd)} each`],
+    ['Verification', `${o.gatePassed} passed`, `${o.gateRuns} gate runs`],
+  ].map(([k, v, s]) => `<div><span class="small muted">${esc(k)}</span><span class="v">${esc(v)}</span><span class="small muted">${esc(s)}</span></div>`).join('')
+
+  const SL = { idea: 'Idea', research: 'Research', model: 'Model', rehearsal: 'Rehearsal', gate: 'At the gate', paper: 'Trading on paper', killed: 'Killed' }
+  hbars($('cFunnel'), B.funnel.map(f => ({ label: SL[f.stage] || f.stage, value: f.n, color: f.stage === 'killed' ? 'var(--muted)' : f.stage === 'paper' ? 'var(--s3)' : 'var(--s1)' })))
+  const tot = B.costByUnit.reduce((a, u) => a + u.usd, 0) || 1
+  hbars($('cCost'), B.costByUnit.filter(u => u.usd > 0 || u.turns > 0).map(u => ({ label: u.name, value: Math.round(1000 * u.usd / tot) / 10, tip: `${u.name}\n${(100 * u.usd / tot).toFixed(1)}% of usage over ${u.turns} turns` })), { color: 'var(--s2)', fmt: v => v + '%' })
+}
+
+async function load() {
+  try { B = await api('super/board?hours=' + hours); render() } catch (e) { $('mission').textContent = 'Cannot reach the company service: ' + e.message }
+}
+document.querySelector('.seg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-h]'); if (!b) return
+  hours = Number(b.dataset.h)
+  for (const x of document.querySelectorAll('.seg button')) x.setAttribute('aria-pressed', x === b ? 'true' : 'false')
+  load()
+})
+const tip = $('tip')
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest ? e.target.closest('[data-tip]') : null
+  if (!t) { tip.hidden = true; return }
+  tip.textContent = t.dataset.tip; tip.hidden = false
+  const r = tip.getBoundingClientRect()
+  tip.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, e.clientX + 14)) + 'px'
+  tip.style.top = Math.max(8, Math.min(window.innerHeight - r.height - 8, e.clientY + 14)) + 'px'
+})
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (B) render() }, 150) })
+load(); setInterval(load, 15000)
+</script>
+</body>
+</html>

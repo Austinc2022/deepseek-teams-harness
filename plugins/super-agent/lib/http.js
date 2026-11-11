@@ -4,6 +4,7 @@
  * runs the loop, so two servers never write the state at once.
  */
 import { orgView, who, timeline, people } from './views.js'
+import { board } from './board.js'
 
 export async function handleSuper(sa, method, p, body, query) {
   let r
@@ -13,6 +14,7 @@ export async function handleSuper(sa, method, p, body, query) {
   if (method === 'POST' && p === '/api/super/enabled') return sa.store.command({ type: 'enabled', on: (await body()).on === true })
   if (method === 'PUT' && p === '/api/super/settings') return sa.store.command({ type: 'settings', patch: await body() })
   if (method === 'POST' && p === '/api/super/engine') return sa.store.command({ type: 'engine', action: (await body()).on === true ? 'start' : 'stop' })
+  if (method === 'GET' && p === '/api/super/board') return board(sa, { hours: query.get('hours') || 24 })
   if (method === 'GET' && p === '/api/super/org') return orgView(sa)
   if (method === 'GET' && p === '/api/super/people') return people(sa)
   if (method === 'GET' && p === '/api/super/who') return who(sa, query.get('type') ?? '', query.get('id') ?? '')

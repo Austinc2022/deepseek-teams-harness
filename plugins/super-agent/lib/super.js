@@ -25,6 +25,7 @@ import { Store, now, today, newId, str, clip, slug } from './store.js'
 import { Org, seedSuper, WORKER, CRYPTO } from './org.js'
 import { EngineOps, Changes } from './engineops.js'
 import { progress, rightNow } from './views.js'
+import { recordMetrics } from './board.js'
 
 const S = { type: 'string' }
 const obj = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: false })
@@ -145,6 +146,7 @@ export class SuperAgent {
       await this.ops.ensure().catch(e => this.log(`engine: ${e.message}`))
       this.changes.poll()
       this.#seed(s)
+      if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
