@@ -91,16 +91,23 @@ ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .tree li:last-child::after { border-left: 0 }
 .tree > ul > li::before, .tree > ul > li::after { display: none }
 .tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 18px; border-left: 1px solid var(--muted) }
+.tree.compact ul.leaf { flex-direction: column; align-items: center; padding-top: 8px }
+.tree.compact ul.leaf > li { padding: 10px 0 0 }
+.tree.compact ul.leaf > li::before { content: ""; display: block; top: 0; left: 50%; right: auto; width: 0; height: 10px; border: 0; border-left: 1px solid var(--muted) }
+.tree.compact ul.leaf > li::after { display: none }
+.tree.compact li { padding-left: 3px; padding-right: 3px }
+.tree.compact .node { width: 150px }
+.treewrap.overflow::after { content: "Wider than the window: scroll sideways to see every box."; display: block; font-size: 12px; color: var(--muted); padding-top: 6px; position: sticky; left: 0 }
 .node { font: inherit; color: var(--ink); text-align: left; width: 162px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; position: relative }
 .node:hover { border-color: var(--muted) } .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .node.working { border-color: var(--info); box-shadow: 0 0 0 1px var(--info) }
 .node.blocked { border-color: var(--bad) }
 .node.you { cursor: default; background: var(--soft); width: auto; align-items: center; padding: 6px 14px }
-.node .nt { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between; gap: 6px }
+.node .nt { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px }
 .node .nm { font-weight: 650; overflow-wrap: anywhere; line-height: 1.25 }
 .node .wk { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em }
 .node .kp { font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums }
-.node svg { display: block }
+.node svg { display: block; max-width: 100% }
 #view { display: flex; flex-direction: column; gap: 16px }
 .steps { display: grid; grid-template-columns: repeat(8, minmax(96px, 1fr)); gap: 0; overflow-x: auto; padding-bottom: 4px }
 .step { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: relative; padding: 0 6px; font-size: 12px }
@@ -272,8 +279,20 @@ function nodeCard(n) {
 }
 function treeHTML(keys, depth, stopTypes = []) {
   const kids = k => B.tree.filter(n => n.parent === k)
-  const li = (n, d) => { const ch = d > 0 && !stopTypes.includes(n.type) ? kids(n.key) : []; return `<li>${nodeCard(n)}${ch.length ? `<ul>${ch.map(c => li(c, d - 1)).join('')}</ul>` : ''}</li>` }
+  const open = (n, d) => d > 0 && !stopTypes.includes(n.type) ? kids(n.key) : []
+  const li = (n, d) => { const ch = open(n, d), leaf = ch.length > 1 && ch.every(c => !open(c, d - 1).length)
+    return `<li>${nodeCard(n)}${ch.length ? `<ul${leaf ? ' class="leaf"' : ''}>${ch.map(c => li(c, d - 1)).join('')}</ul>` : ''}</li>` }
   return keys.map(k => li(B.tree.find(n => n.key === k), depth)).join('')
+}
+/** A wide org chart hides children behind a sideways scroll. When it does not fit, stack each group of end boxes in a
+ * column under its parent; if it still does not fit, say that it scrolls. */
+function fitTrees() {
+  for (const w of document.querySelectorAll('.treewrap')) {
+    const t = w.querySelector('.tree'), fits = () => t.scrollWidth <= w.clientWidth + 1
+    t.classList.remove('compact'); w.classList.remove('overflow')
+    if (!fits()) t.classList.add('compact')
+    if (!fits()) w.classList.add('overflow')
+  }
 }
 const treeLegend = `<div class="legend"><span>Each box: status, current work, activity over the last 24 hours, then turns today · minutes worked in 24 h · share of all model usage.</span><span>Click a box to go inside.</span></div>`
 
@@ -472,6 +491,7 @@ function render() {
   lastHTML = key
   const y = window.scrollY
   $('view').innerHTML = html
+  fitTrees()
   isOverview ? overviewCharts() : entityCharts()
   window.scrollTo(0, y)
 }
