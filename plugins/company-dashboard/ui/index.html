@@ -97,6 +97,17 @@ dialog .db { padding: 16px; overflow: auto }
 .md code { font-family: var(--mono); background: var(--soft); padding: 0 3px; border-radius: 3px }
 .md table { margin-bottom: 8px }
 #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; max-width: calc(100vw - 32px) }
+.sa-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); align-items: start }
+.sa-say { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap }
+.sa-say textarea { min-height: 44px; flex: 1 1 320px }
+.sa-say select { width: auto }
+.feed { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow: auto }
+.msg { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; overflow-wrap: anywhere; white-space: pre-wrap }
+.msg.owner { border-left-color: var(--info) } .msg.q { border-left-color: var(--warn) } .msg.gate { border-left-color: var(--good) }
+.msg .by { font-size: 12px; color: var(--muted); white-space: normal }
+.tk { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow: auto }
+.tk .card { cursor: pointer }
+.tree { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
 @media (max-width: 520px) { .stat .big { font-size: 20px } }
 </style>
 </head>
@@ -117,6 +128,21 @@ dialog .db { padding: 16px; overflow: auto }
   </header>
 
   <section class="panel need" id="need"><div class="head"><h2>Needs you</h2></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+
+  <section class="panel live" id="super">
+    <div class="head"><h2>Super agent</h2><span class="controls"><span class="pill" id="saState">…</span><button id="saToggle">Proactive mode</button></span></div>
+    <div id="saBody"><p class="empty">Loading…</p></div>
+    <form class="sa-say" id="saSay" hidden>
+      <textarea id="saText" placeholder="Tell the super agent what you want. It decides whether to answer, ask a team, or open a ticket for a worker."></textarea>
+      <select id="saTo" aria-label="Which super agent"></select>
+      <button class="primary" type="submit">Send</button>
+    </form>
+    <div class="sa-grid" id="saGrid" hidden>
+      <div><h2 style="margin-bottom:8px">Conversation</h2><div class="feed" id="saFeed"></div></div>
+      <div><h2 style="margin-bottom:8px">Tickets</h2><div class="tk" id="saTickets"></div></div>
+    </div>
+    <div class="tree" id="saTree" hidden></div>
+  </section>
 
   <section class="stats" id="stats"></section>
 
@@ -174,7 +200,7 @@ const usd = (n, d = 2) => n == null || Number.isNaN(Number(n)) ? '–' : '$' + N
 const pct = n => n == null ? '–' : (Number(n) * 100).toFixed(1) + '%'
 const when = t => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
 const mins = (a, b) => a && b ? Math.max(1, Math.round((new Date(b) - new Date(a)) / 60000)) + ' min' : '–'
-let O = null, E = null, charterDirty = false
+let O = null, E = null, SA = null, charterDirty = false
 
 async function api(path, method = 'GET', body) {
   const r = await fetch('api/' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
@@ -217,7 +243,13 @@ function renderTop() {
   $('decisions').innerHTML = open.length ? open.map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
     <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. ${esc(d.why)}</div>
     <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div>
-    <div class="small muted">Recommended: ${esc(d.recommendation)}</div></div>`).join('') : '<p class="empty">Nothing is waiting for you.</p>'
+    <div class="small muted">Recommended: ${esc(d.recommendation)}</div></div>`).join('') : ''
+  const waits = SA ? SA.needsYou : []
+  $('decisions').innerHTML += waits.map(t => `<div class="decision"><div class="q">${esc(t.attention ? t.attention.question : t.stage === 'person:failed' ? 'This ticket failed.' : 'This ticket is blocked.')}</div>
+    <div class="small muted">Ticket: ${esc(t.title)} · ${esc(t.stage.replace('person:', ''))}. ${esc((t.summary || '').slice(0, 280))}</div>
+    <div class="opts"><button class="primary" data-ticket="${t.id}">Open and answer</button><button data-tk-act="retry" data-tk="${t.id}">Retry</button><button class="danger" data-tk-act="stop" data-tk="${t.id}">Stop</button></div></div>`).join('')
+  if (!open.length && !waits.length) $('decisions').innerHTML = '<p class="empty">Nothing is waiting for you.</p>'
+  $('need').className = 'panel need' + (open.length || waits.length ? '' : ' none')
 
   const spentShare = b.dailyUsd ? Math.min(100, 100 * b.spentTodayUsd / b.dailyUsd) : 0
   const paper = O.initiatives.filter(i => i.stage === 'paper').length, active = O.initiatives.filter(i => !['paper', 'killed'].includes(i.stage)).length
@@ -293,6 +325,64 @@ function renderEngine() {
     <pre class="log">${esc(E.live.daemon || 'no daemon log')}</pre>`
 }
 
+// ---------------- super agent
+const STAGE_PILL = s => s === 'working' ? 'info' : s.startsWith('person') ? 'warn' : s === 'ended:completed' ? 'good' : s.startsWith('ended') || s === 'stopped' ? '' : s === 'queued' ? 'info' : ''
+const STAGE_TEXT = { working: 'Working', queued: 'Queued', idle: 'Waiting for an event', 'person:answer': 'Awaiting your answer', 'person:blocked': 'Blocked', 'person:failed': 'Failed', 'ended:completed': 'Delivered', 'ended:dropped': 'Nothing to do', stopped: 'Stopped' }
+function renderSuper() {
+  if (!SA) return
+  const body = $('saBody')
+  if (!SA.setUp) {
+    body.innerHTML = '<p>The super agent is an always-on CEO that reacts to your messages and to events, opens tickets for workers with a sandboxed shell, and talks to agents, teams and super teams.</p><div class="opts"><button class="primary" id="saSetup">Set up the super agent</button></div>'
+    $('saSetup').onclick = () => act(() => api('super/setup', 'POST', {}), 'Super agent set up')
+    $('saState').textContent = 'not set up'; $('saToggle').hidden = true
+    return
+  }
+  const st = $('saState')
+  st.className = 'pill ' + (!SA.loop ? 'bad' : SA.hold ? 'warn' : SA.enabled ? 'good' : 'info')
+  st.textContent = !SA.loop ? 'Loop not running' : SA.hold ? 'On hold' : SA.enabled ? 'Proactive: reacts to events' : 'Acts on your messages only'
+  $('saToggle').hidden = false; $('saToggle').textContent = SA.enabled ? 'Turn proactive mode off' : 'Turn proactive mode on'
+  const d = SA.today
+  body.innerHTML = `<p class="small muted">${!SA.loop ? 'No process is running the loop. Start ./dsh web, ./company-cli serve or ./super-cli run; your messages are queued until then. ' : ''}${SA.hold ? esc('On hold: ' + SA.hold + '. ') : ''}Today: ${d.tickets} of ${SA.settings.maxTicketsPerDay} tickets · ${d.evals} decisions · ${d.agents} new agents · ${d.skills} new skills · ${d.gates} gate runs · up to ${SA.settings.maxWorkers} workers at once</p>`
+  $('saSay').hidden = false; $('saGrid').hidden = false; $('saTree').hidden = false
+  const to = $('saTo'), cur = to.value
+  to.innerHTML = SA.agents.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join(''); if (cur) to.value = cur
+  to.hidden = SA.agents.length < 2
+  $('saFeed').innerHTML = SA.feed.length ? SA.feed.map(m => `<div class="msg ${m.from === 'owner' ? 'owner' : ''} ${m.question ? 'q' : ''} ${m.kind === 'gate' ? 'gate' : ''}"><div class="by">${esc(m.from === 'owner' ? 'You' : m.from)} · ${when(m.ts)}${m.ticket ? ` · <button class="link" data-ticket="${esc(m.ticket)}">ticket</button>` : ''}</div>${esc(m.text)}</div>`).join('') : '<p class="empty">Nothing yet. Write to the super agent above.</p>'
+  $('saTickets').innerHTML = SA.tickets.length ? SA.tickets.map(t => `<button class="card" data-ticket="${t.id}"><span class="ttl">${esc(t.title)}</span>
+    <span><span class="pill ${STAGE_PILL(t.stage)}">${esc(STAGE_TEXT[t.stage] || t.stage)}</span> <span class="small muted">${t.turns} turn${t.turns === 1 ? '' : 's'} · ${esc(t.owner)} · ${when(t.createdAt)}${t.proposal ? ` · gate ${esc(t.proposal.status)}` : ''}</span></span>
+    ${t.stage === 'working' && t.activity ? `<span class="small muted num">${t.activity.tools} tools · ${esc((t.activity.last || '').slice(0, 110))}</span>` : t.summary ? `<span class="small muted">${esc(t.summary.slice(0, 220))}</span>` : ''}</button>`).join('') : '<p class="empty">No ticket yet. The super agent opens one when work needs code, data or a simulation.</p>'
+  const kids = id => SA.agents.filter(a => a.parent === id)
+  const node = a => `<span class="chip" title="${esc(a.mission)}">${esc(a.title)}${a.busy ? ' · thinking' : ''}${a.pending ? ` · ${a.pending} waiting` : ''}</span>${kids(a.id).length ? ' › ' + kids(a.id).map(node).join(' ') : ''}`
+  const thinking = SA.evals.filter(e => e.status === 'running')
+  const jobs = SA.jobs.filter(j => j.status === 'running')
+  $('saTree').innerHTML = `<span class="small muted">Super agents:</span> ${SA.agents.filter(a => !a.parent).map(node).join(' ')}
+    ${thinking.map(e => `<button class="link" data-run="${esc(e.runId)}">${esc(e.agent)} thinking</button>`).join(' ')}
+    ${jobs.map(j => `<span class="pill info">asked ${esc(j.kind)} ${esc(j.target)}</span>`).join(' ')}
+    ${SA.evals.filter(e => e.status !== 'running').slice(0, 1).map(e => `<span class="small muted">Last decision ${when(e.endedAt)}: <button class="link" data-run="${esc(e.runId)}">${esc((e.note || e.status).slice(0, 120))}</button></span>`).join('')}`
+}
+async function showTicket(id) {
+  const t = await api('super/tickets/' + id)
+  const reps = t.assignments.filter(a => a.report)
+  show(t.title, `<div class="md">
+    <p><span class="pill ${STAGE_PILL(t.stage)}">${esc(STAGE_TEXT[t.stage] || t.stage)}</span> <span class="small muted">opened ${when(t.createdAt)} by ${esc(t.owner)} · worker ${esc(t.worker)} · ${t.assignments.length} turns</span></p>
+    ${t.attention ? `<p><strong>Question for you.</strong> ${esc(t.attention.question)}</p>` : ''}
+    <label>Write to this ticket's worker (answers its question; resumes an ended ticket)<textarea id="tkText"></textarea></label>
+    <p class="opts" style="margin-top:8px"><button class="primary" data-tk-act="say" data-tk="${t.id}">Send</button>${t.status === 'open' ? `<button data-tk-act="retry" data-tk="${t.id}">Retry</button><button class="danger" data-tk-act="stop" data-tk="${t.id}">Stop</button>` : ''}</p>
+    <h3>Brief</h3><p style="white-space:pre-wrap">${esc(t.brief)}</p><p><strong>Done when.</strong> ${esc(t.doneWhen)}</p>
+    ${t.proposal ? `<h3>Gate</h3><p>Proposal ${esc(t.proposal.name)}: ${esc(t.proposal.status)}. ${esc(t.proposal.note || '')}</p>` : ''}
+    <h3>Reports</h3>${reps.length ? `<ul>${reps.slice().reverse().map(a => `<li><strong>${esc(a.report.status)}</strong> · ${when(a.endedAt)} · <button class="link" data-run="${esc(a.runId)}">transcript</button><br><span style="white-space:pre-wrap">${esc(a.report.summary)}</span>${a.report.question ? `<br><em>Question: ${esc(a.report.question)}</em>` : ''}</li>`).join('')}</ul>` : '<p class="empty">No report yet.</p>'}
+    ${t.inputs.length ? `<h3>Messages to the worker</h3><ul>${t.inputs.slice(-12).map(i => `<li>${when(i.ts)} · ${esc(i.kind)}${i.read ? '' : ' (not read yet)'}: ${esc(i.text)}</li>`).join('')}</ul>` : ''}
+    <h3>Files</h3><p class="small muted">${esc(t.dir)}</p>${t.files.length ? `<div class="scroll"><table>${t.files.map(f => `<tr><td><button class="link" data-tfile="${esc(f.path)}" data-tk="${t.id}">${esc(f.path)}</button></td><td class="r num">${f.bytes.toLocaleString('en-US')} B</td></tr>`).join('')}</table></div>` : '<p class="empty">Empty.</p>'}
+    <h3>Worker notes</h3><pre>${esc(t.notes)}</pre></div>`)
+}
+$('saSay').addEventListener('submit', e => {
+  e.preventDefault()
+  const text = $('saText').value.trim(); if (!text) return
+  act(async () => { await api('super/say', 'POST', { text, to: $('saTo').value || undefined }); $('saText').value = '' }, 'Sent to the super agent')
+})
+$('saText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('saSay').requestSubmit() })
+$('saToggle').onclick = () => act(() => api('super/enabled', 'POST', { on: !SA.enabled }), SA.enabled ? 'Proactive mode off' : 'Proactive mode on')
+
 function fillCharter() {
   if (charterDirty) return
   const c = O.charter
@@ -312,6 +402,8 @@ $('charter').addEventListener('submit', e => {
 async function load() {
   try {
     O = await api('overview')
+    try { SA = await api('super/overview') } catch { SA = null }
+    renderSuper()
     if (!O.setUp) { $('mission').textContent = 'The company is not set up yet.'; $('decisions').innerHTML = '<p>Create the CEO, the department leads, HR and the teams.</p><div class="opts"><button class="primary" id="setup">Set up the company</button></div>'; $('setup').onclick = () => act(() => api('setup', 'POST', {}), 'Company set up'); return }
     renderTop(); renderLive(); renderPipe(); renderTables(); fillCharter()
   } catch (e) { $('mission').textContent = 'Cannot reach the company service: ' + e.message }
@@ -329,9 +421,13 @@ $('stop').onclick = () => act(() => api('cancel', 'POST', {}), 'Stopping the cyc
 $('auto').onclick = () => act(() => api('charter', 'PUT', { autopilot: { enabled: !O.charter.autopilot.enabled } }), O.charter.autopilot.enabled ? 'Autopilot off' : 'Autopilot on')
 $('pause').onclick = () => act(() => api('pause', 'POST', { paused: !O.paused }), O.paused ? 'Resumed' : 'Paused')
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-dec],[data-ini],[data-report],[data-run],[data-build],[data-build-show],[data-file]'); if (!t) return
+  const t = e.target.closest('[data-dec],[data-ini],[data-report],[data-run],[data-build],[data-build-show],[data-file],[data-ticket],[data-tk-act],[data-tfile]'); if (!t) return
   const d = t.dataset
   try {
+    if (d.tfile) { const f = await api(`super/tickets/${d.tk}/file?path=${encodeURIComponent(d.tfile)}`); return show(d.tfile, `<p><button class="link" data-ticket="${esc(d.tk)}">Back to the ticket</button></p><pre>${esc(f.text)}</pre>`) }
+    if (d.tkAct === 'say') { const text = ($('tkText') || {}).value || ''; if (!text.trim()) return toast('Write a message first'); await api(`super/tickets/${d.tk}/say`, 'POST', { text }); $('dlg').close(); toast('Sent to the worker'); return load() }
+    if (d.tkAct) { await api(`super/tickets/${d.tk}/${d.tkAct}`, 'POST', {}); if ($('dlg').open) $('dlg').close(); toast(d.tkAct === 'stop' ? 'Stopping the ticket' : 'Retrying'); return load() }
+    if (d.ticket) return showTicket(d.ticket)
     if (d.dec) return act(() => api('decisions/' + d.dec, 'POST', { choice: d.choice }), 'Answer recorded. The CEO sees it in the next cycle.')
     if (d.ini) return showInitiative(d.ini)
     if (d.report) { const r = await api('reports/' + encodeURIComponent(d.report)); return show(d.report, `<div class="md">${md(r.text)}</div>`) }

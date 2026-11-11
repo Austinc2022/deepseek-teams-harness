@@ -1,0 +1,8 @@
+#!/bin/bash
+# Super agent CLI (standalone; does not need the harness running).
+#   ./super-cli setup | status | say "text" | answer <ticket> "text" | stop|retry <ticket> | on|off | run
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$PATH"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
+exec node "$ROOT/plugins/super-agent/bin/super.js" "$@"

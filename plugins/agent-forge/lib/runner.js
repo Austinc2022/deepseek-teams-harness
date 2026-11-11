@@ -233,6 +233,11 @@ async function runClaudeCode(p, mem, cwd, write) {
     settings: { autoMemoryEnabled: def.memory.claudeAutoMemory === true, ...(def.externalMcp === true ? {} : { disableClaudeAiConnectors: true }) },
     strictMcpConfig: def.externalMcp !== true,
   }
+  // permissionRules: { allow: [...], deny: [...] } in Claude Code's rule syntax, e.g. deny: ['Read(//abs/secret/**)']
+  if (def.permissionRules && typeof def.permissionRules === 'object') {
+    const list = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : [])
+    options.settings.permissions = { allow: list(def.permissionRules.allow), deny: list(def.permissionRules.deny) }
+  }
   if (def.effort) options.effort = def.effort
   if (def.maxTurns) options.maxTurns = def.maxTurns
   if (def.maxBudgetUsd) options.maxBudgetUsd = Number(def.maxBudgetUsd)

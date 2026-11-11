@@ -3,14 +3,16 @@
  * DeepSeek Harness web server. Every request needs the DSH browser-session cookie; API calls also need the
  * X-Company-Request header (forces a CORS preflight that is never approved) and a same-origin Origin when sent.
  *
- * It reads and drives the one Company of this process (plugins/company), so the page, the CLI and the autopilot
- * all see the same state.
+ * It reads and drives the one Company of this process (plugins/company) and its super agent (plugins/super-agent,
+ * under /api/super/), so the page, the CLIs, the autopilot and the super agent loop all see the same state.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { boot } from '../company/lib/boot.js'
 import { handle, readJson, send } from '../company/lib/http.js'
+import { boot as bootSuper } from '../super-agent/lib/boot.js'
+import { handleSuper } from '../super-agent/lib/http.js'
 
 export const name = 'company-dashboard'
 export const inject = ['webServer', 'connection']
@@ -22,6 +24,7 @@ export function apply(ctx) {
   const logger = typeof ctx.logger === 'function' ? ctx.logger('company-dashboard') : null
   const log = m => (logger ? logger.info(m) : console.error(`[company-dashboard] ${m}`))
   const co = boot({ log })
+  const sa = bootSuper({ log })
 
   const sameOrigin = req => {
     const origin = req.headers.origin
@@ -41,7 +44,7 @@ export function apply(ctx) {
     if (p.startsWith('/api/')) {
       if (req.headers['x-company-request'] !== '1' || !sameOrigin(req)) return send(res, 403, { error: 'forbidden' })
       try {
-        const out = await handle(co, req.method, p, () => readJson(req), url.searchParams)
+        const out = p.startsWith('/api/super/') ? await handleSuper(sa, req.method, p, () => readJson(req), url.searchParams) : await handle(co, req.method, p, () => readJson(req), url.searchParams)
         if (out === undefined) return send(res, 404, { error: 'not found' })
         return send(res, 200, out)
       } catch (e) { return send(res, 400, { error: e?.message ?? String(e) }) }

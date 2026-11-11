@@ -1,0 +1,17 @@
+{
+  "name": "@local/super-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Super agent: an always-on lead that reacts to events (your messages, company and engine events, replies), opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "lib/*.js", "bin/*.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

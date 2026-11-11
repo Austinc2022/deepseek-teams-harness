@@ -15,6 +15,8 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { boot } from '../lib/boot.js'
 import { handle, readJson, send } from '../lib/http.js'
+import { boot as bootSuper } from '../../super-agent/lib/boot.js'
+import { handleSuper } from '../../super-agent/lib/http.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const [cmd, ...rest] = process.argv.slice(2)
@@ -42,6 +44,7 @@ async function serve() {
   if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(24).toString('hex'), { mode: 0o600 })
   const token = fs.readFileSync(tokenFile, 'utf8').trim()
   const page = path.resolve(here, '../../company-dashboard/ui/index.html')
+  const sa = bootSuper({ log: m => console.error(`[super-agent] ${m}`) })
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x')
@@ -55,7 +58,7 @@ async function serve() {
       if (url.pathname === '/' && req.method === 'GET') return send(res, 200, fs.readFileSync(page, 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname.startsWith('/api/')) {
         if (req.headers['x-company-request'] !== '1') return send(res, 403, { error: 'forbidden' })
-        const out = await handle(co, req.method, url.pathname, () => readJson(req), url.searchParams)
+        const out = url.pathname.startsWith('/api/super/') ? await handleSuper(sa, req.method, url.pathname, () => readJson(req), url.searchParams) : await handle(co, req.method, url.pathname, () => readJson(req), url.searchParams)
         return out === undefined ? send(res, 404, { error: 'not found' }) : send(res, 200, out)
       }
       send(res, 404, { error: 'not found' })
@@ -63,6 +66,7 @@ async function serve() {
   })
   server.listen(port, '127.0.0.1', () => console.log(`Company dashboard: http://127.0.0.1:${port}/?token=${token}`))
   co.schedule()
+  sa.start() // the super agent loop runs here unless another process (./dsh web) already runs it
   return new Promise(() => {})
 }
 

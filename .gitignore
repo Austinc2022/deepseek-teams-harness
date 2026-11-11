@@ -59,3 +59,4 @@ scripts/schedule-interval.sh
 
 # Company (CEO) state: charter, initiatives, decisions, spend ledger, briefs - kept local, never published
 forge/company/
+forge/super-agent/

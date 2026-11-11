@@ -1,0 +1,5 @@
+# Super agent: the always-on loop (triggers, evaluation, tickets). No page of its own;
+# it appears on the Company page (plugins/company-dashboard). Needs plugins/company.
+- insert:
+    - id: super-agent
+      name: '@local/super-agent'

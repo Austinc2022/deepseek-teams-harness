@@ -1,0 +1,20 @@
+/**
+ * Super agent API under /api/super/, shared by the DSH mount (plugins/company-dashboard) and the standalone server
+ * (company-cli serve). Reads come from the state file; every change is queued as a command for the process that
+ * runs the loop, so two servers never write the state at once.
+ */
+export async function handleSuper(sa, method, p, body, query) {
+  let r
+  if (method === 'GET' && p === '/api/super/overview') return sa.overview()
+  if (method === 'POST' && p === '/api/super/setup') return sa.setup(await body())
+  if (method === 'POST' && p === '/api/super/say') { const b = await body(); return sa.store.command({ type: 'say', text: b.text, to: b.to }) }
+  if (method === 'POST' && p === '/api/super/enabled') return sa.store.command({ type: 'enabled', on: (await body()).on === true })
+  if (method === 'PUT' && p === '/api/super/settings') return sa.store.command({ type: 'settings', patch: await body() })
+  if ((r = p.match(/^\/api\/super\/tickets\/([a-z0-9]{6,24})$/)) && method === 'GET') return sa.ticketDetail(r[1])
+  if ((r = p.match(/^\/api\/super\/tickets\/([a-z0-9]{6,24})\/file$/)) && method === 'GET') return { text: sa.ticketFile(r[1], query.get('path') ?? '') }
+  if ((r = p.match(/^\/api\/super\/tickets\/([a-z0-9]{6,24})\/(say|stop|retry)$/)) && method === 'POST') {
+    if (r[2] === 'say') return sa.store.command({ type: 'ticket-say', ticket: r[1], text: (await body()).text })
+    return sa.store.command({ type: r[2], ticket: r[1] })
+  }
+  return undefined
+}

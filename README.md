@@ -13,6 +13,7 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/super-team` | A **Super team** page: one supervisor agent orchestrates many agent teams, in parallel or in sequence depending on the task, with every Agent chat mode at both levels. |
 | `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. |
 | `plugins/company-dashboard` | A **Company** page: spend against the budget, decisions waiting for you, the initiative pipeline and gate results, execution orders, the organisation, engine health, cycles, hires and the charter. |
+| `plugins/super-agent` | An always-on **super agent** (after DeepSeek's dsh-superagent prototype): it reacts to events, opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO. |
 
 DSH's own **Agent Teams** bundle is also enabled in the `web` profile (`spawn_teammate`, a shared task board, and a team UI).
 
@@ -187,6 +188,43 @@ Messages from a super team show as **Supervisor** with a `super team: …` tag i
 **Projects (tabs):** the tab bar at the top groups super teams by project, so one project can hold many super teams, each with its own supervisor, mode and teams. **+ Project** creates one, with a name, a color, an optional default folder (new super teams in it start there) and a description that every supervisor and team in it gets as context. The ✎ on the active tab edits or deletes the project; deleting moves its super teams to **General** or deletes them. **All** shows every super team, labelled by project. Settings → Project moves a super team to another project.
 
 Each message is one Agent Forge run, so it also shows on Workflows → Runs. Click any agent in the timeline to open its transcript. Follow-up messages see the earlier requests and answers. `FORGE_MAX_PARALLEL` (default 4) caps how many agents run at once across all teams. Chats are saved in `forge/super-teams/` and projects in `forge/super-team-projects.json` (both excluded from git).
+
+## Super agent: an always-on CEO that reacts, builds and organises
+
+`plugins/super-agent` follows the design of DeepSeek's [dsh-superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) (Source, Trigger, Eval, Ticket, Executor, Channel), pointed at the company charter instead of a GitHub repository. It appears at the top of the **Company** page and in `./super-cli`.
+
+```
+sources ──> trigger ──> super agent decides (tools only) ──┬─> ticket ─> worker in its own sandboxed folder ─> report
+ your messages                                             ├─> ask an agent (answer now), a team or a super team (reply later)
+ company: build requests, finished CEO cycles              ├─> delegate to a super agent below it
+ engine: health changes                                    ├─> create or improve agents, teams, super teams, super agents; install skills
+ clock: one daily review                                   └─> write to you (a result, or one question)
+ replies from agents, teams, super teams, workers, the gate
+```
+
+- **It acts on events, not on a timer.** Your messages are always handled. Proactive mode (off until you turn it on) adds the company, engine and clock sources.
+- **Tickets are real work.** Each ticket gets a folder under `forge/super-agent/work/` and a worker with a shell. The worker reports `ready`, `progress`, `waiting`, `blocked`, `failed` or `dropped`; a question waits for you under **Needs you**; your answer resumes the ticket.
+- **Super agents form a tree.** The root (the CEO) reaches every super team, team and agent. It can create super agents below it, each leading the super teams, teams and agents it is given, and each able to create more within the same limits.
+- **It builds its organisation inside fixed templates.** A new agent is an analyst (read-only) or a builder (sandboxed shell); the super agent chooses the name, role text, DeepSeek model and skills, never the tools or permissions. Changed agents are backed up first.
+- **Skills from the internet are audited.** `install_skill` downloads one `SKILL.md` from GitHub; the independent auditor (a different model) reads it, and it is installed as `quant-ext-<name>` only when judged safe.
+
+**Limits enforced in code**
+
+- A worker's shell runs in the OS sandbox: it writes only inside its ticket folder, cannot read the key files or the other bot's config, and reaches only public market-data hosts and the package registries. File edits outside the folder are refused.
+- A worker's config proposal goes through the same gate as the company's: audit, safety invariants, validator. Nothing else reaches a paper book, and nothing places a real order.
+- New work stops when the day's budget is spent or the DeepSeek balance is at the reserve. Tickets, decisions, new agents, new skills and gate runs each have a daily limit.
+- One process runs the loop (`forge/super-agent/loop.lock`); other processes queue their commands for it.
+
+```bash
+./super-cli setup                 # create the CEO super agent and the worker (safe to repeat)
+./super-cli say "what you want"   # write to the CEO super agent
+./super-cli status                # super agents, tickets, what waits for you
+./super-cli answer <ticket> "..." # answer a worker's question
+./super-cli on | off              # proactive mode
+./super-cli run                   # run the loop here when neither ./dsh web nor ./company-cli serve is running
+```
+
+State is in `forge/super-agent/` (excluded from git).
 
 ## Company: a CEO over departments, with a budget and a gate
 
