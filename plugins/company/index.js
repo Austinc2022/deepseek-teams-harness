@@ -1,6 +1,6 @@
 /**
  * Company: host half. Builds the one Company of this process and runs the autopilot timer
- * (a CEO cycle every charter.autopilot.everyHours while autopilot is on and the budget allows).
+ * (a COO cycle every charter.autopilot.everyHours while autopilot is on and the budget allows).
  * The page and the API are served by plugins/company-dashboard.
  */
 import { boot } from './lib/boot.js'

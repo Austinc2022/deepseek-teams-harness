@@ -1,13 +1,13 @@
 /**
- * One CEO cycle, as an Agent Forge run:
+ * One COO cycle, as an Agent Forge run:
  *
  *   1. Facts        deterministic facts from the profile (profile.facts), plus budget, org and initiatives
- *   2. CEO plan     the CEO picks initiatives, writes briefs for departments, asks for hires, kills, questions
+ *   2. COO plan     the COO picks initiatives, writes briefs for departments, asks for hires, kills, questions
  *   3. Hiring       HR recruiter drafts each agent, HR reviewer checks it, code forces the read-only template
  *   4. Departments  each brief goes to the department's super team (lead = supervisor, teams = workers);
  *                   the lead then reports in a fixed form: evidence, proposals, build specs
  *   5. Gate         profile.gate decides on every proposal, in code (audit and the profile's checks)
- *   6. CEO review   updates the initiatives, writes the brief for the owner
+ *   6. COO review   updates the initiatives, writes the brief for the owner
  *
  * Agents propose; code decides. No agent output can move an initiative to the gated stage.
  */
@@ -134,7 +134,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     return [
       `# Charter\n${charterText(s.charter)}`,
       `# Budget today (${budget.date})\nDaily budget $${budget.dailyUsd}; spent on models so far $${budget.spentTodayUsd}${co.metering === 'balance' ? `; provider balance $${budget.balanceUsd}` : ' (estimated from run costs)'}; this cycle may spend up to $${budget.cycleUsd}. Anything other than model calls (services, assets, hardware, advertising) needs the owner.`,
-      `# Organisation\nCEO: ${s.ceo}. Independent auditor: ${s.auditor} (different model on purpose).\n${orgText(co, s)}`,
+      `# Organisation\nCOO: ${s.ceo} (reports to the CEO super agent). Independent auditor: ${s.auditor} (different model on purpose).\n${orgText(co, s)}`,
       `# Initiatives\n${s.initiatives.filter(i => i.stage !== 'killed').map(initiativeLine).join('\n') || '(none yet)'}\nKilled so far: ${s.initiatives.filter(i => i.stage === 'killed').map(i => `${i.title} (${clip(i.note, 120)})`).join('; ') || 'none'}`,
       `# ${P.text.ordersTitle} so far\n${s.orders.map(P.orderLine).join('\n') || '(none)'}`,
       `# Open build requests\n${s.builds.filter(b => b.status === 'requested' || b.status === 'accepted').map(b => `- ${b.id} [${b.status}] ${b.title} (${b.department})`).join('\n') || '(none)'}`,
@@ -143,8 +143,8 @@ export async function runCycle(co, api, { cycleId, focus }) {
     ].join('\n\n')
   }
 
-  // ---- 2. CEO plan
-  api.phase('CEO plan')
+  // ---- 2. COO plan
+  api.phase('COO plan')
   const plan = await api.agent(start.ceo, [
     context(),
     answered.length ? `# The owner answered\n${answered.map(d => `- "${d.question}" -> ${d.choice}${d.overruled ? ` (the owner overruled the company's own choice "${d.companyChoice}")` : ''}${d.note ? ` (${d.note})` : ''}`).join('\n')}` : null,
@@ -152,7 +152,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     focus ? `# The owner's focus for this cycle\n${focus}` : null,
     `# Your job now\n${P.prompts.plan}\n\n${DECISION_RULE}`,
   ].filter(Boolean).join('\n\n'), { schema: planSchema(depIds), label: 'ceo:plan' })
-  if (!plan) throw new Error('the CEO produced no plan')
+  if (!plan) throw new Error('the COO produced no plan')
   api.save('plan.json', plan)
   co.update(s => {
     for (const d of answered) { const x = s.decisions.find(y => y.id === d.id); if (x) x.seenByCeo = true }
@@ -168,7 +168,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     if (c) { c.assessment = str(plan.assessment, 2000); c.odds = str(plan.northStar?.odds, 600) }
     s.northStar = { odds: str(plan.northStar?.odds, 800), whatWouldChangeIt: str(plan.northStar?.whatWouldChangeIt, 800), ts: now() }
   })
-  await guard('CEO plan')
+  await guard('COO plan')
 
   // ---- 3. hiring
   if ((plan.hires ?? []).length) {
@@ -188,7 +188,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     let ini = d.initiativeId ? s.initiatives.find(x => x.id === d.initiativeId && x.stage !== 'killed') : null
     if (!ini) {
       const n = d.newInitiative ?? {}
-      ini = { id: newId('i'), title: str(n.title || d.brief, 120).split('\n')[0], thesis: str(n.thesis || d.brief, 1500), kind: n.kind ?? P.initiativeKinds[0], department: d.department, stage: P.stages[0], confidence: null, createdAt: now(), history: [{ ts: now(), cycle: cycleId, stage: P.stages[0], note: 'opened by the CEO' }] }
+      ini = { id: newId('i'), title: str(n.title || d.brief, 120).split('\n')[0], thesis: str(n.thesis || d.brief, 1500), kind: n.kind ?? P.initiativeKinds[0], department: d.department, stage: P.stages[0], confidence: null, createdAt: now(), history: [{ ts: now(), cycle: cycleId, stage: P.stages[0], note: 'opened by the COO' }] }
       s.initiatives.push(ini)
     }
     return { directive: d, initiativeId: ini.id, title: ini.title }
@@ -198,9 +198,9 @@ export async function runCycle(co, api, { cycleId, focus }) {
   const runDirective = async ({ directive: d, initiativeId, title }) => {
     const dep = co.read().departments.find(x => x.id === d.department)
     const brief = [
-      `CEO brief for the ${dep.name} department. Initiative: "${title}" (${initiativeId}).`,
+      `COO brief for the ${dep.name} department. Initiative: "${title}" (${initiativeId}).`,
       d.brief,
-      `Proof the CEO expects: ${d.proof}`,
+      `Proof the COO expects: ${d.proof}`,
       `Company charter:\n${charterText(charter)}`,
       P.prompts.deptExtra(facts),
     ].join('\n\n')
@@ -219,9 +219,9 @@ export async function runCycle(co, api, { cycleId, focus }) {
     }
     if (api.signal.aborted) return null
     const report = await api.agent(dep.lead, [
-      `You are the head of ${dep.name}. The CEO's brief:\n${brief}`,
+      `You are the head of ${dep.name}. The COO's brief:\n${brief}`,
       text ? `# What your teams produced\n${clip(text, 30000)}` : '# Your teams produced nothing usable this time. Do the analysis yourself from the files, as far as you can.',
-      `# Your job now\nReport to the CEO in the required form. Evidence: one line per claim with its source file or data and its strength. ${P.proposal.reportRule} ${P.prompts.report} Confidence is a probability, not a mood.`,
+      `# Your job now\nReport to the COO in the required form. Evidence: one line per claim with its source file or data and its strength. ${P.proposal.reportRule} ${P.prompts.report} Confidence is a probability, not a mood.`,
     ].join('\n\n'), { schema: REPORT, label: `report:${dep.id}` })
     if (report) api.save(`reports/${dep.id}.json`, report)
     return { dep, initiativeId, title, report, text, sub }
@@ -263,8 +263,8 @@ export async function runCycle(co, api, { cycleId, focus }) {
   summary.proposals = gateResults.map(g => `${g.name}: ${g.passed ? 'PASSED' : `failed (${g.reasons.join('; ')})`}`)
   summary.orders = gateResults.filter(g => g.order).map(g => g.order.book)
 
-  // ---- 6. CEO review
-  api.phase('CEO review')
+  // ---- 6. COO review
+  api.phase('COO review')
   const review = await api.agent(start.ceo, [
     context(),
     `# This cycle\nYour plan:\n${J({ assessment: plan.assessment, directives: work.map(w => ({ department: w.directive.department, initiative: w.title, id: w.initiativeId })) })}`,
@@ -277,8 +277,8 @@ export async function runCycle(co, api, { cycleId, focus }) {
   const spent = round(await co.cycleSpend(cycleId))
   const name = `${today()}-${cycleId}.md`
   const md = [
-    `# CEO brief ${today()} (cycle ${cycleId})`, '',
-    review?.brief ?? `The CEO did not deliver a review. Plan assessment:\n\n${plan.assessment}`, '',
+    `# COO brief ${today()} (cycle ${cycleId})`, '',
+    review?.brief ?? `The COO did not deliver a review. Plan assessment:\n\n${plan.assessment}`, '',
     '## Cycle record (written by code, not by an agent)', '',
     `- Directives: ${work.map(w => `${w.directive.department} → "${w.title}"`).join('; ') || 'none'}`,
     `- Gate: ${summary.proposals.join(' | ') || 'no proposals submitted'}`,
@@ -294,7 +294,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
       const i = s.initiatives.find(x => x.id === u.id)
       if (!i || i.stage === P.gatedStage || i.awaitingOwner || !P.agentStages.includes(u.stage)) continue
       i.stage = u.stage
-      if (Number.isFinite(u.confidence)) { i.confidence = round(Math.min(1, Math.max(0, u.confidence)), 3); i.confidenceBasis = 'CEO estimate' }
+      if (Number.isFinite(u.confidence)) { i.confidence = round(Math.min(1, Math.max(0, u.confidence)), 3); i.confidenceBasis = 'COO estimate' }
       i.note = str(u.note, 800)
       i.history.push({ ts: now(), cycle: cycleId, stage: u.stage, note: i.note })
     }
@@ -319,7 +319,7 @@ export async function hire(co, api, h, cycleId) {
   if (registry.listAgents().filter(a => P.isOurs(a.name)).length >= hc.maxAgents) { api.log('hire skipped: the organisation is at its maximum size'); return null }
 
   const existing = registry.listAgents().filter(a => !a.invalid && P.isOurs(a.name)).map(a => `- ${a.name}: ${a.description}`).join('\n')
-  const spec = await api.agent(P.recruiterName, `Hiring request from the CEO for the ${dep.name} department (team ${h.team}).\nNeed: ${h.need}\nWhy: ${h.why}\n\nExisting agents (do not duplicate):\n${existing}\n\nWrite the agent specification.`, { schema: RECRUIT, label: 'hr:recruit' })
+  const spec = await api.agent(P.recruiterName, `Hiring request from the COO for the ${dep.name} department (team ${h.team}).\nNeed: ${h.need}\nWhy: ${h.why}\n\nExisting agents (do not duplicate):\n${existing}\n\nWrite the agent specification.`, { schema: RECRUIT, label: 'hr:recruit' })
   if (!spec) return null
   const review = await api.agent(P.reviewerName, `Review this proposed hire.\nRequest: ${h.need} (${h.why})\nSpecification:\n${J(spec)}\n\nExisting agents:\n${existing}`, { schema: HR_REVIEW, label: 'hr:review' })
   let name = String(spec.name ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36)

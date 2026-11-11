@@ -1,11 +1,11 @@
 /**
- * Company: one CEO agent over department leads, each running several agent teams (a super team), working
+ * Company: one COO agent over department leads, each running several agent teams (a super team), working
  * toward one written goal (the charter) inside a daily budget.
  *
  * This file is the store and the rules. State lives in forge/company/ (git-ignored):
  *   company.json     charter, departments, initiatives, decisions, hires, orders, cycles, day accounts
  *   ledger.jsonl     append-only spend entries
- *   reports/         one CEO brief per cycle
+ *   reports/         one COO brief per cycle
  *
  * What agents may never do is enforced here and in cycle.js, in code, not in prompts:
  *   - an initiative reaches the profile's gated stage only through the profile's gate (checks in code + audit);
@@ -190,7 +190,7 @@ export class Company {
     const cycleId = newId('c')
     const startBalance = this.read().lastBalanceUsd
     const { engine } = this.forge
-    const { id: runId, done } = engine.startCustom('company: CEO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: P.projectDir, meta: { company: cycleId } })
+    const { id: runId, done } = engine.startCustom('company: COO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: P.projectDir, meta: { company: cycleId } })
     this.live = { cycleId, runId }
     this.update(s => {
       s.cycles.push({ id: cycleId, runId, trigger, focus: focus ?? null, status: 'running', startedAt: now(), startBalanceUsd: startBalance, subRuns: [] })

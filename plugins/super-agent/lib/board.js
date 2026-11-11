@@ -70,7 +70,7 @@ export function board(sa, { hours = 24 } = {}) {
   const unitOf = {}
   const claim = (agent, id) => { if (agent && !unitOf[agent]) unitOf[agent] = id }
   for (const a of org.superAgents) { units.push({ id: `sa:${a.id}`, type: 'Super agent', name: a.title, who: `super-agent:${a.id}`, lead: a.agent }); claim(a.agent, `sa:${a.id}`) }
-  if (org.company.ceo) { units.push({ id: 'ceo', type: 'Company CEO', name: 'Company CEO', who: `agent:${org.company.ceo.name}`, lead: org.company.ceo.name }); claim(org.company.ceo.name, 'ceo') }
+  if (org.company.ceo) { units.push({ id: 'ceo', type: 'COO', name: 'COO', who: `agent:${org.company.ceo.name}`, lead: org.company.ceo.name }); claim(org.company.ceo.name, 'ceo') }
   if (org.company.auditor) { units.push({ id: 'audit', type: 'Assurance', name: 'Independent auditor', who: `agent:${org.company.auditor.name}`, lead: org.company.auditor.name }); claim(org.company.auditor.name, 'audit') }
   for (const d of org.company.departments) {
     units.push({ id: `dep:${d.id}`, type: 'Department', name: d.name, who: `department:${d.id}`, lead: d.lead.name, teams: d.teams.map(t => t.name), members: [...new Set([d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))])] })
@@ -250,7 +250,7 @@ function structure(sa) {
   const root = org.superAgents.find(a => !a.parent)
   for (const a of org.superAgents) add(`sa:${a.id}`, 'Super agent', a.title, a.parent ? `sa:${a.parent}` : 'company', [a.agent], { lead: a.agent })
   const top = root ? `sa:${root.id}` : 'company'
-  if (org.company.ceo) add('ceo', 'Company CEO', 'Company CEO', top, [org.company.ceo.name], { lead: org.company.ceo.name })
+  if (org.company.ceo) add('ceo', 'COO', 'COO', top, [org.company.ceo.name], { lead: org.company.ceo.name })
   if (org.company.auditor) add('audit', 'Assurance', 'Independent auditor', top, [org.company.auditor.name], { lead: org.company.auditor.name })
   for (const d of org.company.departments) {
     add(`dep:${d.id}`, 'Department', d.name, 'ceo', [d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))], { lead: d.lead.name, mission: d.mission })
@@ -336,7 +336,7 @@ export function entity(sa, ref, { hours = 24 } = {}) {
   if (crumbs[0]?.ref !== 'company') crumbs.unshift({ ref: 'company', name: 'Company' })
   // members: the next level down
   const childRefs = Object.keys(meta).filter(r => meta[r].parent === ref && !(m.type === 'Company'))
-  const kids = ref === 'company' ? Object.keys(meta).filter(r => ['Super agent', 'Company CEO', 'Assurance', 'Department', 'Builders'].includes(meta[r].type)) : ref.startsWith('team:') || ref === 'workers' ? [...set].map(a => `agent:${a}`) : ref.startsWith('dep:') ? [...childRefs.filter(r => r.startsWith('team:')), `agent:${m.lead}`] : childRefs
+  const kids = ref === 'company' ? Object.keys(meta).filter(r => ['Super agent', 'COO', 'Assurance', 'Department', 'Builders'].includes(meta[r].type)) : ref.startsWith('team:') || ref === 'workers' ? [...set].map(a => `agent:${a}`) : ref.startsWith('dep:') ? [...childRefs.filter(r => r.startsWith('team:')), `agent:${m.lead}`] : childRefs
   const members = kids.filter(r => meta[r]).map(r => { const x = stat(rows, sets[r], total); return { ref: r, name: meta[r].name, type: meta[r].type, turnsToday: x.turnsToday, min24: x.min24, share: x.share, busy: x.busy, lastActive: x.lastActive, turns: x.turns, successRate: x.successRate } })
   // when it (or each member) worked
   const to = Date.now(), from = to - Math.max(1, Math.min(168, Number(hours) || 24)) * HOUR

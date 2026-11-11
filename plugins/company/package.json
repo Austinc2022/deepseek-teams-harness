@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Company: a CEO agent that owns one goal and a daily budget, directs department leads (each a super team of agent teams), hires through HR, and executes only through a deterministic gate.",
+  "description": "Company: a COO agent that owns one goal and a daily budget, directs department leads (each a super team of agent teams), hires through HR, and executes only through a deterministic gate.",
   "main": "index.js",
   "exports": {
     ".": "./index.js",

@@ -1,5 +1,5 @@
 /**
- * Company setup: creates the active profile's organisation (CEO, department leads, HR, teams, the auditor and the
+ * Company setup: creates the active profile's organisation (COO, department leads, HR, teams, the auditor and the
  * gate verifier), its departments and one super team per department. Safe to run again: existing agents, teams and
  * departments are left alone unless `force` is set. What the organisation is comes from the profile (profiles/).
  */
@@ -76,7 +76,7 @@ export function seed(co, { force = false, refreshAgents = false } = {}) {
         const st = co.supers.create({
           title: `${P.label} · ${dep.name}`, project: projectId, supervisor: dep.lead, mode: 'auto', maxRounds: 2, maxHops: 1, cwd: P.projectDir,
           teams: dep.teams.map(team => ({ team, mode: 'parallel', chat: 'copy' })),
-          instructions: `You are the head of the ${dep.name} department. Department mission: ${dep.mission}\nThe request you receive is a brief from the CEO. Deliver exactly what it asks for, with the evidence. Keep assignments few and concrete.`,
+          instructions: `You are the head of the ${dep.name} department. Department mission: ${dep.mission}\nThe request you receive is a brief from the COO. Deliver exactly what it asks for, with the evidence. Keep assignments few and concrete.`,
         })
         dep.superTeamId = st.id
         done.superTeams.push(`${dep.id}: ${st.id}`)

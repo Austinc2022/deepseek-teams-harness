@@ -2,7 +2,7 @@
  * Super agent: an always-on lead that reacts to events, modelled on DeepSeek's dsh-superagent prototype
  * (Source -> Trigger -> Eval -> Ticket -> Executor -> Channel), pointed at the company charter instead of a repository.
  *
- *   Sources    the owner's messages, the company (build requests, finished CEO cycles), the profile's health checks,
+ *   Sources    the owner's messages, the company (build requests, finished COO cycles), the profile's health checks,
  *              a daily clock, and replies from agents, teams, super teams and other super agents
  *   Trigger    one event, addressed to one super agent
  *   Eval       that super agent reads its pending triggers and acts through tools (it has no other way to act)
@@ -74,7 +74,7 @@ const ALL_TOOLS = [
   }, ['focus', 'priorities', 'todo']),
   tool('report_milestone', 'Tell the owner a milestone of the goal ladder is reached or lost. Only with evidence the owner can check (a file, a ticket, a number).', { key: { type: 'string', enum: P.milestones.map(m => m.key), description: P.milestones.map(m => `${m.key}: ${m.title}.`).join(' ') }, done: { type: 'boolean' }, evidence: S }),
   tool('submit_engine_change', 'Ask for a finished patch from one of your tickets to be installed into the engine. Code checks it, the independent auditor reads it, then the owner is asked; on Install it is tested on a copy, applied with a backup and rolled back if the engine tests fail. The patch must be a unified diff that applies from inside the engine folder and may only touch quantcore/, config/ and tests/. Submit only what you have reviewed yourself.', { ticket: S, patch: { type: 'string', description: 'file name of the patch inside the ticket folder' }, title: S, summary: { type: 'string', description: 'what it changes and why, in plain words' } }),
-  tool('run_company_cycle', 'Run one full CEO cycle of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
+  tool('run_company_cycle', 'Run one full company cycle (led by the COO) of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
 ]
 /** A company without an engine has no engine change to submit. */
 const TOOLS = ALL_TOOLS.filter(t => P.hasEngine || t.name !== 'submit_engine_change')
@@ -285,7 +285,7 @@ export class SuperAgent {
       }
       const last = c.cycles.at(-1)
       if (last && last.status !== 'running' && last.endedAt && last.endedAt > since) {
-        this.trigger({ key: `cycle:${last.id}`, source: 'company', kind: 'cycle-finished', text: `A company CEO cycle finished (${last.status}; spend $${last.spendUsd ?? '?'}). Summary: ${last.summary ?? '(none)'}\nBrief: ${last.report ? path.join(this.co.reports, last.report) : '(none)'}\nRead the brief and decide what follows.` })
+        this.trigger({ key: `cycle:${last.id}`, source: 'company', kind: 'cycle-finished', text: `A company cycle (COO) finished (${last.status}; spend $${last.spendUsd ?? '?'}). Summary: ${last.summary ?? '(none)'}\nBrief: ${last.report ? path.join(this.co.reports, last.report) : '(none)'}\nRead the brief and decide what follows.` })
       }
     }
     if (src.engine && Date.now() - (this.healthAt ?? 0) > 10 * 60_000) {
@@ -330,7 +330,7 @@ export class SuperAgent {
       `# Charter\nMission: ${ch.mission}\nScope: ${ch.scope}\nRules:\n${ch.rules.map(r => `- ${r}`).join('\n')}`,
       `# You\nSuper agent "${me.id}" (${me.title}). Above you: ${me.parent ?? 'the owner'}. Below you: ${s.agents.filter(a => a.parent === me.id).map(a => a.id).join(', ') || 'no super agents yet'}.${me.parent ? `\nYou lead: super teams ${me.reports.superTeams.join(', ') || '-'}; teams ${me.reports.teams.join(', ') || '-'}; agents ${me.reports.agents.join(', ') || '-'}.` : '\nYou reach every super team, team and agent (list_org).'}`,
       `# Budget today\nSpent $${b.spentTodayUsd} of $${b.dailyUsd}${this.co.metering === 'balance' ? `; ${P.models.provider} balance $${b.balanceUsd ?? '?'} (reserve $${b.reserveUsd})` : ' (estimated from run costs)'}. Tickets opened today: ${this.store.day(s).tickets} of ${s.settings.maxTicketsPerDay}.`,
-      `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last CEO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
+      `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last COO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
       `# Your plan (the owner reads this; keep it current with update_plan)\n${me.plan ? `Updated ${me.plan.updatedAt.slice(0, 16)}\nFocus: ${me.plan.focus}\nPriorities:\n${me.plan.priorities.map((p, i) => `${i + 1}. ${p.text} (${p.why})`).join('\n')}\nTo do:\n${me.plan.todo.map(t => `- [${t.status}] ${t.text} (${t.owner})${t.note ? `: ${t.note}` : ''}`).join('\n')}\nBlockers: ${me.plan.blockers.join('; ') || '-'}\nWaiting on the owner: ${me.plan.waitingOnOwner.join('; ') || '-'}` : '(none yet: write it with update_plan)'}`,
       this.#goalText(s),
       `# Authority\n${P.ownerOnlyText()}\nQuestions waiting for the owner: ${c.decisions.filter(d => d.status === 'open').length}; held: ${c.decisions.filter(d => d.status === 'held').length}. Do not repeat them.`,

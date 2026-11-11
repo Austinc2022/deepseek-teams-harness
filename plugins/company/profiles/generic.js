@@ -271,7 +271,7 @@ export function makeProfile(spec) {
     text: { ...DEFAULT_TEXT, ...(spec.text ?? {}) },
     skills: {
       all: spec.skills?.all ?? [], base: spec.skills?.base ?? [], builder: spec.skills?.builder ?? spec.skills?.base ?? [],
-      // what the CEO and every super agent lead with (forge/skills/; see docs/SUPER-AGENT-AUTONOMY.md)
+      // what the COO and every super agent lead with (forge/skills/; see docs/SUPER-AGENT-AUTONOMY.md)
       leader: spec.skills?.leader ?? ['executive-judgment', 'masterwork-standard', 'grand-scale-orchestration', ...(spec.skills?.base ?? [])],
     },
   }
@@ -488,9 +488,9 @@ ${P.superRules}`,
   P.resolveOrder = spec.resolveOrder ?? null
   /** true only for a profile with a long-running engine that code keeps alive and patches (quant). */
   P.hasEngine = spec.hasEngine === true
-  /** Milestones only the CEO can report (with evidence); they appear as steps of the goal ladder. */
+  /** Milestones only the COO can report (with evidence); they appear as steps of the goal ladder. */
   P.milestones = spec.milestones ?? [
-    { key: 'plan_ready', title: 'A plan to reach the goal exists', missing: 'The CEO has not reported a plan yet.' },
+    { key: 'plan_ready', title: 'A plan to reach the goal exists', missing: 'The COO has not reported a plan yet.' },
     { key: 'first_build', title: 'A first deliverable is built and runs', missing: 'Nothing has been built yet.' },
   ]
   /** The goal ladder the owner reads: steps measured by code where code can measure them. */
@@ -504,7 +504,7 @@ ${P.superRules}`,
     for (let d = new Date(); days.includes(d.toISOString().slice(0, 10)); d = new Date(d.getTime() - 86400_000)) streak++
     return [
       { key: 'org', title: 'Organisation set up', done: c.departments.length > 0 && s.agents.length > 0, how: 'measured', detail: `${c.departments.length} departments, ${s.agents.length} super agents` },
-      ...P.milestones.map(m => ({ key: m.key, title: m.title, done: ms[m.key]?.done === true, how: 'reported by the CEO', detail: said(m.key) })),
+      ...P.milestones.map(m => ({ key: m.key, title: m.title, done: ms[m.key]?.done === true, how: 'reported by the COO', detail: said(m.key) })),
       { key: 'built', title: 'A builder delivered a ticket', done: delivered > 0, how: 'measured', detail: delivered ? `${delivered} ticket(s) delivered.` : 'No ticket has been delivered yet.' },
       { key: 'accepted', title: `First ${P.text.orderNoun} passed the gate`, done: c.orders.length > 0, how: 'measured', detail: c.orders.length ? `${c.orders.length} passed the checks, the rebuild and the audit.` : 'Nothing has passed the gate.' },
       { key: 'daily', title: `${per} ${P.text.orderNoun}${per === 1 ? '' : 's'} today`, done: todays.length >= per, how: 'measured', detail: `${todays.length} of ${per} today.` },
@@ -548,8 +548,8 @@ export default makeProfile({
     autopilot: { enabled: false, everyHours: 6 },
   },
   agents: [
-    { name: 'ceo', tier: 'ceo', tools: WEB_TOOLS, memory: { mode: 'hybrid', scope: 'agent' }, maxTurns: 30, description: 'CEO: owns the charter, sets objectives, directs the department leads; accepts work only through the gate.', role: 'You are the CEO of a company made of AI agent teams. The owner gives you a daily budget and one goal (the charter). You choose a few initiatives, brief the department leads (goal, deliverable, what counts as proof), and judge what comes back. You do not do the departments\' work. Kill initiatives that do not hold up; a cheap "no" is a good result. Hire only when a missing skill blocks an initiative. Decide everything inside the charter yourself.' },
-    { name: 'head-product', tools: WEB_TOOLS, description: 'Head of Product: research, specs and priorities.', role: 'You lead Product. Turn the CEO\'s brief into researched, specific specs that a builder can execute, and say what evidence supports each choice.' },
+    { name: 'ceo', tier: 'ceo', tools: WEB_TOOLS, memory: { mode: 'hybrid', scope: 'agent' }, maxTurns: 30, description: 'COO (reports to the CEO super agent): owns the charter, sets objectives, directs the department leads; accepts work only through the gate.', role: 'You are the COO (chief operating officer) of a company made of AI agent teams. You report to the CEO super agent, which sits above you and talks to the owner. The owner gives you a daily budget and one goal (the charter). You choose a few initiatives, brief the department leads (goal, deliverable, what counts as proof), and judge what comes back. You do not do the departments\' work. Kill initiatives that do not hold up; a cheap "no" is a good result. Hire only when a missing skill blocks an initiative. Decide everything inside the charter yourself.' },
+    { name: 'head-product', tools: WEB_TOOLS, description: 'Head of Product: research, specs and priorities.', role: 'You lead Product. Turn the COO\'s brief into researched, specific specs that a builder can execute, and say what evidence supports each choice.' },
     { name: 'researcher', tools: WEB_TOOLS, description: 'Researcher: markets, users, competitors.', role: 'You research markets, users and competitors from public sources, citing each source and saying how strong the evidence is.' },
     { name: 'head-quality', description: 'Head of Quality: test plans, reviews and acceptance criteria.', role: 'You lead Quality. Write acceptance criteria before work starts, review what is built against them, and say plainly what fails.' },
     { name: 'reviewer', description: 'Reviewer: reads deliverables and reports defects.', role: 'You review deliverables file by file and report concrete defects with their location and severity.' },
