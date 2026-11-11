@@ -173,7 +173,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
       `# Budget today (${budget.date})\nDaily budget $${budget.dailyUsd}; spent on models so far $${budget.spentTodayUsd}; DeepSeek balance $${budget.balanceUsd}; this cycle may spend up to $${budget.cycleUsd}. Anything other than model calls (servers, data feeds, trading capital) needs the owner.`,
       `# Organisation\nCEO: ${s.ceo}. Independent auditor: ${s.auditor} (different model on purpose).\n${orgText(co, s)}`,
       `# Initiatives\n${s.initiatives.filter(i => i.stage !== 'killed').map(initiativeLine).join('\n') || '(none yet)'}\nKilled so far: ${s.initiatives.filter(i => i.stage === 'killed').map(i => `${i.title} (${clip(i.note, 120)})`).join('; ') || 'none'}`,
-      `# Execution orders so far\n${s.orders.map(o => `- ${o.ts.slice(0, 10)} ${o.proposal} -> paper book ${o.book} (P(better) ${o.pImprove})`).join('\n') || '(none)'}`,
+      `# Execution orders so far\n${s.orders.map(o => `- ${o.ts.slice(0, 10)} ${o.proposal} -> paper book ${o.book} (P(better) ${o.pImprove}; ${o.status === 'awaiting-owner' ? 'verified, waiting for the owner to approve the start' : o.status === 'declined' ? 'the owner declined to start it' : 'running'})`).join('\n') || '(none)'}`,
       `# Facts measured just now (deterministic)\n${J(facts)}`,
     ].join('\n\n')
   }
@@ -193,7 +193,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     for (const d of answered) { const x = s.decisions.find(y => y.id === d.id); if (x) x.seenByCeo = true }
     for (const k of plan.kills ?? []) {
       const i = s.initiatives.find(x => x.id === k.initiativeId)
-      if (i && i.stage !== 'paper' && i.stage !== 'killed') { i.stage = 'killed'; i.note = str(k.reason, 600); i.history.push({ ts: now(), cycle: cycleId, stage: 'killed', note: i.note }); summary.killed.push(i.title) }
+      if (i && i.stage !== 'paper' && !i.awaitingOwner && i.stage !== 'killed') { i.stage = 'killed'; i.note = str(k.reason, 600); i.history.push({ ts: now(), cycle: cycleId, stage: 'killed', note: i.note }); summary.killed.push(i.title) }
     }
     for (const d of plan.decisions ?? []) co.addDecision(s, { from: s.ceo, cycle: cycleId, question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4), recommendation: str(d.recommendation, 300), why: str(d.why, 1200) })
     const c = s.cycles.find(x => x.id === cycleId)
@@ -264,7 +264,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
   co.update(s => {
     for (const r of reports) {
       const i = s.initiatives.find(x => x.id === r.initiativeId)
-      if (!i || i.stage === 'paper') continue
+      if (!i || i.stage === 'paper' || i.awaitingOwner) continue
       if (AGENT_STAGES.includes(r.report.recommendedStage) && r.report.recommendedStage !== 'killed') i.stage = r.report.recommendedStage
       i.confidence = Number.isFinite(r.report.confidence) ? round(Math.min(1, Math.max(0, r.report.confidence)), 3) : i.confidence
       i.confidenceBasis = 'department estimate'
@@ -324,7 +324,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
   co.update(s => {
     for (const u of review?.initiativeUpdates ?? []) {
       const i = s.initiatives.find(x => x.id === u.id)
-      if (!i || i.stage === 'paper' || !AGENT_STAGES.includes(u.stage)) continue
+      if (!i || i.stage === 'paper' || i.awaitingOwner || !AGENT_STAGES.includes(u.stage)) continue
       i.stage = u.stage
       if (Number.isFinite(u.confidence)) { i.confidence = round(Math.min(1, Math.max(0, u.confidence)), 3); i.confidenceBasis = 'CEO estimate' }
       i.note = str(u.note, 800)
@@ -411,7 +411,9 @@ export function enroll(co, rec) {
  *   3. safety invariants of the current engine (floor, crash recovery, ledger)
  *   4. quant validator on the holdout: P(better) must beat its trial-adjusted bar and the charter's floor
  * Pass = the validator has written the proposal to proposals/approved/, which the paper daemon runs as a shadow
- * book. That file is the execution order. Nothing here can reach the main book or real money.
+ * book. That file is the execution order. With charter.execution.ownerApproval (the default) the file is held in
+ * proposals/awaiting-owner/ and the CEO asks the owner; it moves to approved/ only when the owner answers Start.
+ * Nothing here can reach the main book or real money.
  */
 export async function gate(co, api, p, { cycleId, charter, facts }) {
   const out = { name: '', initiativeId: p.initiativeId, department: p.department, hypothesis: str(p.hypothesis, 600), passed: false, reasons: [], checks: {} }
@@ -455,7 +457,16 @@ export async function gate(co, api, p, { cycleId, charter, facts }) {
   }
   if (!out.reasons.length && v?.approved_file) {
     out.passed = true
-    out.order = { id: newId('o'), ts: now(), cycle: cycleId, initiative: p.initiativeId, proposal: path.basename(v.approved_file), book: `shadow-${path.basename(v.approved_file, '.json')}`, kind: 'paper', pImprove: round(v.p_improve, 4), required: round(v.required_confidence, 5), audit: out.checks.audit ?? null, issuedBy: co.read().ceo }
+    let status = 'active'
+    if (charter.execution?.ownerApproval !== false) {
+      // verified, but nothing starts until the owner says so: take the file out of approved/ (the paper daemon
+      // only runs what is in approved/) and hold it
+      const hold = path.join(QUANT, 'proposals', 'awaiting-owner')
+      fs.mkdirSync(hold, { recursive: true })
+      fs.renameSync(v.approved_file, path.join(hold, path.basename(v.approved_file)))
+      status = 'awaiting-owner'
+    }
+    out.order = { id: newId('o'), ts: now(), cycle: cycleId, initiative: p.initiativeId, name, hypothesis: out.hypothesis, proposal: path.basename(v.approved_file), book: `shadow-${path.basename(v.approved_file, '.json')}`, kind: 'paper', status, pImprove: round(v.p_improve, 4), required: round(v.required_confidence, 5), audit: out.checks.audit ?? null, issuedBy: co.read().ceo }
   } else if (!out.reasons.length) {
     out.reasons.push('the validator approved but wrote no approved file')
   } else if (v?.approved_file) {
@@ -468,13 +479,20 @@ export async function gate(co, api, p, { cycleId, charter, facts }) {
 function finish(co, out, cycleId) {
   co.update(s => {
     const i = s.initiatives.find(x => x.id === out.initiativeId)
+    const waiting = out.order?.status === 'awaiting-owner'
     if (out.order) s.orders.push(out.order)
+    if (waiting) {
+      const o = out.order
+      co.addDecision(s, { from: s.ceo, cycle: cycleId, kind: 'execute', order: o.id,
+        question: `Start executing "${o.name}"? It passed verification: P(better) ${o.pImprove} against a required ${o.required}${o.audit ? ', and the independent audit found no fatal objection' : ''}. Starting means it runs as paper book ${o.book}; no real money is involved.`,
+        options: ['Start', 'Do not start'], recommendation: 'Start', why: o.hypothesis })
+    }
     if (i) {
       i.gate = { ts: now(), cycle: cycleId, name: out.name, passed: out.passed, reasons: out.reasons, pImprove: out.pImprove ?? null }
-      if (out.passed) { i.stage = 'paper'; i.confidence = out.pImprove; i.confidenceBasis = 'validator P(better) on the holdout' }
-      i.history.push({ ts: now(), cycle: cycleId, stage: i.stage, note: out.passed ? `gate passed: paper book ${out.order.book}` : `gate failed: ${clip(out.reasons.join('; '), 300)}` })
+      if (out.passed) { i.stage = waiting ? 'gate' : 'paper'; i.awaitingOwner = waiting || undefined; i.confidence = out.pImprove; i.confidenceBasis = 'validator P(better) on the holdout' }
+      i.history.push({ ts: now(), cycle: cycleId, stage: i.stage, note: out.passed ? (waiting ? `gate passed: waiting for the owner's approval to start paper book ${out.order.book}` : `gate passed: paper book ${out.order.book}`) : `gate failed: ${clip(out.reasons.join('; '), 300)}` })
     }
   })
-  if (out.order) co.ledger({ kind: 'order', usd: 0, note: `paper execution order ${out.order.book}`, cycle: cycleId })
+  if (out.order) co.ledger({ kind: 'order', usd: 0, note: out.order.status === 'awaiting-owner' ? `verified, waiting for the owner: ${out.order.book}` : `paper execution order ${out.order.book}`, cycle: cycleId })
   return out
 }

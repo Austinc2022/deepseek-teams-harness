@@ -226,6 +226,23 @@ sources ──> trigger ──> super agent decides (tools only) ──┬─> t
 
 State is in `forge/super-agent/` (excluded from git).
 
+
+### Seeing what it does, and letting its work reach the engine
+
+The Company page shows, top to bottom: **Goal and progress** (a ladder of eight steps measured by code where code can
+measure them, paper profit per day against the target, and the effort spent), **Right now** (who is working on what,
+and the last decisions with their reasons), the **Plan** each super agent must keep current (focus, priorities, to-do
+list, blockers, what it needs from you), the **Organisation** (click anyone for its role, who it reports to, what it
+is doing, its recent work and cost) and one **Timeline** you can filter by individual or look back in.
+
+- **Engine runner.** `./super-cli engine on` (or the button on the page) starts the dry-run chain bot, the collector
+  and the paper daemon and restarts them when they stop. It refuses to start the chain bot unless its config is dry-run.
+- **Engine changes.** A worker cannot touch the engine. It delivers a patch; the super agent submits it; code checks
+  that it only touches `quantcore/`, `config/` and `tests/` and loosens no loss limit; the independent auditor reads
+  it; you answer Install or Do not install; then it is tested on a copy, applied with a backup and rolled back when the
+  engine's tests fail.
+- `./super-cli plan` prints the goal ladder, every plan and what is running now.
+
 ## Company: a CEO over departments, with a budget and a gate
 
 The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.

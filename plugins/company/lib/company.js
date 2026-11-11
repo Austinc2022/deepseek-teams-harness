@@ -28,6 +28,7 @@ export const DEFAULT_CHARTER = {
   rules: [
     'Report honest odds. $1,000 a day to $10,000,000 a day is a 10,000x daily return; say plainly how likely each step is and what evidence supports it.',
     'No execution without evidence: an initiative is executed only after it passes the deterministic gate (holdout validation with trial-adjusted significance, safety invariants) and an independent audit.',
+    'No execution without the owner: when a proposal passes the gate the CEO asks the owner, and nothing starts until the owner answers Start.',
     'Every proposal sent to the validator raises the significance bar for all later ones. Submit few, well-argued proposals.',
     'Agents are read-only. They never edit config, place, size or close orders, clear the kill switch, or touch the freqtrade bot on port 8080. Deterministic code does the acting.',
     'Paper first. Real-money trading is not built; asking for it is a decision only the owner can make.',
@@ -46,6 +47,7 @@ export const DEFAULT_CHARTER = {
     minConfidence: 0.95, // floor on P(better); the validator's own trial-adjusted bar applies on top
   },
   hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 }, // auto | observe (ask the owner) | off
+  execution: { ownerApproval: true }, // a proposal that passed the gate starts only after the owner says Start
   autopilot: { enabled: false, everyHours: 6 },
   models: { lead: 'deepseek-v4-pro', worker: 'deepseek-flash', auditor: 'opus' },
 }
@@ -69,7 +71,7 @@ export class Company {
     let s
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { s = {} }
     s.charter = { ...DEFAULT_CHARTER, ...(s.charter ?? {}) }
-    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
+    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
     for (const k of ['departments', 'initiatives', 'decisions', 'hires', 'orders', 'cycles', 'builds']) s[k] ??= []
     s.days ??= {}
     return s
@@ -244,6 +246,7 @@ export class Company {
         c.hiring.maxPerDay = num(patch.hiring.maxPerDay, 0, 20, c.hiring.maxPerDay)
         c.hiring.maxAgents = num(patch.hiring.maxAgents, 1, 200, c.hiring.maxAgents)
       }
+      if (patch.execution?.ownerApproval !== undefined) c.execution.ownerApproval = patch.execution.ownerApproval !== false
       if (patch.gate) {
         c.gate.maxProposalsPerCycle = num(patch.gate.maxProposalsPerCycle, 0, 5, c.gate.maxProposalsPerCycle)
         c.gate.minConfidence = num(patch.gate.minConfidence, 0.5, 0.9999, c.gate.minConfidence)
@@ -277,7 +280,29 @@ export class Company {
         else this.update(s => { const h = s.hires.find(x => x.id === rec.id); if (h) { h.status = 'declined'; delete h.def } })
       }
     }
+    if (d.kind === 'execute') this.#resolveOrder(d.order, /^start$/i.test(d.choice))
     return d
+  }
+
+  /** The owner's answer on a verified proposal: Start moves it to proposals/approved/ (the paper daemon runs it). */
+  #resolveOrder(orderId, start) {
+    const o = this.read().orders.find(x => x.id === orderId)
+    if (!o || o.status !== 'awaiting-owner') return
+    const held = path.join(QUANT, 'proposals', 'awaiting-owner', o.proposal)
+    const dest = start ? path.join(QUANT, 'proposals', 'approved', o.proposal) : path.join(QUANT, 'proposals', 'done', `declined-by-owner-${o.proposal}`)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.renameSync(held, dest)
+    this.update(s => {
+      const x = s.orders.find(y => y.id === orderId)
+      x.status = start ? 'active' : 'declined'; x.decidedAt = now()
+      const i = s.initiatives.find(y => y.id === x.initiative)
+      if (i) {
+        delete i.awaitingOwner
+        if (start) i.stage = 'paper'
+        i.history.push({ ts: now(), stage: i.stage, note: start ? `the owner approved: paper book ${x.book} started` : 'the owner declined to start it' })
+      }
+    })
+    this.ledger({ kind: 'order', usd: 0, note: start ? `owner approved: paper execution order ${o.book}` : `owner declined ${o.book}` })
   }
 
   /** Mark a build request as accepted, done or dropped (the owner or a developer does the building). */
