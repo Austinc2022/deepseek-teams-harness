@@ -215,8 +215,8 @@ export function timeline(sa, { who: w, before, limit = 150 } = {}) {
   for (const o of c.orders) add(o.ts, ['company', 'gate', o.issuedBy], 'passed verification', `${o.proposal}: P(better) ${o.pImprove}, required ${o.required}; ${o.status ?? 'active'}`)
   for (const b of c.builds) add(b.ts, [b.department, depLead(b.department), 'company'], 'build request', `${b.title} (${b.status})`)
   // an ordinary agent's own turns only when asked for that agent, or they would drown everything else
-  if (w && !ev.some(e => e.who.includes(w))) for (const r of runRows(sa).filter(x => x.agent === w)) add(r.endedAt ?? r.startedAt, [r.agent], `turn: ${r.status}`, `${r.label} in "${r.run}"${r.tools ? `, ${r.tools} tool calls` : ''}${r.costUsd ? `, $${r.costUsd}` : ''}`, { run: r.runId, file: r.file })
-  else if (w) for (const r of runRows(sa).filter(x => x.agent === w).slice(0, 30)) add(r.endedAt ?? r.startedAt, [r.agent], `turn: ${r.status}`, `${r.label} in "${r.run}"${r.tools ? `, ${r.tools} tool calls` : ''}${r.costUsd ? `, $${r.costUsd}` : ''}`, { run: r.runId, file: r.file })
+  if (w && !ev.some(e => e.who.includes(w))) for (const r of runRows(sa).filter(x => x.agent === w)) add(r.endedAt ?? r.startedAt, [r.agent], `turn: ${r.status}`, `${r.label} in "${r.run}"${r.tools ? `, ${r.tools} tool calls` : ''}`, { run: r.runId, file: r.file })
+  else if (w) for (const r of runRows(sa).filter(x => x.agent === w).slice(0, 30)) add(r.endedAt ?? r.startedAt, [r.agent], `turn: ${r.status}`, `${r.label} in "${r.run}"${r.tools ? `, ${r.tools} tool calls` : ''}`, { run: r.runId, file: r.file })
   let out = ev
   if (w) out = out.filter(e => e.who.includes(w))
   if (before) out = out.filter(e => e.ts <= before)

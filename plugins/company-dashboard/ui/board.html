@@ -73,56 +73,73 @@ ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .facts div { display: flex; flex-direction: column }
 .facts .v { font: 600 18px/1.2 var(--mono); font-variant-numeric: tabular-nums }
 #tip { position: fixed; z-index: 5; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: 12px; white-space: pre-line; max-width: 320px }
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px }
+.crumbs button { font: inherit; border: 0; background: none; color: var(--info); cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px }
+.crumbs span.cur { font-weight: 650 }
+.treewrap { overflow-x: auto; padding-bottom: 6px }
+.tree { display: inline-block; min-width: 100% }
+.tree ul { display: flex; flex-direction: row; gap: 0; justify-content: center; align-items: flex-start; list-style: none; margin: 0; padding: 18px 0 0; position: relative }
+.tree > ul { padding-top: 0 }
+.tree li { display: flex; flex-direction: column; align-items: center; position: relative; padding: 18px 4px 0 }
+.tree > ul > li { padding-top: 0 }
+.tree li::before, .tree li::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 18px; border-top: 1px solid var(--muted) }
+.tree li::after { right: auto; left: 50%; border-left: 1px solid var(--muted) }
+.tree li:only-child::before, .tree li:only-child::after { border-top: 0 }
+.tree li:first-child::before, .tree li:last-child::after { border-top: 0 }
+.tree li:last-child::before { border-right: 1px solid var(--muted) }
+.tree li:last-child::after { border-left: 0 }
+.tree > ul > li::before, .tree > ul > li::after { display: none }
+.tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 18px; border-left: 1px solid var(--muted) }
+.node { font: inherit; color: var(--ink); text-align: left; width: 162px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; position: relative }
+.node:hover { border-color: var(--muted) } .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.node.working { border-color: var(--info); box-shadow: 0 0 0 1px var(--info) }
+.node.blocked { border-color: var(--bad) }
+.node.you { cursor: default; background: var(--soft); width: auto; align-items: center; padding: 6px 14px }
+.node .nt { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between; gap: 6px }
+.node .nm { font-weight: 650; overflow-wrap: anywhere; line-height: 1.25 }
+.node .wk { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em }
+.node .kp { font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums }
+.node svg { display: block }
+#view { display: flex; flex-direction: column; gap: 16px }
+.steps { display: grid; grid-template-columns: repeat(8, minmax(96px, 1fr)); gap: 0; overflow-x: auto; padding-bottom: 4px }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: relative; padding: 0 6px; font-size: 12px }
+.step::before { content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 3px; background: var(--soft) }
+.step:first-child::before { display: none }
+.step.done::before, .step.next::before { background: var(--s3) }
+.step .dot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font: 600 13px var(--mono); background: var(--panel); border: 2px solid var(--line); color: var(--muted); position: relative; z-index: 1 }
+.step.done .dot { background: var(--s3); border-color: var(--s3); color: #fff }
+.step.next .dot { border-color: var(--accent); color: var(--ink) }
+.step .st { font-weight: 600 } .step.later .st { color: var(--muted); font-weight: 400 }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); align-items: center }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px }
+.heat { display: grid; gap: 2px; align-items: center; font-size: 11px; color: var(--muted) }
+.heat .c { height: 18px; border-radius: 3px; background: var(--soft) }
+.heat .l { padding-right: 8px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.heat .h { text-align: center; font-size: 10px }
+.title { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center }
+.title h1 { font-size: 22px }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(880px, calc(100vw - 32px)); max-height: 86vh }
+dialog::backdrop { background: rgba(0, 0, 0, .45) }
+dialog .dh { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel) }
+dialog pre { margin: 0; padding: 14px; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere }
+button.link { font: inherit; border: 0; background: none; padding: 0; color: var(--info); text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
+button.plain { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 4px 10px; border-radius: 6px; cursor: pointer }
+.msg { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; overflow-wrap: anywhere; white-space: pre-wrap }
+.msg .by { font-size: 12px; color: var(--muted); white-space: normal }
+.rows { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow: auto }
+.md-pre { max-height: 240px; overflow: auto; background: var(--soft); border-radius: 6px; padding: 8px; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div><h1>Company dashboard</h1><p id="mission">Loading…</p></div>
+    <div><nav class="crumbs" id="crumbs" aria-label="Where you are"></nav><p id="mission" class="small">Loading…</p></div>
     <span class="small muted"><span id="at"></span> · <a href="./">Open the desk to act</a></span>
   </header>
-
-  <section class="kpis" id="kpis"></section>
-
-  <section class="panel">
-    <div class="head"><h2>Business units: what each is working on</h2><span class="small muted" id="unitCount"></span></div>
-    <div class="units" id="units"></div>
-  </section>
-
-  <section class="panel">
-    <div class="head"><h2>When each unit worked</h2>
-      <span class="seg" role="group" aria-label="Time range"><button data-h="6">6 h</button><button data-h="24" aria-pressed="true">24 h</button><button data-h="72">3 d</button><button data-h="168">7 d</button></span></div>
-    <div class="chart" id="gantt"></div>
-    <details><summary>Numbers</summary><div id="ganttT"></div></details>
-  </section>
-
-  <section class="panel">
-    <div class="head"><h2>What happens next</h2><span class="small muted" id="nextAt"></span></div>
-    <div class="grid3" id="next"></div>
-  </section>
-
-  <div class="grid2">
-    <section class="panel"><div class="head"><h3>Goal progress over time</h3><span class="small muted">% of the 8 ladder steps</span></div><div class="chart" id="cProgress"></div><details><summary>Numbers</summary><div id="tProgress"></div></details></section>
-    <section class="panel"><div class="head"><h3>Money over time</h3><span class="small muted">USD measured by code (nothing is counted before it is real)</span></div><div class="chart" id="cPnl"></div><details><summary>Numbers</summary><div id="tPnl"></div></details></section>
-    <section class="panel"><div class="head"><h3>Spend per day</h3><span class="small muted">model spend, USD</span></div><div class="chart" id="cSpend"></div><details><summary>Numbers</summary><div id="tDays"></div></details></section>
-    <section class="panel"><div class="head"><h3>Provider balance</h3><span class="small muted">USD; empty when agents run on a subscription</span></div><div class="chart" id="cBalance"></div></section>
-  </div>
-
-  <section class="panel">
-    <div class="head"><h2>Daily operation</h2><span class="small muted">per day, last 30 days</span></div>
-    <div class="grid3">
-      <div><h3>Tickets delivered</h3><div class="chart" id="cDelivered"></div></div>
-      <div><h3>Worker turns</h3><div class="chart" id="cTurns"></div></div>
-      <div><h3>Decisions by super agents</h3><div class="chart" id="cDecisions"></div></div>
-    </div>
-    <div class="facts" id="ops"></div>
-  </section>
-
-  <div class="grid2">
-    <section class="panel"><div class="head"><h3>Ideas by stage</h3><span class="small muted">only the gate moves an idea to the last stage</span></div><div class="chart" id="cFunnel"></div></section>
-    <section class="panel"><div class="head"><h3>Model usage by business unit</h3><span class="small muted">share of all recorded usage</span></div><div class="chart" id="cCost"></div></section>
-  </div>
+  <div id="view"></div>
 </div>
+<dialog id="dlg"><div class="dh"><strong id="dlgT"></strong><button class="plain" id="dlgX">Close</button></div><pre id="dlgB"></pre></dialog>
 <div id="tip" hidden></div>
 
 <script>
@@ -132,7 +149,9 @@ const usd = (n, d = 2) => n == null || Number.isNaN(Number(n)) ? '–' : '$' + N
 const when = t => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
 const ago = t => { if (!t) return 'never'; const m = Math.max(0, Math.round((Date.now() - new Date(t)) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago' }
 const until = t => { const m = Math.round((new Date(t) - Date.now()) / 60000); return m <= 0 ? 'due now' : m < 60 ? 'in ' + m + ' min' : 'in ' + (m / 60).toFixed(1) + ' h' }
-let B = null, hours = 24
+const pc = v => v == null ? '–' : Math.round(v * 100) + '%'
+const mn = v => v == null ? '–' : v < 1 ? Math.max(1, Math.round(v * 60)) + ' s' : v < 90 ? Math.round(v) + ' min' : (v / 60).toFixed(1) + ' h'
+let B = null, E = null, hours = 24, lastHTML = ''
 
 async function api(path) {
   const r = await fetch('api/' + path, { headers: { 'x-company-request': '1' } })
@@ -216,58 +235,141 @@ function gantt(el, A) {
         <text class="v" x="${w - R + 8}" y="${yy + 12}">${r.busyMin ? r.busyMin + ' min' : '–'}</text>` }).join('')}</svg>`
 }
 
-// ---------------- sections
-const ST = { working: ['info', 'Working now'], waiting: ['', 'Waiting for an event'], queued: ['info', 'Work queued'], blocked: ['bad', 'Blocked'], idle: ['', 'Idle'] }
-function render() {
+
+/** Two series side by side per day, with a legend. */
+function bars2(el, rows, names, { h = 150 } = {}) {
+  if (!rows.length || rows.every(r => !r.a && !r.b)) { el.innerHTML = '<p class="empty">Nothing recorded yet.</p>'; return }
+  const w = W(el), L = 30, R = 8, T = 14, Bm = 20, pw = w - L - R, ph = h - T - Bm
+  const max = nice(Math.max(...rows.map(r => Math.max(r.a, r.b)))), step = pw / rows.length, bw = Math.min(12, Math.max(2, step / 2 - 2))
+  const y = v => T + ph - ph * v / max, every = Math.ceil(rows.length / Math.max(2, Math.floor(pw / 46)))
+  const bar = (x, v, c) => { if (!v) return ''; const yy = y(v), bh = T + ph - yy, rad = Math.min(3, bw / 2, bh); return `<path d="M${x} ${T + ph}V${yy + rad}q0 ${-rad} ${rad} ${-rad}h${bw - 2 * rad}q${rad} 0 ${rad} ${rad}V${T + ph}z" fill="${c}"/>` }
+  el.innerHTML = `<div class="legend"><span><i style="background:var(--s1)"></i>${esc(names[0])}</span><span><i style="background:var(--s3)"></i>${esc(names[1])}</span></div>
+  <svg height="${h}" viewBox="0 0 ${w} ${h}" role="img">
+    ${[0, 0.5, 1].map(f => `<line x1="${L}" x2="${w - R}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 6}" y="${y(max * f) + 4}" text-anchor="end">${fmtN(max * f)}</text>`).join('')}
+    ${rows.map((r, i) => { const cx = L + step * i + step / 2
+      return `${bar(cx - bw - 1, r.a, 'var(--s1)')}${bar(cx + 1, r.b, 'var(--s3)')}${i % every === 0 ? `<text x="${cx}" y="${h - 5}" text-anchor="middle">${esc(r.label)}</text>` : ''}<rect class="hit" x="${L + step * i}" y="${T}" width="${step}" height="${ph}" data-tip="${esc(r.tip)}"/>` }).join('')}
+    <line x1="${L}" x2="${w - R}" y1="${T + ph}" y2="${T + ph}" stroke="var(--line)" stroke-width="1"/></svg>`
+}
+const spark = (vals, w = 142, h = 20) => { const max = Math.max(1, ...vals), bw = w / vals.length; return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="0" x2="${w}" y1="${h - .5}" y2="${h - .5}" stroke="var(--line)"/>${vals.map((v, i) => v > 0 ? `<rect x="${i * bw + .5}" y="${h - Math.max(2, (h - 1) * v / max)}" width="${Math.max(1, bw - 1.5)}" height="${Math.max(2, (h - 1) * v / max)}" rx="1" fill="var(--s1)"/>` : '').join('')}</svg>` }
+function heat(el, rows) {
+  const max = Math.max(1, ...rows.flatMap(r => r.spark)), now = new Date()
+  const hr = i => new Date(now.getTime() - (23 - i) * 3600000).getHours()
+  el.style.gridTemplateColumns = `minmax(90px, 170px) repeat(24, minmax(8px, 1fr))`
+  el.innerHTML = rows.map(r => `<div class="l" title="${esc(r.name)}">${esc(r.name)}</div>` + r.spark.map((v, i) => `<div class="c" style="${v > 0 ? `background:color-mix(in srgb, var(--s1) ${Math.round(18 + 82 * Math.min(1, v / Math.min(max, 60)))}%, var(--soft))` : ''}" data-tip="${esc(r.name + '\n' + String(hr(i)).padStart(2, '0') + ':00 to ' + String((hr(i) + 1) % 24).padStart(2, '0') + ':00\n' + v + ' agent-minutes')}"></div>`).join('')).join('') +
+    `<div></div>` + Array.from({ length: 24 }, (_, i) => `<div class="h">${i % 3 === 2 ? String(hr(i)).padStart(2, '0') : ''}</div>`).join('')
+}
+
+// ---------------- org chart
+const ST = { working: ['info', 'Working now'], waiting: ['', 'Waiting'], queued: ['info', 'Queued'], blocked: ['bad', 'Blocked'], idle: ['', 'Idle'] }
+function nodeCard(n) {
+  const s = ST[n.status] || ST.idle
+  return `<button class="node ${n.status}" data-go="${esc(n.ref)}" title="Open ${esc(n.name)}">
+    <span class="nt"><span>${esc(n.role === 'lead' ? 'Lead' : n.type)}</span><span class="pill ${s[0]}" style="font-size:10px;padding:0 6px">${s[1]}</span></span>
+    <span class="nm">${esc(n.name)}</span>
+    <span class="wk">${esc(n.work || (n.sub ? n.sub : ''))}</span>
+    ${spark(n.spark)}
+    <span class="kp">${n.turnsToday} turns · ${n.min24} min · ${Math.round(n.share * 100)}%${n.people ? ' · ' + n.people + ' agents' : ''}</span></button>`
+}
+function treeHTML(keys, depth, stopTypes = []) {
+  const kids = k => B.tree.filter(n => n.parent === k)
+  const li = (n, d) => { const ch = d > 0 && !stopTypes.includes(n.type) ? kids(n.key) : []; return `<li>${nodeCard(n)}${ch.length ? `<ul>${ch.map(c => li(c, d - 1)).join('')}</ul>` : ''}</li>` }
+  return keys.map(k => li(B.tree.find(n => n.key === k), depth)).join('')
+}
+const treeLegend = `<div class="legend"><span>Each box: status, current work, activity over the last 24 hours, then turns today · minutes worked in 24 h · share of all model usage.</span><span>Click a box to go inside.</span></div>`
+
+// ---------------- overview
+function overview() {
   const g = B.goal, m = B.money, h = B.health
-  $('mission').textContent = g.mission
-  $('at').textContent = 'updated ' + when(B.at)
   const ok = h.loop && !h.hold && h.engineOk
-  $('kpis').innerHTML = `
+  const roots = B.tree.filter(n => n.parent === null).map(n => n.key)
+  const top = B.tree.filter(n => ['Super agent', 'Company CEO', 'Assurance', 'Department', 'Builders'].includes(n.type))
+  const n = B.next, p = n.plan
+  return `
+  <section class="kpis">
     <div class="panel kpi"><h2>Goal progress</h2><div class="big">${g.percent}%</div><div class="bar"><i style="width:${g.percent}%"></i></div><div class="small muted">${g.done} of ${g.total} steps${g.next ? ' · next: ' + esc(g.next.title) : ''}</div></div>
     <div class="panel kpi"><h2>${esc(g.money.label || 'Paper profit per day')}</h2><div class="big">${usd(g.money.paperProfitPerDayUsd)}</div><div class="small muted">target ${usd(g.money.targetDailyUsd, 0)} · ${(g.money.shareOfTarget * 100).toFixed(4)}% reached · ${esc(g.money.basis)}</div></div>
     <div class="panel kpi"><h2>Spend and runway</h2><div class="big">${usd(m.spentTodayUsd)} <span class="small muted">today</span></div><div class="small muted">balance ${usd(m.balanceUsd)} · recent ${usd(m.burnPerDayUsd)} a day · ${m.runwayDays == null ? 'no runway estimate yet' : 'about ' + m.runwayDays + ' days left above the reserve'}</div></div>
-    <div class="panel kpi"><h2>Operation</h2><div><span class="pill ${ok ? 'good' : 'bad'}">${ok ? 'Running' : !h.loop ? 'Loop stopped' : h.hold ? 'On hold' : 'Engine down'}</span></div>
-      <div class="small muted">${h.hold ? esc(h.hold) + '. ' : ''}${h.hasEngine === false ? '' : `Engine ${h.engineOk ? 'and data running' : 'not running'}${h.engineKept ? ' (kept running)' : ''} · `}autopilot ${h.autopilot ? 'on' : 'off'} · proactive ${h.proactive ? 'on' : 'off'}${h.engineNote ? ' · ' + esc(h.engineNote) : ''}</div></div>`
+    <div class="panel kpi"><h2>Operation</h2><div><span class="pill ${ok ? 'good' : 'bad'}">${ok ? 'Running' : !h.loop ? 'Loop stopped' : h.hold ? 'On hold' : 'Engine down'}</span> <span class="pill ${B.tree.some(x => x.status === 'working') ? 'info' : ''}">${top.filter(x => x.status === 'working').length} of ${top.length} units working</span></div>
+      <div class="small muted">${h.hold ? esc(h.hold) + '. ' : ''}${h.hasEngine === false ? '' : `Engine ${h.engineOk ? 'and data running' : 'not running'}${h.engineKept ? ' (kept running)' : ''} · `}autopilot ${h.autopilot ? 'on' : 'off'} · proactive ${h.proactive ? 'on' : 'off'}${h.engineNote ? ' · ' + esc(h.engineNote) : ''}</div></div>
+  </section>
 
-  const working = B.units.filter(u => u.status === 'working').length
-  $('unitCount').textContent = `${B.units.length} units · ${working} working now`
-  $('units').innerHTML = B.units.map(u => { const s = ST[u.status] || ST.idle
-    return `<div class="unit ${u.status === 'working' ? 'working' : ''}"><div class="t"><strong>${esc(u.name)}</strong><span class="pill ${s[0]}">${s[1]}</span></div>
-      <div class="small muted">${esc(u.type)}${u.lead ? ' · ' + esc(u.lead) : ''}${u.teams ? ' · ' + u.teams.length + ' teams' : ''}</div>
-      <div class="w">${esc(u.work || '')}</div>
-      ${u.doing ? `<div class="small"><strong>Now:</strong> ${esc(u.doing)}</div>` : ''}
-      ${u.detail ? `<div class="small muted">${esc(u.detail)}</div>` : ''}
-      <div class="small muted num">${u.turnsToday} turns today · last active ${ago(u.lastActive)}</div></div>` }).join('')
+  <section class="panel">
+    <div class="head"><h2>Organisation: who is doing what</h2><span class="small muted">${B.tree.filter(x => x.type === 'Agent').map(x => x.ref).filter((x, i, a) => a.indexOf(x) === i).length} agents in ${B.tree.filter(x => x.type === 'Team').length} teams and ${B.tree.filter(x => x.type === 'Department').length} departments</span></div>
+    ${treeLegend}
+    <div class="treewrap"><div class="tree"><ul><li><span class="node you"><strong>You</strong><span class="small muted">set the goal · approve what starts</span></span><ul>${treeHTML(roots, 3, ['Department', 'Builders'])}</ul></li></ul></div></div>
+  </section>
 
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Activity by hour, last 24 hours</h3><span class="legend"><span>less</span><i style="background:color-mix(in srgb, var(--s1) 18%, var(--soft))"></i><i style="background:color-mix(in srgb, var(--s1) 55%, var(--soft))"></i><i style="background:var(--s1)"></i><span>more agent-minutes</span></span></div><div class="heat" id="heat"></div></section>
+    <section class="panel"><div class="head"><h3>Work done in 24 hours, by unit</h3><span class="small muted">agent-minutes</span></div><div class="chart" id="cLoad"></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="head"><h2>When each unit worked</h2>${rangeButtons()}</div>
+    <div class="chart" id="gantt"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>What happens next</h2><span class="small muted">${n.nextCycle ? 'next company cycle ' + until(n.nextCycle) + ' (' + when(n.nextCycle) + ')' : 'autopilot is off: no cycle is scheduled'}</span></div>
+    <div class="grid3">
+      <div><h3>In motion</h3>${n.running.length ? `<ul>${n.running.map(r => `<li><strong>${esc(r.who)}</strong>: ${esc(r.what)} <span class="small muted">(${ago(r.since)})</span></li>`).join('')}</ul>` : `<p>${esc(n.idle || 'Nothing is running.')}</p>`}
+        <p class="small muted" style="margin-top:6px">${n.queuedEvents} event(s) and ${n.queuedTickets} ticket(s) queued.</p>
+        <h3 style="margin-top:10px">Needs you</h3>${n.needsYou.length ? `<ul>${n.needsYou.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : '<p class="muted">Nothing is waiting for you.</p>'}</div>
+      <div><h3>The CEO's priorities</h3>${p ? `<p class="small muted">updated ${ago(p.updatedAt)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong><br><span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol>${p.blockers.length ? `<h3 style="margin-top:10px">Blocked by</h3><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}` : '<p class="muted">The CEO has not written a plan yet.</p>'}</div>
+      <div><h3>Next on the to-do list</h3>${p && p.todo.length ? `<ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="muted">Nothing listed.</p>'}
+        <h3 style="margin-top:10px">Outlook</h3><ul>${n.forecast.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>
+    </div>
+  </section>
+
+  <section class="panel"><div class="head"><h2>The goal ladder</h2><span class="small muted">${g.done} of ${g.total} done</span></div><div class="steps">${g.steps.map((x, i) => { const cls = x.done ? 'done' : g.next && g.next.key === x.key ? 'next' : 'later'; return `<div class="step ${cls}" data-tip="${esc(x.title + '\n' + x.how + '\n' + x.detail)}"><span class="dot">${x.done ? '✓' : i + 1}</span><span class="st">${esc(x.title)}</span><span class="small muted">${x.done ? 'done' : cls === 'next' ? 'next' : 'later'}</span></div>` }).join('')}</div>${g.next ? `<p class="small muted">Next: ${esc(g.next.title)}. ${esc(g.next.detail)}</p>` : ''}</section>
+
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Goal progress over time</h3><span class="small muted">% of the 8 ladder steps</span></div><div class="chart" id="cProgress"></div></section>
+    <section class="panel"><div class="head"><h3>Money over time</h3><span class="small muted">USD measured by code (nothing is counted before it is real)</span></div><div class="chart" id="cPnl"></div></section>
+    <section class="panel"><div class="head"><h3>Spend per day</h3><span class="small muted">model spend, USD</span></div><div class="chart" id="cSpend"></div></section>
+    <section class="panel"><div class="head"><h3>Provider balance</h3><span class="small muted">USD; empty when agents run on a subscription</span></div><div class="chart" id="cBalance"></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="head"><h2>Daily operation</h2><span class="small muted">per day, last 30 days</span></div>
+    <div class="grid3">
+      <div><h3>Tickets opened and delivered</h3><div class="chart" id="cTickets"></div></div>
+      <div><h3>Worker turns</h3><div class="chart" id="cTurns"></div></div>
+      <div><h3>Decisions by super agents</h3><div class="chart" id="cDecisions"></div></div>
+      <div><h3>Agent turns, whole company</h3><div class="chart" id="cAllTurns"></div></div>
+      <div><h3>Ideas opened and killed</h3><div class="chart" id="cIdeas"></div></div>
+      <div><h3>Company cycles</h3><div class="chart" id="cCycles"></div></div>
+    </div>
+    <div class="facts" id="ops"></div>
+    <details><summary>Numbers per day</summary><div id="tDays"></div></details>
+  </section>
+
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Ideas by stage</h3><span class="small muted">only the gate moves an idea to the last stage</span></div><div class="chart" id="cFunnel"></div></section>
+    <section class="panel"><div class="head"><h3>Model usage by unit</h3><span class="small muted">share of all recorded usage</span></div><div class="chart" id="cCost"></div></section>
+  </div>`
+}
+const rangeButtons = () => `<span class="seg" role="group" aria-label="Time range">${[[6, '6 h'], [24, '24 h'], [72, '3 d'], [168, '7 d']].map(([v, l]) => `<button data-h="${v}" aria-pressed="${hours === v}">${l}</button>`).join('')}</span>`
+const SLx = () => (B.profile && B.profile.stageLabels) || {}, GATED = () => B.profile ? B.profile.gatedStage : 'paper'
+function overviewCharts() {
+  const g = B.goal, top = B.tree.filter(n => ['Super agent', 'Company CEO', 'Assurance', 'Department', 'Builders'].includes(n.type))
+  heat($('heat'), top)
+  hbars($('cLoad'), top.slice().sort((a, b) => b.min24 - a.min24).map(u => ({ label: u.name, value: u.min24, tip: `${u.name}\n${u.min24} agent-minutes in 24 h · ${u.turnsToday} turns today` })), { fmt: v => v + ' min' })
   gantt($('gantt'), B.activity)
-  $('ganttT').innerHTML = table(['Unit', 'Minutes worked', 'Work periods'], B.activity.rows.map(r => [r.name, r.busyMin, r.spans.length]))
-
-  const n = B.next, p = n.plan
-  $('nextAt').textContent = n.nextCycle ? 'next company cycle ' + until(n.nextCycle) + ' (' + when(n.nextCycle) + ')' : 'autopilot is off: no cycle is scheduled'
-  $('next').innerHTML = `
-    <div><h3>In motion</h3>${n.running.length ? `<ul>${n.running.map(r => `<li><strong>${esc(r.who)}</strong>: ${esc(r.what)} <span class="small muted">(${ago(r.since)})</span></li>`).join('')}</ul>` : `<p>${esc(n.idle || 'Nothing is running.')}</p>`}
-      <p class="small muted" style="margin-top:6px">${n.queuedEvents} event(s) and ${n.queuedTickets} ticket(s) queued.</p>
-      <h3 style="margin-top:10px">Needs you</h3>${n.needsYou.length ? `<ul>${n.needsYou.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : '<p class="muted">Nothing is waiting for you.</p>'}</div>
-    <div><h3>The CEO's priorities</h3>${p ? `<p class="small muted">updated ${ago(p.updatedAt)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong><br><span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol>
-      ${p.blockers.length ? `<h3 style="margin-top:10px">Blocked by</h3><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}` : '<p class="muted">The CEO has not written a plan yet.</p>'}</div>
-    <div><h3>Next on the to-do list</h3>${p && p.todo.length ? `<ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="muted">Nothing listed.</p>'}
-      <h3 style="margin-top:10px">Outlook</h3><ul>${n.forecast.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
-
   const H = B.history
   line($('cProgress'), H.map(x => ({ t: x.ts, v: x.percent })), { step: true, fmt: v => Math.round(v) + '%', max: 100 })
-  $('tProgress').innerHTML = table(['When', 'Progress'], H.slice(-12).reverse().map(x => [when(x.ts), x.percent + '%']))
   line($('cPnl'), H.map(x => ({ t: x.ts, v: x.booksPnlUsd })), { color: 'var(--s3)', fmt: v => usd(v) })
-  $('tPnl').innerHTML = table(['When', 'Money'], H.slice(-12).reverse().map(x => [when(x.ts), usd(x.booksPnlUsd)]))
   line($('cBalance'), H.filter(x => x.balanceUsd != null).map(x => ({ t: x.ts, v: x.balanceUsd })), { color: 'var(--s4)', fmt: v => usd(v, 0) })
   const D = B.days, dl = d => d.date.slice(5)
   bars($('cSpend'), D.map(d => ({ label: dl(d), value: d.spendUsd, tip: `${d.date}\n${usd(d.spendUsd)} · ${d.cycles} cycles` })), { color: 'var(--s2)', fmt: v => '$' + fmtN(v) })
-  $('tDays').innerHTML = table(['Day', 'Spend', 'Cycles', 'Tickets opened', 'Delivered', 'Worker turns', 'Decisions', 'New ideas', 'Killed'], D.slice().reverse().map(d => [d.date, usd(d.spendUsd), d.cycles, d.ticketsOpened, d.ticketsDelivered, d.workerTurns, d.decisions, d.ideasNew, d.ideasKilled]))
-  bars($('cDelivered'), D.map(d => ({ label: dl(d), value: d.ticketsDelivered, tip: `${d.date}\n${d.ticketsDelivered} delivered of ${d.ticketsOpened} opened` })), { color: 'var(--s3)', h: 130 })
+  bars2($('cTickets'), D.map(d => ({ label: dl(d), a: d.ticketsOpened, b: d.ticketsDelivered, tip: `${d.date}\n${d.ticketsOpened} opened · ${d.ticketsDelivered} delivered` })), ['Opened', 'Delivered'], { h: 130 })
   bars($('cTurns'), D.map(d => ({ label: dl(d), value: d.workerTurns })), { h: 130 })
   bars($('cDecisions'), D.map(d => ({ label: dl(d), value: d.decisions })), { h: 130 })
-
-  const o = B.ops, pc = v => v == null ? '–' : Math.round(v * 100) + '%', mn = v => v == null ? '–' : v < 1 ? Math.max(1, Math.round(v * 60)) + ' s' : v < 90 ? Math.round(v) + ' min' : (v / 60).toFixed(1) + ' h'
+  bars($('cAllTurns'), D.map(d => ({ label: dl(d), value: d.turns })), { h: 130, color: 'var(--s4)' })
+  bars2($('cIdeas'), D.map(d => ({ label: dl(d), a: d.ideasNew, b: d.ideasKilled, tip: `${d.date}\n${d.ideasNew} opened · ${d.ideasKilled} killed` })), ['Opened', 'Killed'], { h: 130 })
+  bars($('cCycles'), D.map(d => ({ label: dl(d), value: d.cycles })), { h: 130, color: 'var(--s2)' })
+  $('tDays').innerHTML = table(['Day', 'Spend', 'Cycles', 'Tickets opened', 'Delivered', 'Worker turns', 'Decisions', 'Agent turns', 'New ideas', 'Killed'], D.slice().reverse().map(d => [d.date, usd(d.spendUsd), d.cycles, d.ticketsOpened, d.ticketsDelivered, d.workerTurns, d.decisions, d.turns, d.ideasNew, d.ideasKilled]))
+  const o = B.ops
   $('ops').innerHTML = [
     ['Tickets delivered', `${o.ticketsDelivered} of ${o.ticketsEnded}`, `${pc(o.deliveredRate)} of finished tickets · ${o.ticketsOpen} open`],
     ['Time to deliver a ticket', mn(o.medianTicketMin), 'median, open to delivered'],
@@ -277,22 +379,119 @@ function render() {
     ['Company cycle', mn(o.cycleAvgMin), `average · ${usd(o.cycleAvgUsd)} each`],
     ['Verification', `${o.gatePassed} passed`, `${o.gateRuns} gate runs`],
   ].map(([k, v, s]) => `<div><span class="small muted">${esc(k)}</span><span class="v">${esc(v)}</span><span class="small muted">${esc(s)}</span></div>`).join('')
-
-  const SL = (B.profile && B.profile.stageLabels) || {}, GATED = B.profile ? B.profile.gatedStage : 'paper'
-  hbars($('cFunnel'), B.funnel.map(f => ({ label: SL[f.stage] || f.stage, value: f.n, color: f.stage === 'killed' ? 'var(--muted)' : f.stage === GATED ? 'var(--s3)' : 'var(--s1)' })))
+  hbars($('cFunnel'), B.funnel.map(f => ({ label: SLx()[f.stage] || f.stage, value: f.n, color: f.stage === 'killed' ? 'var(--muted)' : f.stage === GATED() ? 'var(--s3)' : 'var(--s1)' })))
   const tot = B.costByUnit.reduce((a, u) => a + u.usd, 0) || 1
   hbars($('cCost'), B.costByUnit.filter(u => u.usd > 0 || u.turns > 0).map(u => ({ label: u.name, value: Math.round(1000 * u.usd / tot) / 10, tip: `${u.name}\n${(100 * u.usd / tot).toFixed(1)}% of usage over ${u.turns} turns` })), { color: 'var(--s2)', fmt: v => v + '%' })
 }
 
-async function load() {
-  try { B = await api('super/board?hours=' + hours); render() } catch (e) { $('mission').textContent = 'Cannot reach the company service: ' + e.message }
+// ---------------- one unit, team or individual
+function entityView() {
+  const e = E, k = e.kpi, d = e.detail || {}, s = ST[e.status] || ST.idle
+  const self = B.tree.find(n => n.ref === e.ref)
+  const hasKids = self && B.tree.some(n => n.parent === self.key)
+  const tiles = [
+    ['Turns today', k.turnsToday, `${k.toolsToday} tool calls`],
+    ['Worked in 24 h', mn(k.min24), 'agent-minutes'],
+    ['Share of model usage', pc(k.share), 'of everything recorded'],
+    ['Turns that completed', pc(k.successRate), `${k.turns} recorded turns`],
+    ['Last active', ago(k.lastActive), k.lastActive ? when(k.lastActive) : ''],
+  ]
+  if (k.people > 1) tiles.push(['People', k.people, 'agents in this unit'])
+  if (k.openInitiatives != null) tiles.push(['Open initiatives', k.openInitiatives, `${k.killed} killed`])
+  if (k.decisions != null) tiles.push(['Decisions', k.decisions, `${k.pending} event(s) waiting`])
+  const p = d.plan
+  return `
+  <section class="panel">
+    <div class="title"><h1>${esc(e.name)}</h1><span class="pill">${esc(e.type)}</span><span class="pill ${s[0]}">${s[1]}</span>${e.sub ? `<span class="small muted">${esc(e.sub)}</span>` : ''}${d.reportsTo ? `<span class="small muted">reports to ${esc(d.reportsTo)}</span>` : ''}</div>
+    ${e.what ? `<p>${esc(e.what)}</p>` : ''}${e.description ? `<p class="muted">${esc(e.description)}</p>` : ''}
+    ${e.doing.length ? `<p><strong>Doing now:</strong> ${esc(e.doing.join(' · '))}</p>` : self && self.work ? `<p><strong>Current work:</strong> ${esc(self.work)}</p>` : ''}
+    <div class="facts">${tiles.map(([a, v, c]) => `<div><span class="small muted">${esc(a)}</span><span class="v">${esc(v)}</span><span class="small muted">${esc(c)}</span></div>`).join('')}</div>
+  </section>
+
+  ${hasKids ? `<section class="panel"><div class="head"><h2>Inside ${esc(e.name)}</h2></div>${treeLegend}<div class="treewrap"><div class="tree"><ul>${treeHTML([self.key], 2)}</ul></div></div></section>` : ''}
+
+  <div class="grid3">
+    <section class="panel"><div class="head"><h3>Activity by hour</h3><span class="small muted">agent-minutes, last 24 h</span></div><div class="chart" id="eHour"></div></section>
+    <section class="panel"><div class="head"><h3>Turns per day</h3><span class="small muted">last 14 days</span></div><div class="chart" id="eTurns"></div></section>
+    <section class="panel"><div class="head"><h3>Time worked per day</h3><span class="small muted">agent-minutes</span></div><div class="chart" id="eMin"></div></section>
+  </div>
+
+  ${e.members.length > 1 ? `<div class="grid2">
+    <section class="panel"><div class="head"><h3>Who did the work, last 24 hours</h3><span class="small muted">agent-minutes</span></div><div class="chart" id="eMemMin"></div></section>
+    <section class="panel"><div class="head"><h3>Turns today, by member</h3></div><div class="chart" id="eMemTurns"></div></section>
+  </div>` : ''}
+
+  <section class="panel"><div class="head"><h2>${e.members.length > 1 ? 'When each member worked' : 'When it worked'}</h2>${rangeButtons()}</div><div class="chart" id="eGantt"></div></section>
+
+  ${e.funnel ? `<div class="grid2"><section class="panel"><div class="head"><h3>Its ideas by stage</h3></div><div class="chart" id="eFunnel"></div></section>
+    <section class="panel"><div class="head"><h3>Its initiatives</h3></div>${(d.initiatives || []).length ? `<ul>${d.initiatives.map(i => `<li><span class="pill">${esc(SLx()[i.stage] || i.stage)}</span> <strong>${esc(i.title)}</strong>${i.confidence != null ? ` <span class="small muted num">confidence ${Math.round(i.confidence * 100)}%</span>` : ''}${i.note ? `<br><span class="small muted">${esc(i.note)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="empty">None yet.</p>'}</section></div>` : ''}
+
+  ${e.decisionsDaily ? `<div class="grid2"><section class="panel"><div class="head"><h3>Decisions per day</h3></div><div class="chart" id="eDec"></div></section>
+    <section class="panel"><div class="head"><h3>Its tickets</h3></div><div class="chart" id="eTk"></div></section></div>
+    <div class="grid2"><section class="panel"><div class="head"><h3>Plan</h3>${p ? `<span class="small muted">updated ${ago(p.updatedAt)}</span>` : ''}</div>${p ? `<p><strong>Focus.</strong> ${esc(p.focus)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong> <span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol><ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : t.status === 'done' ? 'good' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="empty">No plan written yet.</p>'}</section>
+    <section class="panel"><div class="head"><h3>Last decisions and why</h3></div><div class="rows">${(d.decisions || []).map(x => `<div class="msg"><div class="by">${when(x.at)}</div>${esc(x.note)}</div>`).join('') || '<p class="empty">None yet.</p>'}</div></section></div>` : ''}
+
+  ${e.ref === 'workers' || (d.tickets && !e.decisionsDaily) ? `<section class="panel"><div class="head"><h3>Tickets</h3></div>${(d.tickets || []).length ? table(['Ticket', 'State', 'Turns'], d.tickets.map(t => [t.title, t.outcome || t.status, t.turns])) : '<p class="empty">None.</p>'}</section>` : ''}
+
+  <div class="grid2">
+    <section class="panel"><div class="head"><h3>Recent work</h3><span class="small muted">open a row to read the transcript</span></div>${e.recent.length ? `<div class="scroll"><table><tr><th>When</th><th>Who</th><th>Task</th><th>Status</th><th class="r">Tools</th><th></th></tr>${e.recent.map(r => `<tr><td>${when(r.endedAt || r.startedAt)}</td><td>${e.members.length > 1 ? `<button class="link" data-go="agent:${esc(r.agent)}">${esc(r.agent)}</button>` : esc(r.agent)}</td><td>${esc(r.label)}<div class="small muted">${esc(r.run)}</div></td><td><span class="pill ${r.status === 'completed' ? 'good' : r.status === 'failed' ? 'bad' : 'info'}">${esc(r.status)}</span></td><td class="r num">${r.tools}</td><td><button class="link" data-run="${esc(r.runId)}" data-file="${esc(r.file)}">read</button></td></tr>`).join('')}</table></div>` : '<p class="empty">No recorded turn yet.</p>'}</section>
+    <section class="panel"><div class="head"><h3>History</h3></div><div class="rows">${(e.timeline || []).map(x => `<div class="msg"><div class="by">${when(x.ts)} · <strong>${esc(x.kind)}</strong></div>${esc(x.text)}</div>`).join('') || '<p class="empty">Nothing recorded for it yet.</p>'}</div></section>
+  </div>
+
+  ${d.role ? `<section class="panel"><div class="head"><h3>Its instructions, skills and tools</h3><span class="small muted">${esc(d.provider || '')} · ${esc(d.model || '')} · ${d.canWrite ? 'can write and run code in a sandboxed ticket folder' : 'read-only'}</span></div><p class="small">Skills: ${esc((d.skills || []).join(', ') || 'none')} · Tools: ${esc((d.tools || []).join(', ') || 'none')}${(d.teams || []).length ? ' · Teams: ' + esc(d.teams.join(', ')) : ''}</p><pre class="md-pre">${esc(d.role)}</pre></section>` : ''}`
 }
-document.querySelector('.seg').addEventListener('click', e => {
-  const b = e.target.closest('button[data-h]'); if (!b) return
-  hours = Number(b.dataset.h)
-  for (const x of document.querySelectorAll('.seg button')) x.setAttribute('aria-pressed', x === b ? 'true' : 'false')
-  load()
+function entityCharts() {
+  const e = E, now = new Date(), hr = i => String(new Date(now.getTime() - (23 - i) * 3600000).getHours()).padStart(2, '0')
+  bars($('eHour'), e.hourly.map((v, i) => ({ label: hr(i), value: v, tip: `${hr(i)}:00\n${v} agent-minutes` })), { h: 140 })
+  bars($('eTurns'), e.days.map(d => ({ label: d.date.slice(5), value: d.turns, tip: `${d.date}\n${d.turns} turns · ${d.tools} tool calls` })), { h: 140, color: 'var(--s4)' })
+  bars($('eMin'), e.days.map(d => ({ label: d.date.slice(5), value: d.minutes, tip: `${d.date}\n${d.minutes} agent-minutes` })), { h: 140, color: 'var(--s3)' })
+  if (e.members.length > 1) {
+    hbars($('eMemMin'), e.members.slice().sort((a, b) => b.min24 - a.min24).map(m => ({ label: m.name, value: m.min24, tip: `${m.name} (${m.type})\n${m.min24} agent-minutes · ${Math.round(m.share * 100)}% of all usage` })), { fmt: v => v + ' min' })
+    hbars($('eMemTurns'), e.members.slice().sort((a, b) => b.turnsToday - a.turnsToday).map(m => ({ label: m.name, value: m.turnsToday })), { color: 'var(--s4)' })
+  }
+  gantt($('eGantt'), e.activity)
+  if (e.funnel) hbars($('eFunnel'), e.funnel.map(f => ({ label: SLx()[f.stage] || f.stage, value: f.n, color: f.stage === 'killed' ? 'var(--muted)' : f.stage === GATED() ? 'var(--s3)' : 'var(--s1)' })))
+  if (e.decisionsDaily) { bars($('eDec'), e.decisionsDaily.map(d => ({ label: d.date.slice(5), value: d.n })), { h: 140 }); hbars($('eTk'), e.ticketOutcomes.map(t => ({ label: t.label, value: t.n })), { color: 'var(--s3)' }) }
+}
+
+// ---------------- routing and loading
+const route = () => decodeURIComponent(location.hash.slice(1)) || 'company'
+function crumbs() {
+  const list = route() === 'company' || !E ? [{ ref: 'company', name: 'Company dashboard' }] : E.crumbs.map((c, i) => (i === 0 ? { ref: 'company', name: 'Company dashboard' } : c))
+  $('crumbs').innerHTML = list.map((c, i) => i === list.length - 1 ? `<span class="cur">${esc(c.name)}</span>` : `<button data-go="${esc(c.ref)}">${esc(c.name)}</button><span class="muted">›</span>`).join(' ')
+}
+function render() {
+  const r = route(), isOverview = r === 'company'
+  if (!B || (!isOverview && (!E || E.ref !== r))) return
+  $('mission').textContent = B.goal.mission
+  $('at').textContent = 'updated ' + when(B.at)
+  crumbs()
+  const html = isOverview ? overview() : entityView()
+  const key = JSON.stringify([r, hours, isOverview ? [B.tree, B.goal, B.money, B.health, B.next, B.days, B.history.length, B.ops, B.activity.rows] : { ...E, at: 0 }]) + '|' + $('view').clientWidth
+  if (key === lastHTML) return
+  lastHTML = key
+  const y = window.scrollY
+  $('view').innerHTML = html
+  isOverview ? overviewCharts() : entityCharts()
+  window.scrollTo(0, y)
+}
+async function load() {
+  try {
+    const r = route()
+    const [b, e] = await Promise.all([api('super/board?hours=' + hours), r === 'company' ? null : api(`super/entity?ref=${encodeURIComponent(r)}&hours=${hours}`)])
+    B = b; E = e; render()
+  } catch (err) { $('mission').textContent = 'Cannot load: ' + err.message + '. If the portal was restarted, reload this page.' }
+}
+window.addEventListener('hashchange', () => { E = null; lastHTML = ''; window.scrollTo(0, 0); $('view').innerHTML = '<p class="empty">Loading…</p>'; load() })
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-go],[data-h],[data-run]'); if (!t) return
+  const d = t.dataset
+  if (d.go) { location.hash = d.go === 'company' ? '' : encodeURIComponent(d.go); return }
+  if (d.h) { hours = Number(d.h); lastHTML = ''; return load() }
+  if (d.run) { try { const f = await api(`runs/${d.run}/file?path=${encodeURIComponent(d.file)}`); $('dlgT').textContent = d.file; $('dlgB').textContent = f.text; $('dlg').showModal() } catch (e) { alertText(e.message) } }
 })
+function alertText(m) { $('dlgT').textContent = 'Could not open'; $('dlgB').textContent = m; $('dlg').showModal() }
+$('dlgX').onclick = () => $('dlg').close()
 const tip = $('tip')
 document.addEventListener('mousemove', e => {
   const t = e.target.closest ? e.target.closest('[data-tip]') : null
@@ -302,7 +501,7 @@ document.addEventListener('mousemove', e => {
   tip.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, e.clientX + 14)) + 'px'
   tip.style.top = Math.max(8, Math.min(window.innerHeight - r.height - 8, e.clientY + 14)) + 'px'
 })
-let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (B) render() }, 150) })
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150) })
 load(); setInterval(load, 15000)
 </script>
 </body>

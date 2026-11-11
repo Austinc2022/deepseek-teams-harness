@@ -6,7 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { now, clip } from './store.js'
-import { progress, rightNow, orgView } from './views.js'
+import { progress, rightNow, orgView, who, timeline } from './views.js'
 import { profile as P } from '../../company/lib/profile.js'
 
 const DAY = 86400_000
@@ -48,7 +48,7 @@ function turns(sa) {
   for (const id of ids) {
     let r
     try { r = engine.getRun(id) } catch { continue }
-    for (const a of r.agents ?? []) if (a.startedAt) rows.push({ agent: a.agent, label: a.label, run: r.orchestration, s: a.startedAt, e: a.endedAt, status: a.status, costUsd: a.costUsd ?? 0, tools: a.tools ?? 0 })
+    for (const a of r.agents ?? []) if (a.startedAt) rows.push({ runId: r.id, file: a.file, agent: a.agent, label: a.label, run: r.orchestration, s: a.startedAt, e: a.endedAt, status: a.status, costUsd: a.costUsd ?? 0, tools: a.tools ?? 0 })
   }
   turns.rows = rows; turns.at = Date.now()
   return rows
@@ -175,6 +175,7 @@ export function board(sa, { hours = 24 } = {}) {
   return {
     at: now(), hours: Math.round((to - from) / 3600_000),
     profile: { id: P.id, label: P.label, hasEngine: P.hasEngine, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: sa.co.metering, text: P.text },
+    tree: orgTree(sa),
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },
     health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, hasEngine: P.hasEngine, engineOk: P.hasEngine ? eng.engineFresh && eng.collectorFresh : true, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },
@@ -205,4 +206,178 @@ export function board(sa, { hours = 24 } = {}) {
       ],
     },
   }
+}
+
+// ---------------------------------------------------------------- org chart with numbers, and one entity in depth
+const HOUR = 3600_000
+
+/** Numbers for a set of agents, from the recorded turns: today, the last 24 h hour by hour, the last 14 days. */
+function stat(rows, set, totalCost) {
+  const t1 = Date.now(), today = localDay(t1)
+  const mine = rows.filter(r => set.has(r.agent))
+  const spark = new Array(24).fill(0)
+  const dayMap = {}
+  let min24 = 0, cost = 0, done = 0, failed = 0
+  for (const r of mine) {
+    const s0 = new Date(r.s).getTime(), e0 = r.e ? new Date(r.e).getTime() : t1
+    cost += r.costUsd
+    if (r.status === 'completed') done++; else if (r.status === 'failed') failed++
+    const d = (dayMap[localDay(s0)] ??= { date: localDay(s0), turns: 0, minutes: 0, tools: 0, cost: 0 })
+    d.turns++; d.minutes += (e0 - s0) / 60000; d.tools += r.tools; d.cost += r.costUsd
+    for (let h = 0; h < 24; h++) {
+      const a = t1 - (24 - h) * HOUR, b = a + HOUR
+      const o = Math.min(e0, b) - Math.max(s0, a)
+      if (o > 0) { spark[h] += o / 60000; min24 += o / 60000 }
+    }
+  }
+  const live = mine.filter(r => r.status === 'running')
+  const days = []
+  for (let i = 13; i >= 0; i--) { const k = localDay(t1 - i * DAY); const d = dayMap[k]; days.push({ date: k, turns: d?.turns ?? 0, minutes: Math.round(d?.minutes ?? 0), tools: d?.tools ?? 0 }) }
+  return {
+    turnsToday: dayMap[today]?.turns ?? 0, toolsToday: dayMap[today]?.tools ?? 0, turns: mine.length, min24: Math.round(min24), share: totalCost ? cost / totalCost : 0,
+    lastActive: mine.map(r => r.e ?? r.s).sort().at(-1) ?? null, busy: live.length > 0, doing: live.map(r => r.label).slice(0, 3),
+    lastLabel: mine.slice().sort((a, b) => (a.s < b.s ? 1 : -1))[0]?.label ?? null, successRate: done + failed ? done / (done + failed) : null,
+    spark: spark.map(v => Math.round(v)), days,
+  }
+}
+
+/** Who belongs to what. ref is the entity key used by the dashboard: company, sa:<id>, ceo, audit, dep:<id>, team:<name>, agent:<name>, workers. */
+function structure(sa) {
+  const org = orgView(sa)
+  const sets = { company: new Set() }
+  const meta = { company: { type: 'Company', name: 'The whole company', parent: null } }
+  const add = (ref, type, name, parent, agents, extra = {}) => { sets[ref] = new Set(agents.filter(Boolean)); meta[ref] = { type, name, parent, ...extra }; for (const a of sets[ref]) sets.company.add(a) }
+  const root = org.superAgents.find(a => !a.parent)
+  for (const a of org.superAgents) add(`sa:${a.id}`, 'Super agent', a.title, a.parent ? `sa:${a.parent}` : 'company', [a.agent], { lead: a.agent })
+  const top = root ? `sa:${root.id}` : 'company'
+  if (org.company.ceo) add('ceo', 'Company CEO', 'Company CEO', top, [org.company.ceo.name], { lead: org.company.ceo.name })
+  if (org.company.auditor) add('audit', 'Assurance', 'Independent auditor', top, [org.company.auditor.name], { lead: org.company.auditor.name })
+  for (const d of org.company.departments) {
+    add(`dep:${d.id}`, 'Department', d.name, 'ceo', [d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))], { lead: d.lead.name, mission: d.mission })
+    for (const t of d.teams) {
+      add(`team:${t.name}`, 'Team', t.name, `dep:${d.id}`, t.members.map(m => m.name), { description: t.description })
+      for (const m of t.members) if (!meta[`agent:${m.name}`]) add(`agent:${m.name}`, 'Agent', m.name, `team:${t.name}`, [m.name], { model: m.model, description: m.description })
+    }
+    if (!meta[`agent:${d.lead.name}`]) add(`agent:${d.lead.name}`, 'Agent', d.lead.name, `dep:${d.id}`, [d.lead.name], { model: d.lead.model, description: d.lead.description, isLead: true })
+  }
+  add('workers', 'Builders', 'Ticket workers', top, org.others.map(a => a.name))
+  for (const a of org.others) if (!meta[`agent:${a.name}`]) add(`agent:${a.name}`, 'Agent', a.name, 'workers', [a.name], { model: a.model, description: a.description })
+  for (const a of [org.company.ceo, org.company.auditor].filter(Boolean)) if (!meta[`agent:${a.name}`]) add(`agent:${a.name}`, 'Agent', a.name, a === org.company.ceo ? 'ceo' : 'audit', [a.name], { model: a.model, description: a.description })
+  return { org, sets, meta }
+}
+
+/** Every node of the organisation with its numbers; agents repeat under each team they belong to. */
+export function orgTree(sa) {
+  const s = sa.store.read(), c = sa.co.read()
+  const rows = turns(sa)
+  const { org, sets, meta } = structure(sa)
+  const total = rows.reduce((n, r) => n + r.costUsd, 0)
+  const cache = {}
+  const st = ref => (cache[ref] ??= stat(rows, sets[ref], total))
+  const open = s.tickets.filter(t => t.status === 'open')
+  const nodes = []
+  const node = (key, ref, parent, extra = {}) => {
+    const m = meta[ref], k = st(ref)
+    let status = k.busy ? 'working' : 'idle', work = k.doing.join(' · ') || ''
+    if (ref.startsWith('sa:')) {
+      const a = s.agents.find(x => `sa:${x.id}` === ref)
+      status = s.evals.some(e => e.agent === a.id && e.status === 'running') ? 'working' : a.plan?.todo?.some(t => t.status === 'blocked') ? 'blocked' : 'waiting'
+      work = a.plan?.focus ?? 'No plan written yet.'
+    } else if (ref.startsWith('dep:')) {
+      const ini = c.initiatives.filter(i => i.department === ref.slice(4) && !['killed', P.gatedStage].includes(i.stage)).at(-1)
+      work = k.busy ? work : ini ? `${ini.title} (${ini.stage})` : 'No open directive.'
+    } else if (ref === 'workers') {
+      const running = open.filter(t => t.assignments.at(-1)?.status === 'running')
+      status = running.length ? 'working' : open.some(t => t.attention) ? 'blocked' : open.length ? 'queued' : 'idle'
+      work = running.map(t => t.title).join(' · ') || (open.length ? `${open.length} open ticket(s)` : 'No open ticket.')
+    } else if (ref === 'ceo') {
+      const act = c.cycles.at(-1)?.status === 'running'
+      if (act) status = 'working'
+      work = act ? 'Running a company cycle' : work || 'Between cycles.'
+    } else if (!work) work = k.lastLabel ? `Last: ${k.lastLabel}` : m.type === 'Agent' ? 'Not called yet.' : ''
+    nodes.push({ key, ref, parent, type: m.type, name: m.name, sub: m.lead ?? m.model ?? '', status, work: clip(work, 200), turnsToday: k.turnsToday, min24: k.min24, share: k.share, lastActive: k.lastActive, spark: k.spark, ...extra })
+  }
+  const roots = org.superAgents.filter(a => !a.parent)
+  const walkSa = (a, parent) => {
+    const key = `sa:${a.id}`
+    node(key, key, parent)
+    for (const ch of org.superAgents.filter(x => x.parent === a.id)) walkSa(ch, key)
+  }
+  for (const a of roots) walkSa(a, null)
+  const top = roots[0] ? `sa:${roots[0].id}` : null
+  if (meta.ceo) node('ceo', 'ceo', top)
+  for (const d of org.company.departments) {
+    const dk = `dep:${d.id}`
+    node(dk, dk, 'ceo', { teams: d.teams.length, people: sets[dk].size })
+    node(`${dk}/lead`, `agent:${d.lead.name}`, dk, { role: 'lead' })
+    for (const t of d.teams) {
+      const tk = `team:${t.name}`
+      node(tk, tk, dk, { people: t.members.length })
+      for (const m of t.members) node(`${tk}/${m.name}`, `agent:${m.name}`, tk)
+    }
+  }
+  if (meta.audit) node('audit', 'audit', top)
+  node('workers', 'workers', top, { people: sets.workers.size })
+  for (const a of org.others) node(`workers/${a.name}`, `agent:${a.name}`, 'workers')
+  return nodes
+}
+
+/** One entity in depth: its numbers, its hours and days, its members, its work. */
+export function entity(sa, ref, { hours = 24 } = {}) {
+  const s = sa.store.read(), c = sa.co.read()
+  const rows = turns(sa)
+  const { sets, meta } = structure(sa)
+  if (!meta[ref]) throw new Error('no such unit')
+  const m = meta[ref], set = sets[ref]
+  const total = rows.reduce((n, r) => n + r.costUsd, 0)
+  const k = stat(rows, set, total)
+  const crumbs = []
+  for (let r = ref; r; r = meta[r]?.parent) crumbs.unshift({ ref: r, name: meta[r].name })
+  if (crumbs[0]?.ref !== 'company') crumbs.unshift({ ref: 'company', name: 'Company' })
+  // members: the next level down
+  const childRefs = Object.keys(meta).filter(r => meta[r].parent === ref && !(m.type === 'Company'))
+  const kids = ref === 'company' ? Object.keys(meta).filter(r => ['Super agent', 'Company CEO', 'Assurance', 'Department', 'Builders'].includes(meta[r].type)) : ref.startsWith('team:') || ref === 'workers' ? [...set].map(a => `agent:${a}`) : ref.startsWith('dep:') ? [...childRefs.filter(r => r.startsWith('team:')), `agent:${m.lead}`] : childRefs
+  const members = kids.filter(r => meta[r]).map(r => { const x = stat(rows, sets[r], total); return { ref: r, name: meta[r].name, type: meta[r].type, turnsToday: x.turnsToday, min24: x.min24, share: x.share, busy: x.busy, lastActive: x.lastActive, turns: x.turns, successRate: x.successRate } })
+  // when it (or each member) worked
+  const to = Date.now(), from = to - Math.max(1, Math.min(168, Number(hours) || 24)) * HOUR
+  const spansOf = st => {
+    const sp = rows.filter(r => st.has(r.agent)).map(r => ({ s: Math.max(from, new Date(r.s).getTime()), e: Math.min(to, r.e ? new Date(r.e).getTime() : to), label: r.label })).filter(x => x.e > from && x.s < to && x.e > x.s).sort((a, b) => a.s - b.s)
+    const out = []
+    for (const x of sp) { const l = out.at(-1); if (l && x.s <= l.e + 60_000) { l.e = Math.max(l.e, x.e); if (!l.labels.includes(x.label) && l.labels.length < 4) l.labels.push(x.label) } else out.push({ s: x.s, e: x.e, labels: [x.label] }) }
+    return out
+  }
+  const ganttRefs = members.length > 1 ? members.map(x => x.ref) : [ref]
+  const activity = { from: new Date(from).toISOString(), to: new Date(to).toISOString(), rows: ganttRefs.map(r => { const sp = spansOf(sets[r]); return { id: r, name: meta[r].name, spans: sp, busyMin: Math.round(sp.reduce((n, x) => n + (x.e - x.s), 0) / 60000) } }) }
+  const recent = rows.filter(r => set.has(r.agent)).sort((a, b) => (a.s < b.s ? 1 : -1)).slice(0, 14).map(r => ({ agent: r.agent, label: r.label, run: r.run, status: r.status, startedAt: r.s, endedAt: r.e, tools: r.tools, runId: r.runId, file: r.file }))
+  const out = {
+    at: now(), ref, type: m.type, name: m.name, crumbs, description: m.description ?? m.mission ?? '', sub: m.lead ?? m.model ?? '',
+    status: k.busy ? 'working' : 'idle', doing: k.doing, kpi: { turnsToday: k.turnsToday, toolsToday: k.toolsToday, min24: k.min24, share: k.share, lastActive: k.lastActive, successRate: k.successRate, turns: k.turns, people: set.size },
+    hourly: k.spark, days: k.days, members, activity, recent,
+  }
+  // what the desk already knows about this kind of thing
+  const [type, id] = ref === 'company' ? ['company', 'company'] : ref.startsWith('sa:') ? ['super-agent', ref.slice(3)] : ref.startsWith('dep:') ? ['department', ref.slice(4)] : ref.startsWith('team:') ? ['team', ref.slice(5)] : ref.startsWith('agent:') ? ['agent', ref.slice(6)] : ref === 'ceo' ? ['agent', c.ceo] : ref === 'audit' ? ['agent', c.auditor] : [null, null]
+  if (type) { try { const w = who(sa, type, id); out.what = w.what; out.description ||= w.description ?? ''; out.detail = { role: w.role, skills: w.skills, tools: w.tools, model: w.model, provider: w.provider, canWrite: w.canWrite, reportsTo: w.reportsTo, teams: w.teams, plan: w.plan, decisions: w.decisions, tickets: w.tickets, initiatives: w.initiatives, builds: w.builds, cycles: w.cycles, asks: w.asks }; out.timeline = (w.timeline ?? []).slice(0, 25) } catch (e) { out.what = '' } }
+  if (ref === 'workers') {
+    out.what = 'Workers build one ticket at a time in a sandboxed folder with a shell: data pulls, code, simulations.'
+    out.detail = { tickets: s.tickets.slice(-20).reverse().map(t => ({ id: t.id, title: t.title, status: t.status, outcome: t.outcome, turns: t.assignments.length })) }
+    out.timeline = timeline(sa, { who: P.workerName, limit: 25 })
+  }
+  if (ref.startsWith('dep:')) {
+    const id = ref.slice(4), stages = P.stages
+    out.funnel = stages.map(st => ({ stage: st, n: c.initiatives.filter(i => i.department === id && i.stage === st).length }))
+    out.kpi.openInitiatives = c.initiatives.filter(i => i.department === id && !['killed', P.gatedStage].includes(i.stage)).length
+    out.kpi.killed = c.initiatives.filter(i => i.department === id && i.stage === 'killed').length
+  }
+  if (ref.startsWith('sa:')) {
+    const id = ref.slice(3), a = s.agents.find(x => x.id === id)
+    out.status = s.evals.some(e => e.agent === id && e.status === 'running') ? 'working' : a?.plan?.todo?.some(t => t.status === 'blocked') ? 'blocked' : 'waiting'
+    const per = {}
+    for (const e of s.evals.filter(e => e.agent === id)) per[localDay(e.startedAt)] = (per[localDay(e.startedAt)] ?? 0) + 1
+    out.decisionsDaily = k.days.map(d => ({ date: d.date, n: per[d.date] ?? 0 }))
+    const tk = s.tickets.filter(t => t.owner === id)
+    out.ticketOutcomes = [['Delivered', tk.filter(t => t.outcome === 'completed').length], ['Open', tk.filter(t => t.status === 'open').length], ['Dropped or stopped', tk.filter(t => t.status === 'ended' && t.outcome !== 'completed').length]].map(([label, n]) => ({ label, n }))
+    out.kpi.decisions = s.evals.filter(e => e.agent === id).length
+    out.kpi.pending = s.triggers.filter(t => t.to === id && t.status === 'pending').length
+  }
+  return out
 }

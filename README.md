@@ -24,6 +24,10 @@ happens next, trends and daily operating numbers.
 
 ![Company dashboard with sample data](docs/images/company-dashboard.png)
 
+Click any box in the org chart to go inside a department, a team or one agent, each with its own numbers and charts.
+
+![One department on the dashboard, with sample data](docs/images/company-dashboard-unit.png)
+
 The **Company** page (the desk): what needs your answer, the goal ladder, what is running now and the last decisions
 with their reasons, and the CEO super agent's plan.
 
@@ -334,9 +338,10 @@ The **Dashboard** sidebar page (`/company/board.html`, linked from the desk) is 
 
 - **Where are we?** Goal progress on the eight-step ladder, paper profit per day against the target, spend today,
   balance and how many days it lasts at the recent spend, and whether the loop and the engine are running.
-- **Who is doing what?** One card per business unit (each super agent, the company CEO, the auditor, every department,
-  the ticket workers) with its status and current work, and a chart of when each unit worked over the last 6 hours to
-  7 days.
+- **Who is doing what?** An org chart from you down to the departments. Every box shows status, current work, a
+  24-hour activity strip, turns today, minutes worked and share of model usage. Click a box to go inside: a
+  department shows its teams and agents, a team its members, an agent its own hours, days, recent work and
+  instructions. Beside it: an hour-by-unit heat map, work done per unit, and a chart of when each unit worked.
 - **What happens next?** What is in motion, when the next cycle is due, what waits for you, the CEO's priorities and
   to-do list, and an outlook. The outlook gives no date for the target while paper profit is zero.
 - **How is the operation performing?** Trends for goal progress, paper profit, balance and spend; per-day tickets
