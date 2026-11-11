@@ -7,6 +7,7 @@
  *   company decide <id> <choice>   answer a decision
  *   company autopilot on|off [hours]
  *   company serve [--port 3093]    the dashboard on its own port (no harness needed)
+ *   company profile [id]           show the active profile and the available ones, or select one (restart to apply)
  */
 import http from 'node:http'
 import fs from 'node:fs'
@@ -15,6 +16,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { boot } from '../lib/boot.js'
 import { handle, readJson, send } from '../lib/http.js'
+import { PROFILE_ID, listProfiles, selectProfile } from '../lib/profile.js'
 import { boot as bootSuper } from '../../super-agent/lib/boot.js'
 import { handleSuper } from '../../super-agent/lib/http.js'
 
@@ -26,8 +28,9 @@ const money = n => (n == null ? '?' : `$${Number(n).toLocaleString('en-US', { ma
 function status() {
   const o = co.overview()
   const out = [
+    `Profile: ${o.profile.id} (${o.profile.label}); models on ${o.profile.provider}; project folder ${o.profile.projectDir}`,
     `Mission: ${o.charter.mission}`,
-    `Budget ${o.budget.date}: spent ${money(o.budget.spentTodayUsd)} of ${money(o.budget.dailyUsd)}; DeepSeek balance ${money(o.budget.balanceUsd)}; autopilot ${o.charter.autopilot.enabled ? `on, every ${o.charter.autopilot.everyHours} h` : 'off'}`,
+    `Budget ${o.budget.date}: spent ${money(o.budget.spentTodayUsd)} of ${money(o.budget.dailyUsd)}${o.profile.metering === 'balance' ? `; ${o.profile.provider} balance ${money(o.budget.balanceUsd)}` : ' (estimated from run costs)'}; autopilot ${o.charter.autopilot.enabled ? `on, every ${o.charter.autopilot.everyHours} h` : 'off'}`,
     '', 'Organisation:', `  CEO ${o.ceo?.name ?? '(not set up)'}  auditor ${o.auditor?.name ?? '-'} (${o.auditor?.model ?? '-'})`,
     ...o.departments.map(d => `  ${d.name} — lead ${d.lead}\n${d.teams.map(t => `      ${t.name}: ${t.members.map(m => `${m.name} (${m.model})`).join(', ')}`).join('\n')}`),
     '', 'Initiatives:', ...(o.initiatives.length ? o.initiatives.map(i => `  ${i.id} [${i.stage}] ${i.title}  confidence ${i.confidence ?? '-'}`) : ['  (none)']),
@@ -100,7 +103,14 @@ async function main() {
     return
   }
   if (cmd === 'serve') return serve()
-  console.error('usage: company-cli setup|status|cycle ["focus"]|decide <id> <choice>|autopilot on|off [hours]|serve [--port N]')
+  if (cmd === 'profile') {
+    if (!rest[0]) { console.log(`active: ${PROFILE_ID}\navailable: ${listProfiles().join(', ')}`); return }
+    if (!listProfiles().includes(rest[0])) throw new Error(`no profile ${rest[0]} (available: ${listProfiles().join(', ')})`)
+    selectProfile(rest[0])
+    console.log(`selected ${rest[0]}. Restart ./dsh web (or the CLI), then run ./company-cli setup and ./super-cli setup.`)
+    return
+  }
+  console.error('usage: company-cli profile [id]|setup|status|cycle ["focus"]|decide <id> <choice>|autopilot on|off [hours]|serve [--port N]')
   process.exit(2)
 }
 main().then(() => process.exit(0), e => { console.error(`error: ${e.message}`); process.exit(1) })

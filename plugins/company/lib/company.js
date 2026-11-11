@@ -8,46 +8,29 @@
  *   reports/         one CEO brief per cycle
  *
  * What agents may never do is enforced here and in cycle.js, in code, not in prompts:
- *   - an initiative reaches "paper" only through the deterministic gate (quant validator + audit);
- *   - nothing here places a real order: the engine is paper-only and promotion to real money is a human decision;
- *   - a cycle does not start when the day's budget or the provider balance would be exceeded.
+ *   - an initiative reaches the profile's gated stage only through the profile's gate (checks in code + audit);
+ *   - nothing here publishes, sells or spends: that is a human decision;
+ *   - a cycle does not start when the day's budget (or, with balance metering, the provider balance) would be exceeded.
+ * What the company is (organisation, rules, stages, facts, gate) comes from the active profile (profiles/).
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ROOT, QUANT, STAGES, AGENT_STAGES, now, today, newId, round, str } from './paths.js'
+import { ROOT, now, today, newId, round, str } from './paths.js'
+import { profile as P, PROFILE_ID } from './profile.js'
 import { providerBalance } from '../../agent-forge/lib/providers.js'
 import { runCycle, enroll } from './cycle.js'
 import { seed } from './setup.js'
 
-export { ROOT, QUANT, STAGES, AGENT_STAGES, today, newId }
+export const STAGES = P.stages
+export const AGENT_STAGES = P.agentStages
+export { ROOT, today, newId }
 
+/** The active profile's charter (profiles/<id>.js); the owner edits it on the Company page. */
 export const DEFAULT_CHARTER = {
-  mission: 'Turn a budget of $1,000 a day into as much crypto trading profit as possible. The north star is $10,000,000 a day.',
-  scope: 'Crypto only.',
-  northStar: { dailyBudgetUsd: 1000, targetDailyUsd: 10_000_000 },
-  rules: [
-    'Report honest odds. $1,000 a day to $10,000,000 a day is a 10,000x daily return; say plainly how likely each step is and what evidence supports it.',
-    'No execution without evidence: an initiative is executed only after it passes the deterministic gate (holdout validation with trial-adjusted significance, safety invariants) and an independent audit.',
-    'Every proposal sent to the validator raises the significance bar for all later ones. Submit few, well-argued proposals.',
-    'Agents are read-only. They never edit config, place, size or close orders, clear the kill switch, or touch the freqtrade bot on port 8080. Deterministic code does the acting.',
-    'Paper first. Real-money trading is not built; asking for it is a decision only the owner can make.',
-    'Loss limits in the engine config may only be tightened by proposals. Loosening is the owner\'s decision.',
-    'Spend the budget where it raises the probability of profit: research, simulation and rehearsal first. Do not spend to look busy.',
-    'One question at a time for the owner, with a recommendation. Stay silent otherwise.',
-  ],
-  budget: {
-    dailyUsd: 1000,      // everything the company may spend in a day (models now; data, servers and capital need the owner)
-    cycleUsd: 15,        // a cycle is stopped when its model spend passes this
-    reserveUsd: 5,       // never spend the provider balance below this
-  },
-  gate: {
-    maxProposalsPerCycle: 2,
-    requireAudit: true,
-    minConfidence: 0.95, // floor on P(better); the validator's own trial-adjusted bar applies on top
-  },
   hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 }, // auto | observe (ask the owner) | off
   autopilot: { enabled: false, everyHours: 6 },
-  models: { lead: 'deepseek-v4-pro', worker: 'deepseek-flash', auditor: 'opus' },
+  ...P.charter,
+  models: { lead: P.models.lead, worker: P.models.worker, auditor: P.models.auditor },
 }
 
 export class Company {
@@ -62,6 +45,9 @@ export class Company {
     fs.mkdirSync(this.reports, { recursive: true })
     this.live = null // { cycleId, runId, cancel }
     this.timer = null
+    this.profile = P
+    /** balance: spend = drop of the provider balance (DeepSeek). runs: spend = cost the runs report (Claude subscription, notional). */
+    this.metering = P.models.provider === 'deepseek' ? 'balance' : 'runs'
   }
 
   // ---------------- state
@@ -89,7 +75,8 @@ export class Company {
   // ---------------- budget
   /** Record the provider balance now; a drop since the last reading is model spend of the current day. */
   async meter(note) {
-    const bal = await providerBalance('deepseek')
+    if (this.metering !== 'balance') return { balanceUsd: null, ...this.budget() }
+    const bal = await providerBalance(P.models.provider)
     if (!bal) return { balanceUsd: null, ...this.budget() }
     const date = today()
     let spent = 0
@@ -100,7 +87,7 @@ export class Company {
       s.lastBalanceUsd = bal.usd
       s.lastBalanceAt = now()
     })
-    if (spent > 0) this.ledger({ kind: 'model', provider: 'deepseek', usd: spent, note: note ?? 'balance change' })
+    if (spent > 0) this.ledger({ kind: 'model', provider: P.models.provider, usd: spent, note: note ?? 'balance change' })
     return { balanceUsd: bal.usd, ...this.budget() }
   }
 
@@ -116,6 +103,43 @@ export class Company {
     }
   }
 
+  /** Run metering: add the cost a finished run reported to today's spend. */
+  charge(usd, note, extra = {}) {
+    if (this.metering !== 'runs' || !(usd > 0)) return
+    const date = today()
+    this.update(s => {
+      const day = (s.days[date] ??= { startBalanceUsd: null, modelUsd: 0, claudeEstUsd: 0, cycles: 0 })
+      day.modelUsd = round(day.modelUsd + usd)
+      day.claudeEstUsd = round((day.claudeEstUsd ?? 0) + usd)
+    })
+    this.ledger({ kind: 'model', provider: P.models.provider, usd: round(usd), note, ...extra })
+  }
+
+  runCost(runId) { try { return this.forge.engine.getRun(runId).costUsd ?? 0 } catch { return 0 } }
+
+  /** What a cycle has spent so far: its own run plus its departments' super-team runs. */
+  async cycleSpend(cycleId) {
+    const c = this.read().cycles.find(x => x.id === cycleId)
+    if (!c) return 0
+    if (this.metering === 'balance') {
+      const m = await this.meter(`cycle ${cycleId}`)
+      return typeof c.startBalanceUsd === 'number' && m.balanceUsd != null ? Math.max(0, c.startBalanceUsd - m.balanceUsd) : 0
+    }
+    return [c.runId, ...(c.subRuns ?? []).map(r => r.runId)].reduce((n, id) => n + this.runCost(id), 0)
+  }
+
+  /** Why no new model work may start now, or null (shared by cycles and the super agent). */
+  async holdReason() {
+    const m = await this.meter('budget check')
+    if (this.metering === 'balance') {
+      if (m.balanceUsd == null) return `the ${P.models.provider} balance cannot be read (check the API key in .dsh-home/.env and the network)`
+      if (m.balanceUsd - m.reserveUsd < 0.5) return `the ${P.models.provider} balance ($${m.balanceUsd}) is at the reserve ($${m.reserveUsd}); top up or lower the reserve`
+    }
+    if (m.remainingTodayUsd <= 0) return `today's budget ($${m.dailyUsd}) is spent`
+    if (fs.existsSync(path.join(this.dir, 'PAUSED'))) return 'paused (delete forge/company/PAUSED to resume)'
+    return null
+  }
+
   ledger(entry) {
     fs.appendFileSync(this.ledgerFile, JSON.stringify({ ts: now(), date: today(), ...entry }) + '\n')
   }
@@ -126,14 +150,10 @@ export class Company {
 
   /** Why a cycle may not start now, or null. */
   async blocked() {
-    const m = await this.meter('before cycle')
     const s = this.read()
     if (!s.departments.length) return 'the company is not set up yet (run setup)'
-    if (m.balanceUsd == null) return 'the DeepSeek balance cannot be read (check DEEPSEEK_API_KEY in .dsh-home/.env and the network)'
-    if (m.balanceUsd - m.reserveUsd < 0.5) return `the DeepSeek balance ($${m.balanceUsd}) is at the reserve ($${m.reserveUsd}); top up or lower the reserve`
-    if (m.remainingTodayUsd <= 0) return `today's budget ($${m.dailyUsd}) is spent`
-    if (fs.existsSync(path.join(this.dir, 'PAUSED'))) return 'paused (delete forge/company/PAUSED to resume)'
-    return null
+    if (s.profile && s.profile !== PROFILE_ID) return `the company was set up with profile "${s.profile}" but "${PROFILE_ID}" is active; run setup again or select "${s.profile}"`
+    return this.holdReason()
   }
 
   // ---------------- setup
@@ -166,7 +186,7 @@ export class Company {
     const cycleId = newId('c')
     const startBalance = this.read().lastBalanceUsd
     const { engine } = this.forge
-    const { id: runId, done } = engine.startCustom('company: CEO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: QUANT, meta: { company: cycleId } })
+    const { id: runId, done } = engine.startCustom('company: CEO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: P.projectDir, meta: { company: cycleId } })
     this.live = { cycleId, runId }
     this.update(s => {
       s.cycles.push({ id: cycleId, runId, trigger, focus: focus ?? null, status: 'running', startedAt: now(), startBalanceUsd: startBalance, subRuns: [] })
@@ -175,14 +195,15 @@ export class Company {
       day.cycles++
     })
     const finished = done.then(async st => {
-      const m = await this.meter(`cycle ${cycleId}`)
+      const spend = round(await this.cycleSpend(cycleId))
+      this.charge(spend, `cycle ${cycleId}`, { cycle: cycleId })
       this.update(s => {
         const c = s.cycles.find(x => x.id === cycleId)
         if (!c) return
         c.status = st.status
         c.endedAt = now()
         c.error = st.error ? String(st.error).split('\n')[0] : undefined
-        c.spendUsd = typeof c.startBalanceUsd === 'number' && m.balanceUsd != null ? round(Math.max(0, c.startBalanceUsd - m.balanceUsd)) : null
+        c.spendUsd = spend
         c.claudeEstUsd = c.claudeEstUsd ?? 0
         if (st.result?.summary) c.summary = str(st.result.summary, 600)
         if (st.result?.report) c.report = st.result.report
@@ -326,6 +347,7 @@ export class Company {
       departments, initiatives: s.initiatives, decisions: s.decisions.slice(-80).reverse(), hires: s.hires.slice(-60).reverse(),
       orders: s.orders.slice(-60).reverse(), builds: s.builds.slice(-40).reverse(), cycles: s.cycles.slice(-40).reverse(),
       busy: !!act, run, stages: STAGES, setUp: s.departments.length > 0, updatedAt: s.updatedAt,
+      profile: { id: P.id, label: P.label, setUpWith: s.profile ?? null, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: this.metering, provider: P.models.provider, projectDir: P.projectDir, text: P.text },
       paused: fs.existsSync(path.join(this.dir, 'PAUSED')),
     }
   }
