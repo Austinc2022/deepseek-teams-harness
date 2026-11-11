@@ -14,7 +14,7 @@ export const READ_TOOLS = ['Read', 'Grep', 'Glob']
 export const WEB_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch']
 export const AUDITOR = P.auditorName
 
-export function seed(co, { force = false } = {}) {
+export function seed(co, { force = false, refreshAgents = false } = {}) {
   const { registry } = co.forge
   const done = { profile: P.id, agents: [], teams: [], migrated: [], departments: [], superTeams: [], folders: [] }
   const exists = n => { try { registry.getAgent(n); return true } catch { return false } }
@@ -33,7 +33,8 @@ export function seed(co, { force = false } = {}) {
   }
 
   for (const a of P.agents) {
-    if (exists(a.name) && !force) continue
+    // refreshAgents rewrites the profile's own agents (new role text, model, skills) and leaves teams, hires and state alone
+    if (exists(a.name) && !force && !refreshAgents) continue
     registry.saveAgent({ ...a, skills: (a.skills ?? []).filter(skillOk) })
     done.agents.push(a.name)
   }

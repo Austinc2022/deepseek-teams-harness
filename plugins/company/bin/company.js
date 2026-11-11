@@ -2,6 +2,7 @@
 /**
  * Company CLI (works without the harness running).
  *   company setup [--force]        create the CEO, leads, HR, teams, departments (safe to repeat)
+ *   company setup --refresh-agents rewrite the profile's agents after the profile changed (teams and hires are kept)
  *   company status                 charter, budget, org, initiatives, open decisions
  *   company cycle ["focus"]        run one CEO cycle now and wait for it
  *   company decide <id> <choice>   answer a decision
@@ -76,7 +77,7 @@ async function serve() {
 
 async function main() {
   if (cmd === 'setup') {
-    console.log(JSON.stringify(co.setup({ force: rest.includes('--force') }), null, 2))
+    console.log(JSON.stringify(co.setup({ force: rest.includes('--force'), refreshAgents: rest.includes('--refresh-agents') }), null, 2))
     await co.meter('setup')
     return
   }

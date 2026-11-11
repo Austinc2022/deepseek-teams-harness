@@ -21,7 +21,17 @@ export default makeProfile({
   tags: ['vr', 'studio'],
   projectDir: path.join(ROOT, '..', 'vr-studio'),
   superProject: { name: 'VR Studio', color: '#7c3aed' },
-  models: { provider: 'claude-code', ceo: 'opus', lead: 'sonnet', worker: 'sonnet', fast: 'haiku', auditor: 'opus' },
+  // the top tier leads on the strongest model at the highest effort; the auditor stays on a different model
+  // from the builders
+  models: { provider: 'claude-code', ceo: 'opus', ceoEffort: 'xhigh', ceoFallback: 'sonnet', lead: 'sonnet', worker: 'sonnet', fast: 'haiku', auditor: 'opus' },
+  scale: { maxWorkers: 3, maxEvals: 2, maxTicketsPerDay: 20, maxSuperAgents: 12, maxAssignments: 10 },
+  critics: [
+    { agent: 'head-design', lens: 'creative direction and taste: is the core mechanic a delight in the first 60 seconds, is the look and sound distinctive and cohesive, what would make a player show it to a friend' },
+    { agent: 'xr-engineer', lens: 'engineering: correctness of the WebXR session and input, comfort options, the frame budget, anything that would crash or stutter' },
+    { agent: 'playtest-analyst', lens: 'a first-time player: where they are confused, bored, sick or stuck, minute by minute' },
+    { agent: 'head-business', lens: 'the market: the hook in one sentence, who buys it, how it stands against the best in its genre, what a store page could honestly claim' },
+    { agent: 'auditor', lens: 'the gate\'s rubric: would this pass today, and what exactly would fail it' },
+  ],
 
   stages: ['idea', 'concept', 'prototype', 'production', 'polish', 'gate', 'release-candidate', 'killed'],
   gatedStage: 'release-candidate',
@@ -55,7 +65,7 @@ export default makeProfile({
       'The first 60 seconds must show the core loop and why it is fun. Cut features before cutting polish.',
       'Analysts are read-only; builders work only inside their sandboxed ticket folder. Publishing, store submission, pricing, ads and any spending are the owner\'s decisions.',
       'Spend the budget where it raises the odds of a great game today: design, building, playtesting and fixing. Do not spend to look busy.',
-      'One question at a time for the owner, with a recommendation. Stay silent otherwise.',
+      'Decide, do not ask. The studio decides everything inside this charter: concept, scope, design, technology, priorities, retries and what to cut. The owner is asked only about owner-only matters (spending, anything public, legal, access, this charter), one question at a time. What the sandbox cannot measure (a real headset, real players) is recorded as an open risk in GAME.md, not asked about.',
     ],
     budget: { dailyUsd: 1000, cycleUsd: 60, reserveUsd: 0 },
     gate: { maxProposalsPerCycle: 2, requireAudit: true, minConfidence: 0.85 },
@@ -73,7 +83,7 @@ How you work:
 - Pick concepts that can be great in a small scope: one strong core mechanic that only works in VR, a distinctive look that can be made procedurally or in code, a clear hook for a store page. Kill concepts that need months of content.
 - Games are built by sandboxed builders through build requests and tickets; a game is accepted only by the gate. Your job before the gate is to raise the odds that it passes: sharp specs, playtests, fixes, and attacking your own ideas.
 - Hire only when a missing skill blocks a game. Say what the new agent will do that no current agent does.
-- The owner's attention is expensive: at most one or two questions per cycle, each with options and your recommendation.
+- You decide. Concept, scope, design, technology, priorities and what to cut are yours; you do not ask the owner about them.
 - Be honest about the north star. State the odds as you see them and what would change them.` },
     { name: 'head-design', tools: WEB_TOOLS, skills: ['brainstorming', 'create-prd', 'write-spec', 'user-personas'],
       description: 'Creative Director (Head of Game Design): concepts, core loops, game design documents and art direction.',
@@ -151,13 +161,14 @@ Studio standard for every game folder:
     maxBytes: 300e6,
     verify: true,
     verifyMinutes: 40,
+    unmeasurable: ['frame rate, comfort and controller feel on a real headset (only a desktop browser run with software rendering is possible here)', 'real players\' reactions', 'sales'],
     rubric: [
       'Original: the concept, name, art, sound and levels are the studio\'s own; nothing imitates a specific existing game.',
       'Fun: one VR-native core mechanic that is clear and satisfying in the first 60 seconds, with feedback (sound, haptics, VFX) on every action.',
       'Finished: a complete 10-20 minute session with a start, progression and an end; no placeholders, no dead buttons, no known crash.',
       'Craft: a distinctive, cohesive look and sound; readable UI in 3D space.',
       'VR quality: correct WebXR session handling, controller input, comfort options (snap turn, vignette or teleport, seated), and a desktop fallback.',
-      'Performance: a credible 72 fps budget on a standalone headset (instancing, low draw calls, no per-frame allocations in hot loops).',
+      'Performance: a credible 72 fps budget on a standalone headset, argued from measured draw calls, triangles and frame work (instancing, low draw calls, no per-frame allocations in hot loops); the headset run itself is an open risk in GAME.md.',
       'Engineering: builds cleanly, has meaningful tests, README lets a stranger run it.',
       'Commercial: GAME.md states a clear hook, audience and price thesis that a store page could sell.',
     ],
@@ -170,10 +181,10 @@ Studio standard for every game folder:
   },
 
   prompts: {
-    plan: 'Plan this cycle. The north star is one release-candidate VR game every day. Decide today\'s game first: continue the most promising one (give its initiative id) or start a new one with a concept that can be great in a small scope. Choose at most 4 directives (one per department at most), each with a self-contained brief and the proof you expect: Game Design writes or sharpens the design, Engineering turns it into a build spec, Quality writes acceptance criteria or reviews a build, Business checks market fit and the sales thesis. Building happens through build specs that the super agent hands to sandboxed builders. Kill games that will not reach the bar. Ask for a hire only when a missing skill blocks a game. Ask the owner only what only the owner can decide. State the north-star odds honestly.',
+    plan: 'Plan this cycle. The north star is one release-candidate VR game every day. Decide today\'s game first: continue the most promising one (give its initiative id) or start a new one with a concept that can be great in a small scope. Choose at most 4 directives (one per department at most), each with a self-contained brief and the proof you expect: Game Design writes or sharpens the design, Engineering turns it into a build spec, Quality writes acceptance criteria or reviews a build, Business checks market fit and the sales thesis. Building happens through build specs that the super agent hands to sandboxed builders. Kill games that will not reach the bar. Ask for a hire only when a missing skill blocks a game. State the north-star odds honestly.',
     report: 'buildSpecs: work that a sandboxed builder must do (a new game, a feature, a fix pass, a performance pass), each precise enough for a builder who has not read this conversation: what to build, the studio standard files, the acceptance criteria and the tests that prove it. Give the expected value for the game.',
     confidence: 'your probability that this game becomes a release candidate that meets the charter\'s quality bar',
-    review: 'Judge the results. Update each game you worked on (stage and your own probability that it becomes a release candidate; you cannot set Release candidate, only the gate does). Write the brief for the owner in Markdown: 1) the studio today and the game of the day, 2) what was designed, built and learned, 3) what the gate accepted or rejected and why, 4) honest odds for the north star (quality and the $10,000,000 path), 5) what the next cycle will do. Add a question for the owner only if something needs the owner.',
+    review: 'Judge the results. Update each game you worked on (stage and your own probability that it becomes a release candidate; you cannot set Release candidate, only the gate does). Write the brief for the owner in Markdown: 1) the studio today and the game of the day, 2) what was designed, built and learned, 3) what the gate accepted or rejected and why, 4) honest odds for the north star (quality and the $10,000,000 path), 5) what the next cycle will do.',
     dailyReview: 'Daily review. The north star is one release-candidate VR game today. Look at the studio state, the open tickets and the games in progress, and decide the most valuable next step: a build ticket for today\'s game, a fix pass on a game that failed the gate, or a design for tomorrow. Open at most two tickets. Tell the owner only if there is a result or a decision.',
     deptExtra: () => `Studio folder: ${path.join(ROOT, '..', 'vr-studio')}. Release candidates are in its release-candidates/ folder; builders' ticket folders are under forge/super-agent/work/.`,
   },

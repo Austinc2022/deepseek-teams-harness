@@ -199,7 +199,7 @@ const P = makeProfile({
   projectDir: QUANT,
   folders: [QUANT_REPORTS],
   superProject: { name: 'Crypto company', color: '#c2410c' },
-  models: { provider: 'deepseek', ceo: 'deepseek-v4-pro', lead: 'deepseek-v4-pro', worker: 'deepseek-v4-pro', fast: 'deepseek-flash', auditor: 'opus', choices: ['deepseek-v4-pro', 'deepseek-flash'] },
+  models: { provider: 'deepseek', ceo: 'deepseek-v4-pro', lead: 'deepseek-v4-pro', worker: 'deepseek-v4-pro', fast: 'deepseek-flash', auditor: 'opus', choices: ['deepseek-v4-pro', 'deepseek-flash'], ceoEffort: 'high' },
   auditorName: 'quant-red-team',
   stages: ['idea', 'research', 'model', 'rehearsal', 'gate', 'paper', 'live-request', 'killed'],
   agentStages: ['idea', 'research', 'model', 'rehearsal', 'gate', 'killed'],
@@ -242,6 +242,7 @@ const P = makeProfile({
     gate: { maxProposalsPerCycle: 2, requireAudit: true, minConfidence: 0.95 },
     hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 },
     execution: { ownerApproval: true },
+    autonomy: { level: 'ask', maxQuestionsPerDay: 6 },   // trading: the owner stays in the loop, as upstream designed it
     autopilot: { enabled: false, everyHours: 6 },
   },
   agents: [

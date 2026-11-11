@@ -27,6 +27,14 @@ const S = { type: 'string' }
 const arr = (items, maxItems) => ({ type: 'array', items, ...(maxItems ? { maxItems } : {}) })
 const obj = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: false })
 
+/** A question for the owner. The host, not the agent, decides whether it is sent (Company.askOwner). */
+const QUESTION = obj({
+  question: S, options: arr(S, 4), recommendation: S, why: S,
+  category: { type: 'string', enum: [...P.ownerOnly.map(o => o.key), 'internal'], description: 'which owner-only matter this is; "internal" is anything else, and an internal question is not sent: your recommendation becomes the decision' },
+  ifNoAnswer: { type: 'string', description: 'what the company does until the owner answers; work must be able to continue' },
+})
+const DECISION_RULE = `Decisions for the owner: normally none. ${P.ownerOnlyText()} Decide every internal matter yourself and say what you decided in your assessment or brief. When evidence cannot be produced in this environment, record it as an open risk and continue; that is not a question. A question you do send must say what the company does meanwhile (ifNoAnswer).`
+
 const planSchema = deps => obj({
   assessment: S,
   northStar: obj({ odds: S, whatWouldChangeIt: S }),
@@ -39,7 +47,7 @@ const planSchema = deps => obj({
   }, ['department', 'initiativeId', 'brief', 'proof']), 4),
   hires: arr(obj({ department: { type: 'string', enum: deps }, team: { type: 'string', description: `existing team name, or a new one starting with ${P.prefix}` }, need: S, why: S }), 2),
   kills: arr(obj({ initiativeId: S, reason: S })),
-  decisions: arr(obj({ question: S, options: arr(S, 4), recommendation: S, why: S }), 2),
+  decisions: arr(QUESTION, 1),
 }, ['assessment', 'northStar', 'directives', 'hires', 'kills', 'decisions'])
 
 const REPORT = obj({
@@ -66,7 +74,7 @@ const REVIEW = obj({
   brief: { type: 'string', description: 'Markdown brief for the owner: state, what was learned, what the gate decided, odds, next' },
   summary: { type: 'string', description: 'two sentences' },
   initiativeUpdates: arr(obj({ id: S, stage: { type: 'string', enum: P.agentStages }, confidence: { type: 'number' }, note: S })),
-  decisions: arr(obj({ question: S, options: arr(S, 4), recommendation: S, why: S }), 2),
+  decisions: arr(QUESTION, 1),
 })
 
 // ---------------------------------------------------------------- helpers
@@ -130,6 +138,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
       `# Initiatives\n${s.initiatives.filter(i => i.stage !== 'killed').map(initiativeLine).join('\n') || '(none yet)'}\nKilled so far: ${s.initiatives.filter(i => i.stage === 'killed').map(i => `${i.title} (${clip(i.note, 120)})`).join('; ') || 'none'}`,
       `# ${P.text.ordersTitle} so far\n${s.orders.map(P.orderLine).join('\n') || '(none)'}`,
       `# Open build requests\n${s.builds.filter(b => b.status === 'requested' || b.status === 'accepted').map(b => `- ${b.id} [${b.status}] ${b.title} (${b.department})`).join('\n') || '(none)'}`,
+      `# Questions\nWaiting for the owner: ${s.decisions.filter(d => d.status === 'open').map(d => `"${clip(d.question, 160)}" (meanwhile: ${d.ifNoAnswer || 'continue'})`).join('; ') || 'none'}\nHeld (not yet asked): ${s.decisions.filter(d => d.status === 'held').length}\nDecided by the company recently: ${s.decisions.filter(d => d.status === 'auto').slice(-5).map(d => `"${clip(d.question, 120)}" -> ${clip(d.choice, 80)}`).join('; ') || 'none'}`,
       `# Facts measured just now (deterministic)\n${J(facts)}`,
     ].join('\n\n')
   }
@@ -138,10 +147,10 @@ export async function runCycle(co, api, { cycleId, focus }) {
   api.phase('CEO plan')
   const plan = await api.agent(start.ceo, [
     context(),
-    answered.length ? `# The owner answered\n${answered.map(d => `- "${d.question}" -> ${d.choice}${d.note ? ` (${d.note})` : ''}`).join('\n')}` : null,
+    answered.length ? `# The owner answered\n${answered.map(d => `- "${d.question}" -> ${d.choice}${d.overruled ? ` (the owner overruled the company's own choice "${d.companyChoice}")` : ''}${d.note ? ` (${d.note})` : ''}`).join('\n')}` : null,
     lastBrief ? `# Your previous brief\n${readClip(path.join(co.reports, lastBrief.report), 3000)}` : null,
     focus ? `# The owner's focus for this cycle\n${focus}` : null,
-    `# Your job now\n${P.prompts.plan}`,
+    `# Your job now\n${P.prompts.plan}\n\n${DECISION_RULE}`,
   ].filter(Boolean).join('\n\n'), { schema: planSchema(depIds), label: 'ceo:plan' })
   if (!plan) throw new Error('the CEO produced no plan')
   api.save('plan.json', plan)
@@ -151,7 +160,10 @@ export async function runCycle(co, api, { cycleId, focus }) {
       const i = s.initiatives.find(x => x.id === k.initiativeId)
       if (i && i.stage !== P.gatedStage && !i.awaitingOwner && i.stage !== 'killed') { i.stage = 'killed'; i.note = str(k.reason, 600); i.history.push({ ts: now(), cycle: cycleId, stage: 'killed', note: i.note }); summary.killed.push(i.title) }
     }
-    for (const d of plan.decisions ?? []) co.addDecision(s, { from: s.ceo, cycle: cycleId, question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4), recommendation: str(d.recommendation, 300), why: str(d.why, 1200) })
+    for (const d of plan.decisions ?? []) {
+      const r = co.askOwner(s, { from: s.ceo, cycle: cycleId, ...d })
+      api.log(`question for the owner (${r.rec.category}): ${r.status === 'auto' ? `not sent, decided by the company: ${r.rec.choice}` : r.status === 'held' ? 'held until the owner is free; continuing with the stated default' : 'asked'}`)
+    }
     const c = s.cycles.find(x => x.id === cycleId)
     if (c) { c.assessment = str(plan.assessment, 2000); c.odds = str(plan.northStar?.odds, 600) }
     s.northStar = { odds: str(plan.northStar?.odds, 800), whatWouldChangeIt: str(plan.northStar?.whatWouldChangeIt, 800), ts: now() }
@@ -259,7 +271,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
     `# Department reports\n${reports.map(r => `## ${r.dep.name}: "${r.title}" (${r.initiativeId})\n${J(r.report)}`).join('\n\n') || '(no department delivered a report)'}`,
     `# Gate results (deterministic; you cannot change them)\n${J(gateResults)}`,
     summary.hires.length ? `# Hires this cycle\n${summary.hires.join('\n')}` : null,
-    `# Your job now\n${P.prompts.review}`,
+    `# Your job now\n${P.prompts.review}\n\n${DECISION_RULE}`,
   ].filter(Boolean).join('\n\n'), { schema: REVIEW, label: 'ceo:review' })
 
   const spent = round(await co.cycleSpend(cycleId))
@@ -286,7 +298,10 @@ export async function runCycle(co, api, { cycleId, focus }) {
       i.note = str(u.note, 800)
       i.history.push({ ts: now(), cycle: cycleId, stage: u.stage, note: i.note })
     }
-    for (const d of review?.decisions ?? []) co.addDecision(s, { from: s.ceo, cycle: cycleId, question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4), recommendation: str(d.recommendation, 300), why: str(d.why, 1200) })
+    for (const d of review?.decisions ?? []) {
+      const r = co.askOwner(s, { from: s.ceo, cycle: cycleId, ...d })
+      api.log(`question for the owner (${r.rec.category}): ${r.status === 'auto' ? `not sent, decided by the company: ${r.rec.choice}` : r.status === 'held' ? 'held until the owner is free; continuing with the stated default' : 'asked'}`)
+    }
   })
   summary.killed = co.read().initiatives.filter(i => i.stage === 'killed' && i.history.some(h => h.cycle === cycleId && h.stage === 'killed')).map(i => i.title)
   return { report: name, summary: review?.summary ?? clip(plan.assessment, 400), ...summary, spendUsd: spent }

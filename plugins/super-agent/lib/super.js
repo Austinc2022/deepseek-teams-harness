@@ -41,9 +41,14 @@ const REPORT = obj({
 
 const tool = (name, description, properties = {}, required = Object.keys(properties)) => ({ name, description, inputSchema: { type: 'object', properties, required } })
 const A = { type: 'array', items: S }
-const TOOLS = [
-  tool('reply_owner', 'Write to the owner. Use only for a result, a decision you need, or something you cannot finish. Set question true when you need an answer.', { text: S, question: { type: 'boolean' } }, ['text']),
-  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' } }, ['title', 'brief', 'doneWhen']),
+const ALL_TOOLS = [
+  tool('reply_owner', 'Write to the owner. purpose result: a finished result the owner can use. purpose cannot-finish: something that cannot be finished, with what was tried. purpose question: an owner-only matter you cannot decide; give category, recommendation and ifNoAnswer. The host decides whether a question is sent: an internal one is not sent and your recommendation stands, and only one owner-only question waits at a time. Never use this for progress.', {
+    text: S, purpose: { type: 'string', enum: ['result', 'question', 'cannot-finish'] },
+    category: { type: 'string', enum: [...P.ownerOnly.map(o => o.key), 'internal'], description: 'for a question: which owner-only matter it is; internal is anything else' },
+    options: A, recommendation: S, ifNoAnswer: { type: 'string', description: 'for a question: what you do until the owner answers; work must be able to continue' },
+  }, ['text', 'purpose']),
+  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' }, workstream: { type: 'string', description: 'optional: the workstream of a larger programme this ticket belongs to, e.g. "world", "combat", "audio", "integration"' }, dependsOn: { type: 'array', items: S, description: 'optional ticket ids that must be delivered first; this ticket starts when they are, and its worker can read their folders. Use it for integration and for anything built on another ticket' }, talent: { type: 'string', enum: ['standard', 'principal'], description: 'principal: the strongest model, for the hardest or most important tickets' } }, ['title', 'brief', 'doneWhen']),
+  tool('critique', 'Send a ticket\'s folder to the critique panel. Every critic reads the work through its own lens at the same time and returns a score, what must be fixed and what would lift it. Use it before the gate, and again after a fix pass, until nothing must be fixed. Then send the fixes to the ticket with message_ticket.', { ticket: S, focus: { type: 'string', description: 'optional: what you most want judged' } }, ['ticket']),
   tool('message_ticket', 'Send more context or a correction to a ticket. Its worker reads it on the next turn; an ended ticket resumes.', { ticket: S, text: S }),
   tool('read_ticket', 'Read a ticket: its reports, its notes and its file list.', { ticket: S }),
   tool('stop_ticket', 'Stop a ticket.', { ticket: S, reason: S }),
@@ -71,6 +76,14 @@ const TOOLS = [
   tool('submit_engine_change', 'Ask for a finished patch from one of your tickets to be installed into the engine. Code checks it, the independent auditor reads it, then the owner is asked; on Install it is tested on a copy, applied with a backup and rolled back if the engine tests fail. The patch must be a unified diff that applies from inside the engine folder and may only touch quantcore/, config/ and tests/. Submit only what you have reviewed yourself.', { ticket: S, patch: { type: 'string', description: 'file name of the patch inside the ticket folder' }, title: S, summary: { type: 'string', description: 'what it changes and why, in plain words' } }),
   tool('run_company_cycle', 'Run one full CEO cycle of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
 ]
+/** A company without an engine has no engine change to submit. */
+const TOOLS = ALL_TOOLS.filter(t => P.hasEngine || t.name !== 'submit_engine_change')
+const CRITIQUE = obj({
+  score: { type: 'number', description: '0..1 through your lens; 1 is the best work in the field' },
+  verdict: { type: 'string', description: 'two sentences: what this is and how good' },
+  mustFix: { type: 'array', items: S, description: 'defects that must be fixed, each with the file or place and the fix' },
+  wouldElevate: { type: 'array', items: S, description: 'at most 5 changes that would lift it from good to great' },
+})
 
 /** Where an open ticket stands, first match wins (the prototype's table). */
 export function stage(t, running) {
@@ -320,7 +333,8 @@ export class SuperAgent {
       `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last CEO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
       `# Your plan (the owner reads this; keep it current with update_plan)\n${me.plan ? `Updated ${me.plan.updatedAt.slice(0, 16)}\nFocus: ${me.plan.focus}\nPriorities:\n${me.plan.priorities.map((p, i) => `${i + 1}. ${p.text} (${p.why})`).join('\n')}\nTo do:\n${me.plan.todo.map(t => `- [${t.status}] ${t.text} (${t.owner})${t.note ? `: ${t.note}` : ''}`).join('\n')}\nBlockers: ${me.plan.blockers.join('; ') || '-'}\nWaiting on the owner: ${me.plan.waitingOnOwner.join('; ') || '-'}` : '(none yet: write it with update_plan)'}`,
       this.#goalText(s),
-      `# Tickets\n${tk.map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
+      `# Authority\n${P.ownerOnlyText()}\nQuestions waiting for the owner: ${c.decisions.filter(d => d.status === 'open').length}; held: ${c.decisions.filter(d => d.status === 'held').length}. Do not repeat them.`,
+      `# Tickets (up to ${s.settings.maxWorkers} worked at once)\n${tk.map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (${t.workstream ? `workstream ${t.workstream}; ` : ''}${t.dependsOn?.length ? `after ${t.dependsOn.join(', ')}; ` : ''}${t.talent ? 'principal; ' : ''}${t.critiques?.length ? `last critique: lowest ${t.critiques.at(-1).min}, ${t.critiques.at(-1).mustFix} must-fix; ` : 'not critiqued; '}owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
       `# Asked and still running\n${s.jobs.filter(j => j.status === 'running').map(j => `- ${j.kind} ${j.target}: ${clip(j.message, 140)}`).join('\n') || '(nothing)'}`,
       `# Recent messages\n${s.feed.slice(-8).map(m => `- ${m.ts.slice(5, 16)} ${m.from}: ${clip(m.text, 240)}`).join('\n') || '(none)'}`,
     ].join('\n\n')
@@ -342,7 +356,7 @@ export class SuperAgent {
     const evalId = newId('e')
     const ids = triggers.map(t => t.id)
     const actions = []
-    const prompt = `${this.#context(me)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n# Your job\nHandle each trigger: ignore it, answer it, or start work, using your tools. Read files when you need facts. Call update_plan in every turn in which your priorities, to-do list or blockers change (the owner reads the plan instead of asking you). Then return a short note of what you decided and why, written so the owner can follow it.`
+    const prompt = `${this.#context(me)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n# Your job\nYou decide: handle each trigger by ignoring it, answering it, or starting work, using your tools. Read files when you need facts. Call update_plan in every turn in which your priorities, to-do list or blockers change (the owner reads the plan instead of asking you). Then return a short note of what you decided and why, written so the owner can follow it.`
     const { id: runId, done } = engine.startCustom(`super agent: ${me.id}`, async api => {
       const mcp = toolsMcp('super', TOOLS, (name, args) => this.#tool(me, name, args, api, actions))
       const res = await api.agent(me.agent, prompt, { schema: NOTE, label: `eval:${me.id}`, full: true, extraMcp: { super: mcp }, signal: AbortSignal.timeout(30 * 60_000) })
@@ -385,7 +399,8 @@ export class SuperAgent {
     const { registry, engine } = this.forge
     const org = this.org
     switch (name) {
-      case 'reply_owner': this.say({ from: me.id, text: a.text, question: a.question === true }); return 'Sent.'
+      case 'reply_owner': return this.#replyOwner(me, a)
+      case 'critique': return this.#critique(me, a, api)
       case 'open_ticket': return this.#openTicket(me, a)
       case 'message_ticket': {
         this.store.update(s => {
@@ -470,6 +485,48 @@ export class SuperAgent {
     }
   }
 
+  /** A message to the owner. A question goes through Company.askOwner: the host decides whether it is sent. */
+  #replyOwner(me, a) {
+    const text = str(a.text, 6000).trim()
+    if (text.length < 10) throw new Error('say what the owner needs to know')
+    const purpose = a.purpose ?? (a.question === true ? 'question' : 'result')
+    if (purpose !== 'question') { this.say({ from: me.id, text, kind: purpose === 'cannot-finish' ? 'cannot-finish' : 'message' }); return 'Sent.' }
+    if (!str(a.ifNoAnswer, 600).trim()) throw new Error('a question needs ifNoAnswer: what you do until the owner answers')
+    const r = this.co.update(s => this.co.askOwner(s, { from: me.id, question: text, options: a.options, recommendation: a.recommendation, why: '', category: a.category, ifNoAnswer: a.ifNoAnswer }))
+    if (r.status === 'auto') return `Not sent. This is an internal matter, so it is yours to decide: go with "${r.rec.choice}" and continue. It is recorded as decided by the company; the owner can overrule it.`
+    if (r.status === 'held') return `Held. Another question is already waiting for the owner, or today's limit is reached. Continue with: ${r.rec.ifNoAnswer}. It will be asked when the owner is free; do not ask again.`
+    this.say({ from: me.id, text: `${text}${r.rec.recommendation ? `\nRecommended: ${r.rec.recommendation}` : ''}\nMeanwhile: ${r.rec.ifNoAnswer}`, question: true })
+    return `Asked (${r.rec.category}). It waits under "Needs you". Continue with: ${r.rec.ifNoAnswer}. The answer reaches the next company cycle; do not wait for it.`
+  }
+
+  /** The critique panel: every critic of the profile reads the ticket's folder through its own lens, at once. */
+  async #critique(me, a, api) {
+    const t = this.#myTicket(this.store.read(), me, a.ticket)
+    const critics = P.critics.filter(c => { try { this.forge.registry.getAgent(c.agent); return true } catch { return false } })
+    if (!critics.length) throw new Error('this company has no critics set up')
+    const charter = this.co.read().charter
+    const out = await api.parallel(critics.map(c => async () => {
+      const r = await api.agent(c.agent, [
+        `You are on the critique panel for "${t.title}". The work is in the current directory; read it, do not take the builder's word for it.`,
+        `Your lens: ${c.lens}.`,
+        `The brief it was built to:\n${clip(t.brief, 3000)}\nDone when: ${clip(t.doneWhen, 800)}`,
+        `The company's goal: ${charter.mission}`,
+        a.focus ? `The lead most wants judged: ${str(a.focus, 600)}` : '',
+        `Judge it against the best work in its field, not against the effort spent. Be specific: name the file or the moment, and the fix. Do not ask for evidence this environment cannot produce.`,
+      ].filter(Boolean).join('\n\n'), { schema: CRITIQUE, label: `critic:${c.agent}`, full: true, cwd: t.dir, signal: AbortSignal.timeout(20 * 60_000) })
+      return { critic: c.agent, lens: c.lens, ...(r?.structured ?? { error: r?.error ?? 'no verdict' }) }
+    }))
+    const got = out.filter(x => x && !x.error)
+    const scores = got.map(x => Math.min(1, Math.max(0, Number(x.score) || 0)))
+    const summary = { ts: now(), by: me.id, critics: got.length, min: scores.length ? Math.min(...scores) : null, mean: scores.length ? Math.round(100 * scores.reduce((n, x) => n + x, 0) / scores.length) / 100 : null, mustFix: got.reduce((n, x) => n + (x.mustFix?.length ?? 0), 0) }
+    this.store.update(s => { const y = s.tickets.find(z => z.id === t.id); if (y) { (y.critiques ??= []).push(summary); y.critiques = y.critiques.slice(-12) } })
+    return [
+      `Critique of ticket ${t.id} "${t.title}": ${got.length} of ${critics.length} critics answered; lowest score ${summary.min ?? '-'}, mean ${summary.mean ?? '-'}; ${summary.mustFix} must-fix item(s). The gate's bar is ${charter.gate.minConfidence}.`,
+      ...out.filter(Boolean).map(x => x.error ? `## ${x.critic}: no verdict (${x.error})` : `## ${x.critic} (score ${x.score})\n${x.verdict}\nMust fix:\n${(x.mustFix ?? []).map(m => `- ${m}`).join('\n') || '- nothing'}\nWould elevate:\n${(x.wouldElevate ?? []).map(m => `- ${m}`).join('\n') || '- nothing'}`),
+      summary.mustFix ? 'Send the must-fix items (and the best of the rest) to the ticket with message_ticket, then critique again after the fix pass.' : 'Nothing must be fixed. It can go to the gate.',
+    ].join('\n\n')
+  }
+
   #myTicket(s, me, id) {
     const t = s.tickets.find(x => x.id === id)
     if (!t) throw new Error(`no ticket ${id}`)
@@ -521,6 +578,11 @@ export class SuperAgent {
     const title = str(a.title, 140).trim()
     const brief = str(a.brief, 12000).trim()
     if (title.length < 6 || brief.length < 80) throw new Error('a ticket needs a title and a brief a newcomer could act on (80+ characters)')
+    const all = this.store.read().tickets
+    const dependsOn = [...new Set((a.dependsOn ?? []).map(String))].slice(0, 12)
+    for (const d of dependsOn) if (!all.some(x => x.id === d)) throw new Error(`dependsOn: no ticket ${d}`)
+    const workstream = a.workstream ? slug(a.workstream, 24) : undefined
+    const talent = a.talent === 'principal' ? 'principal' : undefined
     let worker = WORKER
     if (a.worker) {
       const def = this.forge.registry.getAgent(String(a.worker))
@@ -537,12 +599,12 @@ export class SuperAgent {
     fs.writeFileSync(path.join(dir, 'TICKET.md'), `# ${title}\n\nTicket ${id}, opened ${now()} by super agent ${me.id}.\n\n## Brief\n${brief}\n\n## Done when\n${str(a.doneWhen, 3000)}\n`)
     if (!fs.existsSync(path.join(dir, 'NOTES.md'))) fs.writeFileSync(path.join(dir, 'NOTES.md'), '# Notes\n\n(nothing yet)\n')
     this.store.update(st => {
-      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}) })
+      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}), ...(workstream ? { workstream } : {}), ...(dependsOn.length ? { dependsOn } : {}), ...(talent ? { talent } : {}) })
       this.store.day(st).tickets++
     })
     if (build) { try { this.co.setBuild(build, 'accepted') } catch {} }
     this.say({ from: me.id, kind: 'ticket', ticket: id, text: `Opened ticket "${title}".` })
-    return `Ticket ${id} opened; a worker starts shortly. Its report will reach you as a trigger.`
+    return `Ticket ${id} opened${dependsOn.length ? `; it starts when ${dependsOn.join(', ')} ${dependsOn.length === 1 ? 'is' : 'are'} delivered` : '; a worker starts shortly'}. Its report will reach you as a trigger.`
   }
 
   #dispatch() {
@@ -551,10 +613,29 @@ export class SuperAgent {
       if (this.live.tickets.size >= s.settings.maxWorkers) break
       if (t.status !== 'open' || this.live.tickets.has(t.id)) continue
       if (stage(t, false) !== 'queued') continue
+      if (t.dependsOn?.length) {
+        const deps = t.dependsOn.map(d => s.tickets.find(x => x.id === d)).filter(Boolean)
+        const dead = deps.find(d => d.status === 'ended' && d.outcome !== 'completed')
+        if (dead && !t.depWarned) {
+          this.store.update(x => { const y = x.tickets.find(z => z.id === t.id); y.depWarned = true })
+          this.trigger({ source: 'ticket', kind: 'dependency', to: t.owner, ticket: t.id, text: `Ticket ${t.id} "${t.title}" waits for ticket ${dead.id} "${dead.title}", which ended without being delivered (${dead.outcome}). Decide: reopen ${dead.id} with message_ticket, or stop ${t.id}, or replace the dependency with a new ticket.` })
+        }
+        if (deps.some(d => !(d.status === 'ended' && d.outcome === 'completed'))) continue
+      }
       const limit = s.settings.maxAssignments + (t.extraTurns ?? 0)
       if (t.assignments.length >= limit) {
-        this.store.update(x => { const y = x.tickets.find(z => z.id === t.id); y.attention = { question: `This ticket used ${y.assignments.length} worker turns without finishing. Retry gives it 4 more; Stop ends it.`, ts: now() } })
-        this.say({ from: 'system', kind: 'report', ticket: t.id, question: true, text: `Ticket "${t.title}" used ${t.assignments.length} worker turns without finishing. Retry or stop it.` })
+        if (this.co.read().charter.autonomy.level === 'ask') {
+          this.store.update(x => { const y = x.tickets.find(z => z.id === t.id); y.attention = { question: `This ticket used ${y.assignments.length} worker turns without finishing. Retry gives it 4 more; Stop ends it.`, ts: now() } })
+          this.say({ from: 'system', kind: 'report', ticket: t.id, question: true, text: `Ticket "${t.title}" used ${t.assignments.length} worker turns without finishing. Retry or stop it.` })
+        } else if (!t.autoExtended) {
+          // once: four more turns, and the lead is told so it can narrow the scope
+          this.store.update(x => { const y = x.tickets.find(z => z.id === t.id); y.autoExtended = true; y.extraTurns = (y.extraTurns ?? 0) + 4 })
+          this.trigger({ source: 'ticket', kind: 'turn-limit', to: t.owner, ticket: t.id, text: `Ticket ${t.id} "${t.title}" used ${t.assignments.length} worker turns without finishing. It has been given 4 more, once. Read it (read_ticket) and decide now: narrow its scope or correct its direction with message_ticket, split the rest into a new ticket, or stop it. This is yours to decide.` })
+        } else {
+          this.#stopTicket(t.id, `stopped by the host: ${t.assignments.length} worker turns without finishing`)
+          this.say({ from: 'system', kind: 'report', ticket: t.id, text: `Ticket "${t.title}" was stopped after ${t.assignments.length} worker turns without finishing. Its lead decides what follows.` })
+          this.trigger({ source: 'ticket', kind: 'stopped', to: t.owner, ticket: t.id, text: `Ticket ${t.id} "${t.title}" was stopped: it used ${t.assignments.length} worker turns, including its one extension, without finishing. What exists is in ${t.dir}. Decide what follows: a smaller ticket that reuses that folder's work, a different approach, or nothing.` })
+        }
         continue
       }
       this.#assign(t, s)
@@ -571,6 +652,7 @@ export class SuperAgent {
       `Your folder (current directory): ${t.dir}\nTurn ${t.assignments.length + 1} on this ticket. Read TICKET.md and NOTES.md first.`,
       `## Brief\n${t.brief}`,
       `## Done when\n${t.doneWhen}`,
+      t.dependsOn?.length ? `## Built before this ticket (read-only to you; build on it, copy what you need into your folder)\n${t.dependsOn.map(d => s.tickets.find(x => x.id === d)).filter(Boolean).map(d => `- ${d.id} "${d.title}"${d.workstream ? ` (${d.workstream})` : ''}: ${d.dir}`).join('\n')}` : '',
       prior.length ? `## Your earlier reports\n${prior.map(x => `- (${x.report.status}) ${clip(x.report.summary, 900)}`).join('\n')}` : '',
       fresh.length ? `## New since your last turn\n${fresh.map(i => `- ${i.kind === 'person' ? 'The owner' : i.kind === 'lead' ? `Your lead (${i.from})` : i.kind}: ${i.text}`).join('\n')}` : '',
       `## Environment\n${P.worker.environment(t)}${P.hasEngine ? '\n- You cannot change the engine yourself. When the ticket needs an engine change, deliver it as one unified diff file in your folder (for example change.patch) that applies with "git apply" from inside the engine folder and touches only quantcore/, config/ and tests/, with the tests that prove it. Your lead submits it; it is audited, the owner approves, and code installs it.' : ''}\n- The company goal: ${this.co.read().charter.mission}`,
@@ -578,7 +660,7 @@ export class SuperAgent {
     ].filter(Boolean).join('\n\n')
     const minutes = s.settings.assignmentMinutes
     const { id: runId, done } = engine.startCustom(`ticket: ${t.short}`, async api => {
-      const res = await api.agent(t.worker, prompt, { schema: REPORT, label: `worker:${t.short}`, full: true, cwd: t.dir, signal: AbortSignal.timeout(minutes * 60_000) })
+      const res = await api.agent(t.worker, prompt, { schema: REPORT, label: `worker:${t.short}`, full: true, cwd: t.dir, signal: AbortSignal.timeout(minutes * 60_000), ...(t.talent === 'principal' ? { model: P.models.ceo, effort: P.models.ceoEffort ?? 'xhigh' } : {}) })
       return { ok: !!res?.ok, report: res?.structured ?? null, error: res?.error ?? null, turns: res?.turns }
     }, { ticket: t.id, title: t.title }, { cwd: t.dir, meta: { superTicket: t.id } })
     this.live.tickets.set(t.id, { runId })
@@ -610,14 +692,15 @@ export class SuperAgent {
       if (rep.status === 'ready' && !unread) { t.status = 'ended'; t.outcome = 'completed'; t.endedAt = now() }
       else if (rep.status === 'dropped') { t.status = 'ended'; t.outcome = 'dropped'; t.endedAt = now() }
       else if (rep.status === 'progress') t.inputs.push({ id: newId('i'), ts: now(), kind: 'continue', text: 'Continue from NOTES.md.' })
-      if (rep.question && rep.status !== 'ready') t.attention = { question: rep.question, ts: now() }
+      // a worker's question goes to its lead; only in "ask" mode does it wait for the owner
+      if (rep.question && rep.status !== 'ready' && this.co.read().charter.autonomy.level === 'ask') t.attention = { question: rep.question, ts: now() }
       if (proposal) t.proposal = { ...proposal, status: 'queued' }
     })
     if (!t) return
     if (rep.status === 'ready' && t.build && t.status === 'ended') { try { this.co.setBuild(t.build, 'done') } catch {} }
     if (rep.status !== 'progress') {
       this.say({ from: 'worker', kind: 'report', ticket: t.id, question: !!t.attention, text: `Ticket "${t.title}" — ${rep.status}. ${clip(rep.summary, 1200)}${rep.question ? `\nQuestion: ${rep.question}` : ''}` })
-      this.trigger({ source: 'ticket', kind: 'report', to: t.owner, ticket: t.id, text: `Worker report on ticket ${t.id} "${t.title}": ${rep.status}.\n${clip(rep.summary, 4000)}${rep.question ? `\nIts question (the owner sees it too): ${rep.question}` : ''}\nFiles: ${(rep.files ?? []).join(', ') || '-'}\nFolder: ${t.dir}${proposal ? '\nIt sent a proposal to the gate; the result will reach you.' : ''}\nDecide what follows: nothing, a follow-up ticket, a review by an agent or team, or a short result for the owner.` })
+      this.trigger({ source: 'ticket', kind: 'report', to: t.owner, ticket: t.id, text: `Worker report on ticket ${t.id} "${t.title}": ${rep.status}.\n${clip(rep.summary, 4000)}${rep.question ? (t.attention ? `\nIts question (the owner sees it too): ${rep.question}` : `\nIts question is for you, not the owner: ${rep.question}\nAnswer it now with message_ticket (the ticket resumes). You decide it. Only if it is an owner-only matter, ask through reply_owner and tell the ticket what to do meanwhile.`) : ''}\nFiles: ${(rep.files ?? []).join(', ') || '-'}\nFolder: ${t.dir}${proposal ? '\nIt sent a proposal to the gate; the result will reach you.' : ''}\nDecide what follows yourself: nothing, new instructions to the ticket (message_ticket), a critique, a follow-up ticket, or a short result for the owner. A blocked or failed ticket is yours to resolve; it is not passed to the owner.` })
     }
     if (proposal) this.#gate(t, proposal)
   }
@@ -670,7 +753,7 @@ export class SuperAgent {
       settings: s.settings, today: this.store.day(s),
       agents: s.agents.map(a => ({ ...a, busy: busy.has(a.id), pending: s.triggers.filter(t => t.to === a.id && t.status === 'pending').length })),
       tickets,
-      needsYou: tickets.filter(t => t.stage.startsWith('person:')),
+      needsYou: tickets.filter(t => t.stage === 'person:answer' || (this.co.read().charter.autonomy.level === 'ask' && t.stage.startsWith('person:'))),
       feed: s.feed.slice(-80).reverse(),
       jobs: s.jobs.slice(-20).reverse(),
       evals: s.evals.slice(-15).reverse(),

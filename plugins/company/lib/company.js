@@ -28,6 +28,9 @@ export { ROOT, today, newId }
 /** The active profile's charter (profiles/<id>.js); the owner edits it on the Company page. */
 export const DEFAULT_CHARTER = {
   hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 }, // auto | observe (ask the owner) | off
+  // high: the company decides everything that is not owner-only, and asks at most maxQuestionsPerDay owner-only
+  // questions, one at a time. ask: every question goes to the owner (docs/SUPER-AGENT-AUTONOMY.md).
+  autonomy: { level: 'high', maxQuestionsPerDay: 1 },
   execution: { ownerApproval: false }, // true: a proposal that passed the gate is held until the owner says Start (the quant profile turns it on)
   autopilot: { enabled: false, everyHours: 6 },
   ...P.charter,
@@ -56,7 +59,7 @@ export class Company {
     let s
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { s = {} }
     s.charter = { ...DEFAULT_CHARTER, ...(s.charter ?? {}) }
-    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
+    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'autonomy', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
     for (const k of ['departments', 'initiatives', 'decisions', 'hires', 'orders', 'cycles', 'builds']) s[k] ??= []
     s.days ??= {}
     return s
@@ -231,6 +234,7 @@ export class Company {
 
   async tick() {
     const s = this.read()
+    if (s.decisions.some(x => x.status === 'held')) this.update(x => { this.promoteHeld(x) })
     const ap = s.charter.autopilot
     if (!ap.enabled || this.active()) return
     const last = s.cycles.at(-1)
@@ -266,6 +270,10 @@ export class Company {
         c.hiring.maxPerDay = num(patch.hiring.maxPerDay, 0, 20, c.hiring.maxPerDay)
         c.hiring.maxAgents = num(patch.hiring.maxAgents, 1, 200, c.hiring.maxAgents)
       }
+      if (patch.autonomy) {
+        if (['high', 'ask'].includes(patch.autonomy.level)) c.autonomy.level = patch.autonomy.level
+        c.autonomy.maxQuestionsPerDay = num(patch.autonomy.maxQuestionsPerDay, 0, 20, c.autonomy.maxQuestionsPerDay)
+      }
       if (patch.execution?.ownerApproval !== undefined) c.execution.ownerApproval = patch.execution.ownerApproval !== false
       if (patch.gate) {
         c.gate.maxProposalsPerCycle = num(patch.gate.maxProposalsPerCycle, 0, 5, c.gate.maxProposalsPerCycle)
@@ -276,16 +284,22 @@ export class Company {
     })
   }
 
-  /** The owner answers a decision. choice is one of its options (or free text); the next cycle sees it. */
+  /**
+   * The owner answers a decision. choice is one of its options (or free text); the next cycle sees it.
+   * The owner may also overrule something the company decided for them, or answer a held question early.
+   */
   decide(id, { choice, note } = {}) {
     return this.update(s => {
       const d = s.decisions.find(x => x.id === id)
       if (!d) throw new Error('no such decision')
-      if (d.status !== 'open') throw new Error('this decision is already answered')
+      if (d.status === 'answered') throw new Error('this decision is already answered')
+      if (d.status === 'auto') { d.overruled = true; d.companyChoice = d.choice }
       d.status = 'answered'
       d.choice = str(choice, 600).trim()
       d.note = str(note, 2000).trim() || undefined
       d.answeredAt = now()
+      d.seenByCeo = false
+      this.promoteHeld(s)
       return d
     })
   }
@@ -337,6 +351,50 @@ export class Company {
     return { paused: !!on }
   }
 
+  // ---------------- the one door for an agent's question (docs/SUPER-AGENT-AUTONOMY.md)
+  /** True when an owner-only question may be shown now: none is waiting and today's limit is not reached. */
+  #slotFree(s) {
+    const asked = x => !x.kind && x.askedAt
+    if (s.decisions.some(x => x.status === 'open' && !x.kind)) return false
+    const day = today()
+    const local = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    return s.decisions.filter(x => asked(x) && local(x.askedAt) === day).length < s.charter.autonomy.maxQuestionsPerDay
+  }
+
+  /** A held question is asked when the place is free. Called inside update(). */
+  promoteHeld(s) {
+    const h = s.decisions.find(x => x.status === 'held')
+    if (!h || !this.#slotFree(s)) return null
+    h.status = 'open'; h.askedAt = now()
+    return h
+  }
+
+  /**
+   * An agent wants the owner to decide something. Called inside update(). Returns { status, rec }:
+   *   auto   it is not an owner-only matter: the recommendation is the decision (the owner can overrule it)
+   *   open   it is owner-only and is now waiting under "Needs you"
+   *   held   it is owner-only but one is already waiting, or today's limit is reached; the company continues
+   *          with d.ifNoAnswer and the question is asked when the place is free
+   */
+  askOwner(s, d) {
+    const keys = P.ownerOnly.map(o => o.key)
+    const category = keys.includes(d.category) ? d.category : 'internal'
+    const base = {
+      ...d, category,
+      question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4),
+      recommendation: str(d.recommendation, 300), why: str(d.why, 1200), ifNoAnswer: str(d.ifNoAnswer, 600),
+    }
+    const same = s.decisions.find(x => x.question === base.question && ['open', 'held'].includes(x.status))
+    if (same) return { status: same.status, rec: same }
+    if (s.charter.autonomy.level === 'ask') return { status: 'open', rec: this.addDecision(s, { ...base, askedAt: now() }) }
+    const push = rec => { s.decisions.push(rec); s.decisions = s.decisions.slice(-300); return rec }
+    if (category === 'internal') {
+      return { status: 'auto', rec: push({ id: newId('d'), ts: now(), ...base, status: 'auto', choice: base.recommendation || base.options[0] || 'as recommended', decidedAt: now() }) }
+    }
+    if (this.#slotFree(s)) return { status: 'open', rec: this.addDecision(s, { ...base, askedAt: now() }) }
+    return { status: 'held', rec: push({ id: newId('d'), ts: now(), ...base, status: 'held' }) }
+  }
+
   addDecision(s, d) {
     const open = s.decisions.filter(x => x.status === 'open')
     if (open.some(x => x.question === d.question)) return null
@@ -371,6 +429,7 @@ export class Company {
       departments, initiatives: s.initiatives, decisions: s.decisions.slice(-80).reverse(), hires: s.hires.slice(-60).reverse(),
       orders: s.orders.slice(-60).reverse(), builds: s.builds.slice(-40).reverse(), cycles: s.cycles.slice(-40).reverse(),
       busy: !!act, run, stages: STAGES, setUp: s.departments.length > 0, updatedAt: s.updatedAt,
+      ownerOnly: P.ownerOnly,
       profile: { id: P.id, label: P.label, setUpWith: s.profile ?? null, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: this.metering, provider: P.models.provider, projectDir: P.projectDir, text: P.text },
       paused: fs.existsSync(path.join(this.dir, 'PAUSED')),
     }

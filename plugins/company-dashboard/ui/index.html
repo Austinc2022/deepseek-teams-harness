@@ -149,7 +149,8 @@ button.chip.busy { outline: 2px solid var(--accent) }
     </div>
   </header>
 
-  <section class="panel need" id="need"><div class="head"><h2>Needs you</h2></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+  <section class="panel need" id="need"><div class="head"><h2>Needs you</h2><span class="small muted" id="needHint"></span></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+  <section class="panel" id="autoPanel" hidden><details><summary><strong>Decided for you</strong> <span class="small muted" id="autoCount"></span></summary><div id="autoList"></div></details></section>
 
   <section class="panel" id="goal"><div class="head"><h2>Goal and progress</h2></div><div id="goalBody"><p class="empty">Loading…</p></div></section>
 
@@ -224,6 +225,8 @@ button.chip.busy { outline: 2px solid var(--accent) }
       <label>Autopilot: a cycle every (hours)<input id="c-hours" type="number" min="0.25" step="0.25"></label>
       <label>Hiring<select id="c-hiring"><option value="auto">Automatic (read-only agents)</option><option value="observe">Ask me first</option><option value="off">Off</option></select></label>
       <label>Hires per day, at most<input id="c-hires" type="number" min="0" step="1"></label>
+      <label>Questions to you<select id="c-autonomy"><option value="high">Only owner-only matters (the company decides the rest)</option><option value="ask">Ask me everything</option></select></label>
+      <label>Owner-only questions per day, at most<input id="c-questions" type="number" min="0" max="20" step="1"></label>
       <label>Proposals to the gate per cycle<input id="c-props" type="number" min="0" max="5" step="1"></label>
       <label class="wide">Rules (one per line)<textarea id="c-rules" style="min-height:170px"></textarea></label>
       <div class="wide"><button class="primary" type="submit">Save the charter</button></div>
@@ -284,9 +287,21 @@ function renderTop() {
   const open = O.decisions.filter(d => d.status === 'open')
   $('need').className = 'panel need' + (open.length ? '' : ' none')
   $('decisions').innerHTML = open.length ? open.map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
-    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. ${esc(d.why)}</div>
+    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}${d.category ? ' · ' + esc(d.category) : ''}. ${esc(d.why)}${d.ifNoAnswer ? ' Meanwhile: ' + esc(d.ifNoAnswer) : ''}</div>
     <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div>
     <div class="small muted">Recommended: ${esc(d.recommendation)}</div></div>`).join('') : ''
+  // what the company decided itself (you can overrule it), and owner-only questions held until you are free
+  const autos = O.decisions.filter(d => d.status === 'auto'), held = O.decisions.filter(d => d.status === 'held')
+  const au = c.autonomy || { level: 'ask', maxQuestionsPerDay: 0 }
+  $('needHint').textContent = au.level === 'high' ? `Only owner-only matters reach you, one at a time, at most ${au.maxQuestionsPerDay} a day. Everything else the company decides.` : 'Every question from the company comes to you.'
+  $('autoPanel').hidden = !autos.length && !held.length
+  $('autoCount').textContent = `${autos.length} decided by the company${held.length ? ` · ${held.length} held for you` : ''}`
+  $('autoList').innerHTML = held.map(d => `<div class="decision"><div class="q">${esc(d.question)} <span class="pill warn">held · ${esc(d.category)}</span></div>
+    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. It will be asked when nothing else is waiting. Meanwhile: ${esc(d.ifNoAnswer || 'the company continues')}</div>
+    <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div></div>`).join('') +
+    autos.slice(0, 30).map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
+    <div class="small muted">${esc(d.from)} decided: <strong>${esc(d.choice)}</strong> · ${when(d.decidedAt || d.ts)}${d.why ? '. ' + esc(d.why) : ''}</div>
+    ${d.options.filter(o => o !== d.choice).length ? `<div class="opts"><span class="small muted">Overrule:</span>${d.options.filter(o => o !== d.choice).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>` : ''}</div>`).join('')
   const waits = SA ? SA.needsYou : []
   $('decisions').innerHTML += waits.map(t => `<div class="decision"><div class="q">${esc(t.attention ? t.attention.question : t.stage === 'person:failed' ? 'This ticket failed.' : 'This ticket is blocked.')}</div>
     <div class="small muted">Ticket: ${esc(t.title)} · ${esc(t.stage.replace('person:', ''))}. ${esc((t.summary || '').slice(0, 280))}</div>
@@ -573,13 +588,14 @@ function fillCharter() {
   const c = O.charter
   $('c-mission').value = c.mission; $('c-daily').value = c.budget.dailyUsd; $('c-cycle').value = c.budget.cycleUsd; $('c-reserve').value = c.budget.reserveUsd
   $('c-target').value = c.northStar.targetDailyUsd; $('c-hours').value = c.autopilot.everyHours; $('c-hiring').value = c.hiring.mode; $('c-hires').value = c.hiring.maxPerDay
+  if (c.autonomy) { $('c-autonomy').value = c.autonomy.level; $('c-questions').value = c.autonomy.maxQuestionsPerDay }
   $('c-props').value = c.gate.maxProposalsPerCycle; $('c-rules').value = c.rules.join('\n')
 }
 $('charter').addEventListener('input', () => { charterDirty = true })
 $('charter').addEventListener('submit', e => {
   e.preventDefault()
   act(async () => {
-    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
+    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, autonomy: { level: $('c-autonomy').value, maxQuestionsPerDay: $('c-questions').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
     charterDirty = false
   }, 'Charter saved')
 })

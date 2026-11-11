@@ -257,6 +257,38 @@ is doing, its recent work and cost) and one **Timeline** you can filter by indiv
   engine's tests fail.
 - `./super-cli plan` prints the goal ladder, every plan and what is running now.
 
+## Company profiles: any industry, and a leader that decides
+
+The company and the super agent are not tied to one industry. What a company is (its organisation, charter, rules,
+pipeline stages, skills, models, facts and gate) lives in a **profile** under `plugins/company/profiles/`:
+
+| Profile | What it is |
+|---|---|
+| `generic` | A starting point for any company that produces files. Its gate: static checks, an independent rebuild and test in the sandbox, and an audit with a quality score. |
+| `vr-studio` | A VR game studio that ships WebXR games into `../vr-studio/release-candidates/`. Runs on the Claude subscription. |
+| `quant` | The original crypto trading company described below. Needs the private `quant/` engine and a DeepSeek key. |
+
+```bash
+./company-cli profile                 # the active profile and the available ones
+./company-cli profile vr-studio       # select one, then restart and run the two setups
+./company-cli setup && ./super-cli setup
+./company-cli setup --refresh-agents  # after editing a profile: rewrite its agents, keep teams and hires
+```
+
+Write your own by copying `vr-studio.js`; `makeProfile` in `generic.js` documents every field.
+
+**The owner is asked very little.** The company decides everything inside its charter. Only owner-only matters
+(spending, anything public, legal, access, the charter) can reach "Needs you", one at a time, and the host
+enforces that in code. What the company decided is listed under "Decided for you" with an Overrule button. The
+charter's `autonomy` setting switches back to "ask me everything".
+
+**The super agent leads at master level.** It carries three leadership skills (`executive-judgment`,
+`masterwork-standard`, `grand-scale-orchestration`), runs on the strongest model at the highest effort, sends work
+to a critique panel before the gate (`critique`), and lays out large work as a programme: tickets in workstreams
+that wait for each other (`dependsOn`), with principal builders on the hardest ones.
+
+The design is in [docs/SUPER-AGENT-AUTONOMY.md](docs/SUPER-AGENT-AUTONOMY.md).
+
 ## Company: a CEO over departments, with a budget and a gate
 
 The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.
