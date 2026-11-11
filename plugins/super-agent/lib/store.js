@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { profile as P } from '../../company/lib/profile.js'
 
 export const now = () => new Date().toISOString()
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -21,13 +22,14 @@ export const DEFAULT_SETTINGS = {
   maxWorkers: 2,          // tickets worked at the same time
   maxEvals: 2,            // super agents thinking at the same time
   assignmentMinutes: 45,  // one worker turn is stopped after this long
-  maxAssignments: 8,      // worker turns per ticket before it asks the owner
+  maxAssignments: 8,      // worker turns per ticket; then one extension, then the ticket is stopped
   maxTicketsPerDay: 12,
   maxEvalsPerDay: 150,
   maxSuperAgents: 8,
   maxSkillsPerDay: 5,
   sources: { company: true, engine: true, clock: true },
   engine: { autostart: false }, // the host starts and keeps the paper engine's processes running
+  ...P.scale,             // the active profile's scale (maxWorkers, maxTicketsPerDay, maxSuperAgents, ...)
 }
 
 const LISTS = ['agents', 'triggers', 'tickets', 'jobs', 'evals', 'feed']

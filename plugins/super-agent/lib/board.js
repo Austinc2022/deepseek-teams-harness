@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { now, clip } from './store.js'
 import { progress, rightNow, orgView } from './views.js'
+import { profile as P } from '../../company/lib/profile.js'
 
 const DAY = 86400_000
 const localDay = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -76,7 +77,7 @@ export function board(sa, { hours = 24 } = {}) {
     claim(d.lead.name, `dep:${d.id}`)
   }
   for (const d of org.company.departments) for (const t of d.teams) for (const m of t.members) claim(m.name, `dep:${d.id}`)
-  units.push({ id: 'workers', type: 'Builders', name: 'Ticket workers', who: 'agent:quant-super-worker', lead: null })
+  units.push({ id: 'workers', type: 'Builders', name: 'Ticket workers', who: `agent:${P.workerName}`, lead: null })
   for (const a of org.others) claim(a.name, 'workers')
 
   const openTk = s.tickets.filter(t => t.status === 'open')
@@ -97,12 +98,12 @@ export function board(sa, { hours = 24 } = {}) {
       u.detail = a.plan ? `${a.plan.todo.filter(t => t.status === 'doing').length} doing · ${a.plan.todo.filter(t => t.status === 'todo').length} to do · ${a.plan.todo.filter(t => t.status === 'blocked').length} blocked` : ''
     } else if (u.id.startsWith('dep:')) {
       const id = u.id.slice(4)
-      const ini = c.initiatives.filter(i => i.department === id && i.stage !== 'killed' && i.stage !== 'paper').at(-1)
+      const ini = c.initiatives.filter(i => i.department === id && i.stage !== 'killed' && i.stage !== P.gatedStage).at(-1)
       const lastAny = c.initiatives.filter(i => i.department === id).at(-1)
       u.work = ini ? ini.title : lastAny ? `Nothing open. Last: ${lastAny.title} (${lastAny.stage})` : 'No directive yet.'
       u.detail = ini ? `stage: ${ini.stage}${ini.confidence != null ? ` · confidence ${Math.round(ini.confidence * 100)}%` : ''}${ini.note ? ` · ${clip(ini.note, 160)}` : ''}` : ''
       u.stage = ini?.stage ?? null
-      u.openInitiatives = c.initiatives.filter(i => i.department === id && !['killed', 'paper'].includes(i.stage)).length
+      u.openInitiatives = c.initiatives.filter(i => i.department === id && !['killed', P.gatedStage].includes(i.stage)).length
     } else if (u.id === 'workers') {
       u.status = runningTk.length ? 'working' : openTk.some(t => t.attention) ? 'blocked' : openTk.length ? 'queued' : 'idle'
       u.work = runningTk.length ? runningTk.map(t => t.title).join(' · ') : openTk.length ? `${openTk.length} open ticket(s) waiting` : 'No open ticket.'
@@ -167,15 +168,16 @@ export function board(sa, { hours = 24 } = {}) {
   for (const e of s.evals) for (const id of e.triggers ?? []) { const t = s.triggers.find(x => x.id === id); if (t && e.startedAt) lat.push((new Date(e.startedAt) - new Date(t.ts)) / 60000) }
   const cyc = c.cycles.filter(x => x.endedAt && x.status === 'completed')
   const costByUnit = units.map(u => ({ id: u.id, name: u.name, usd: r2(rows.filter(r => unitOf[r.agent] === u.id).reduce((n, r) => n + r.costUsd, 0)), turns: rows.filter(r => unitOf[r.agent] === u.id).length })).sort((a, b) => b.usd - a.usd)
-  const stages = ['idea', 'research', 'model', 'rehearsal', 'gate', 'paper', 'killed']
+  const stages = P.stages
   const ceoPlan = s.agents.find(a => !a.parent)?.plan ?? null
   const perDay = g.money.paperProfitPerDayUsd
 
   return {
     at: now(), hours: Math.round((to - from) / 3600_000),
+    profile: { id: P.id, label: P.label, hasEngine: P.hasEngine, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: sa.co.metering, text: P.text },
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },
-    health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, engineOk: eng.engineFresh && eng.collectorFresh, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },
+    health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, hasEngine: P.hasEngine, engineOk: P.hasEngine ? eng.engineFresh && eng.collectorFresh : true, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },
     units, activity: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), rows: activity },
     days, history: hist,
     funnel: stages.map(st => ({ stage: st, n: c.initiatives.filter(i => i.stage === st).length })),
@@ -197,8 +199,8 @@ export function board(sa, { hours = 24 } = {}) {
       needsYou: c.decisions.filter(d => d.status === 'open').map(d => clip(d.question, 220)).concat(openTk.filter(t => t.attention).map(t => `Ticket "${t.title}": ${clip(t.attention.question, 160)}`)),
       ladderNext: g.next, plan: ceoPlan ? { focus: ceoPlan.focus, updatedAt: ceoPlan.updatedAt, priorities: ceoPlan.priorities, todo: ceoPlan.todo.filter(t => t.status !== 'done').slice(0, 8), blockers: ceoPlan.blockers, waitingOnOwner: ceoPlan.waitingOnOwner } : null,
       forecast: [
-        runwayDays != null ? `At the recent spend of $${burn} a day, the DeepSeek balance above the reserve lasts about ${runwayDays} day${runwayDays === 1 ? '' : 's'}.` : 'No spend recorded yet, so there is no runway estimate.',
-        perDay > 0 ? `Paper profit is $${perDay} a day; the target is ${Math.round(g.money.targetDailyUsd / perDay).toLocaleString('en-US')} times that.` : 'Paper profit is $0 a day, so there is no honest date for the target. An estimate appears once an approved strategy has traded on paper.',
+        runwayDays != null ? `At the recent spend of $${burn} a day, the provider balance above the reserve lasts about ${runwayDays} day${runwayDays === 1 ? '' : 's'}.` : sa.co.metering === 'balance' ? 'No spend recorded yet, so there is no runway estimate.' : `Spend is estimated from run costs (about $${burn ?? 0} a day recently); on a subscription your plan's usage limits are the real limit.`,
+        perDay > 0 ? `${g.money.label} is $${perDay}; the target is ${Math.round(g.money.targetDailyUsd / perDay).toLocaleString('en-US')} times that.` : `No money is measured yet: ${g.money.basis}.`,
         g.next ? `The next step on the ladder is "${g.next.title}". ${g.next.detail}` : 'Every step on the ladder is done.',
       ],
     },

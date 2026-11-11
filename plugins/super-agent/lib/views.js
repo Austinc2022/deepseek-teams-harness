@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { clip } from './store.js'
+import { profile as P } from '../../company/lib/profile.js'
 
 const iso = t => (t ? new Date(t).toISOString() : null)
 const DAY = 86400_000
@@ -16,29 +17,20 @@ export function progress(sa) {
   const c = sa.co.read()
   const eng = sa.ops.snapshot()
   const ms = s.milestones ?? {}
-  const active = c.orders.filter(o => (o.status ?? 'active') === 'active')
-  const oldest = active.map(o => new Date(o.decidedAt ?? o.ts).getTime()).sort()[0]
-  const bookPnl = name => eng.books.find(b => b.name === name)?.pnl ?? 0
-  const approvedPnl = active.reduce((n, o) => n + bookPnl(o.book), 0)
-  const said = (k, missing) => (ms[k]?.done ? `${ms[k].evidence} (${ms[k].ts.slice(0, 10)})` : ms[k]?.evidence ? `Not yet: ${ms[k].evidence}` : missing)
-  const steps = [
-    { key: 'org', title: 'Organisation set up', done: c.departments.length > 0 && s.agents.length > 0, how: 'measured', detail: `${c.departments.length} departments, ${s.agents.length} super agents` },
-    { key: 'engine', title: 'Engine and market data running', done: eng.engineFresh && eng.collectorFresh, how: 'measured', detail: eng.engineFresh && eng.collectorFresh ? 'Both heartbeats are fresh.' : `Engine heartbeat ${eng.engineAgeS == null ? 'missing' : `${Math.round(eng.engineAgeS / 60)} min old`}; collector ${eng.collectorAgeS == null ? 'missing' : `${Math.round(eng.collectorAgeS / 60)} min old`}.` },
-    { key: 'gate_ready', title: 'Verification gate can score a new strategy', done: ms.gate_ready?.done === true, how: 'reported by the CEO', detail: said('gate_ready', 'The CEO has not reported this yet.') },
-    { key: 'train_positive', title: 'A strategy is profitable on training data', done: ms.train_positive?.done === true, how: 'reported by the CEO', detail: said('train_positive', 'No strategy has shown a profit after fees yet.') },
-    { key: 'verified', title: 'A strategy passed verification', done: c.orders.length > 0, how: 'measured', detail: c.orders.length ? `${c.orders.length} passed the audit, the safety checks and the validator.` : 'Nothing has passed the gate.' },
-    { key: 'paper', title: 'Approved by you and trading on paper', done: active.length > 0, how: 'measured', detail: active.length ? `${active.length} paper book(s) running.` : c.orders.some(o => o.status === 'awaiting-owner') ? 'One is waiting for your answer.' : 'Nothing approved yet.' },
-    { key: 'paper30', title: '30 days of paper trading in profit', done: !!oldest && Date.now() - oldest >= 30 * DAY && approvedPnl > 0, how: 'measured', detail: oldest ? `Day ${Math.floor((Date.now() - oldest) / DAY)} of 30; paper profit so far $${approvedPnl.toFixed(2)}.` : 'Starts when the first paper book runs.' },
-    { key: 'real', title: 'Your decision on real money', done: false, how: 'yours', detail: 'Real-money trading is not built. It is a decision only you can take.' },
-  ]
+  const missing = Object.fromEntries(P.milestones.map(m => [m.key, m.missing ?? 'The CEO has not reported this yet.']))
+  const said = k => (ms[k]?.done ? `${ms[k].evidence} (${ms[k].ts.slice(0, 10)})` : ms[k]?.evidence ? `Not yet: ${ms[k].evidence}` : missing[k])
+  // the ladder and the money line are the profile's: a trading company and a game studio measure different things
+  const steps = P.goalSteps({ c, s, eng, ms, said })
   const done = steps.filter(x => x.done).length
   const days = Object.values(c.days ?? {})
   const target = c.charter.northStar.targetDailyUsd
-  const daysRunning = oldest ? Math.max(1, (Date.now() - oldest) / DAY) : 0
-  const perDay = daysRunning ? approvedPnl / daysRunning : 0
+  const m = P.goalMoney({ c, s, eng })
+  const perDay = m.perDayUsd ?? 0
+  const approvedPnl = m.totalUsd ?? 0
+  const active = c.orders.filter(o => (o.status ?? 'active') === 'active')
   return {
     mission: c.charter.mission, percent: Math.round(100 * done / steps.length), done, total: steps.length, steps, next: steps.find(x => !x.done) ?? null,
-    money: { targetDailyUsd: target, paperProfitPerDayUsd: Math.round(perDay * 100) / 100, shareOfTarget: target ? Math.max(0, perDay) / target : 0, paperProfitUsd: Math.round(approvedPnl * 100) / 100, books: eng.books, basis: active.length ? 'approved paper books' : 'no approved strategy is trading' },
+    money: { targetDailyUsd: target, label: m.label, paperProfitPerDayUsd: Math.round(perDay * 100) / 100, shareOfTarget: target ? Math.max(0, perDay) / target : 0, paperProfitUsd: Math.round(approvedPnl * 100) / 100, books: eng.books, accepted: active.length, basis: m.basis },
     odds: c.northStar?.odds ?? null, oddsAt: c.northStar?.ts ?? null,
     effort: {
       spentUsd: Math.round(days.reduce((n, d) => n + (d.modelUsd ?? 0), 0) * 100) / 100, days: days.length,
@@ -75,7 +67,7 @@ export function rightNow(sa) {
       for (const sub of c.cycles.find(x => x.id === act.cycleId)?.subRuns ?? []) { try { agents.push(...engine.getRun(sub.runId).agents.map(a => ({ ...a, label: `${sub.department} · ${a.label}` }))) } catch {} }
       const running = agents.filter(a => a.status === 'running')
       cycle = { id: act.cycleId, runId: act.runId, phase: act.state.phase, startedAt: act.state.startedAt }
-      items.push({ who: 'Company CEO cycle', whoId: 'company', kind: 'cycle', what: `Phase: ${act.state.phase ?? 'starting'}. ${running.length ? `Working now: ${running.map(a => a.label).join(', ')}` : 'Measuring the engine.'}`, since: act.state.startedAt, runId: act.runId })
+      items.push({ who: 'Company CEO cycle', whoId: 'company', kind: 'cycle', what: `Phase: ${act.state.phase ?? 'starting'}. ${running.length ? `Working now: ${running.map(a => a.label).join(', ')}` : 'Gathering facts.'}`, since: act.state.startedAt, runId: act.runId })
     }
   } catch {}
   const ap = c.charter.autopilot
@@ -115,7 +107,7 @@ export function orgView(sa) {
     teams: d.teams.map(t => { try { const team = registry.getTeam(t); return { name: t, description: team.description, members: team.members.map(info) } } catch { return { name: t, missing: true, members: [] } } }),
   }))
   const inOrg = new Set([c.ceo, c.auditor, ...departments.flatMap(d => [d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))]), ...s.agents.map(a => a.agent)])
-  const others = registry.listAgents().filter(a => !a.invalid && a.name.startsWith('quant-') && !inOrg.has(a.name)).map(a => ({ name: a.name, description: a.description, model: a.model, provider: a.provider ?? 'claude-code', tags: a.tags ?? [] }))
+  const others = registry.listAgents().filter(a => !a.invalid && P.isOurs(a.name) && !inOrg.has(a.name)).map(a => ({ name: a.name, description: a.description, model: a.model, provider: a.provider ?? 'claude-code', tags: a.tags ?? [] }))
   return {
     superAgents: s.agents.map(a => ({ id: a.id, title: a.title, agent: a.agent, parent: a.parent, mission: a.mission, reports: a.reports, busy: evalBusy.has(a.id), focus: a.plan?.focus ?? null, planAt: a.plan?.updatedAt ?? null })),
     company: { ceo: c.ceo ? info(c.ceo) : null, auditor: c.auditor ? info(c.auditor) : null, departments },
@@ -219,7 +211,7 @@ export function timeline(sa, { who: w, before, limit = 150 } = {}) {
   const depLead = id => c.departments.find(d => d.id === id)?.lead
   for (const i of c.initiatives) for (const h of i.history ?? []) add(h.ts, [i.department, depLead(i.department), 'company'], `initiative: ${h.stage}`, `${i.title}\n${h.note ?? ''}`, { ini: i.id })
   for (const d of c.decisions) { add(d.ts, [d.from, supTitle(d.from), 'you'], 'question for you', d.question); if (d.answeredAt) add(d.answeredAt, ['you', d.from], 'you answered', `${d.choice}${d.note ? ` (${d.note})` : ''}: ${d.question}`) }
-  for (const h of c.hires) add(h.ts, [h.name, h.team, 'quant-head-people', 'company'], `hire: ${h.status}`, `${h.name} into ${h.team}. ${h.reason ?? h.why ?? ''}`)
+  for (const h of c.hires) add(h.ts, [h.name, h.team, P.peopleLeadName, 'company'], `hire: ${h.status}`, `${h.name} into ${h.team}. ${h.reason ?? h.why ?? ''}`)
   for (const o of c.orders) add(o.ts, ['company', 'gate', o.issuedBy], 'passed verification', `${o.proposal}: P(better) ${o.pImprove}, required ${o.required}; ${o.status ?? 'active'}`)
   for (const b of c.builds) add(b.ts, [b.department, depLead(b.department), 'company'], 'build request', `${b.title} (${b.status})`)
   // an ordinary agent's own turns only when asked for that agent, or they would drown everything else

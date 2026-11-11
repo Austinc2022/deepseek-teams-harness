@@ -58,7 +58,7 @@ button.link { border: 0; background: none; padding: 0; color: var(--info); text-
 .decision:first-of-type { border-top: 0; padding-top: 0 }
 .decision .q { font-weight: 600 }
 .opts { display: flex; flex-wrap: wrap; gap: 6px }
-.pipe { display: grid; gap: 10px; align-items: start; grid-template-columns: repeat(7, minmax(150px, 1fr)); overflow-x: auto; padding-bottom: 4px }
+.pipe { display: grid; gap: 10px; align-items: start; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); overflow-x: auto; padding-bottom: 4px }
 .col { background: var(--soft); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
 .col > .t { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between }
 .col.paper { outline: 2px solid var(--good); outline-offset: -2px }
@@ -136,7 +136,7 @@ button.chip.busy { outline: 2px solid var(--accent) }
 <div class="wrap">
   <header class="top">
     <div class="who">
-      <h1>Company desk</h1>
+      <h1 id="coName">Company desk</h1>
       <p class="mission" id="mission">Loading…</p>
       <p class="small"><a href="board.html" style="color:var(--info)">Open the dashboard: units, charts and trends</a></p>
     </div>
@@ -149,7 +149,8 @@ button.chip.busy { outline: 2px solid var(--accent) }
     </div>
   </header>
 
-  <section class="panel need" id="need"><div class="head"><h2>Needs you</h2></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+  <section class="panel need" id="need"><div class="head"><h2>Needs you</h2><span class="small muted" id="needHint"></span></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+  <section class="panel" id="autoPanel" hidden><details><summary><strong>Decided for you</strong> <span class="small muted" id="autoCount"></span></summary><div id="autoList"></div></details></section>
 
   <section class="panel" id="goal"><div class="head"><h2>Goal and progress</h2></div><div id="goalBody"><p class="empty">Loading…</p></div></section>
 
@@ -178,16 +179,16 @@ button.chip.busy { outline: 2px solid var(--accent) }
   <section class="panel live" id="live" hidden></section>
 
   <section class="panel">
-    <div class="head"><h2>Initiatives: idea to paper execution</h2><span class="small muted">Only the gate moves an initiative to Paper. Click a card for its evidence.</span></div>
+    <div class="head"><h2 id="pipeT">Initiatives</h2><span class="small muted" id="pipeH"></span></div>
     <div class="pipe" id="pipe"></div>
   </section>
 
   <div class="grid">
-    <section class="panel"><div class="head"><h2>Execution orders (paper books)</h2></div><div class="scroll" id="orders"></div></section>
-    <section class="panel"><div class="head"><h2>Engine, measured now</h2><span class="controls"><span class="small muted" id="engineAt"></span><button id="engToggle" hidden>Engine</button></span></div><div id="engProcs"></div><div id="engine"><p class="empty">Reading the engine…</p></div></section>
+    <section class="panel"><div class="head"><h2 id="ordersT">Accepted</h2></div><div class="scroll" id="orders"></div></section>
+    <section class="panel"><div class="head"><h2 id="engineT">Measured now</h2><span class="controls"><span class="small muted" id="engineAt"></span><button id="engToggle" hidden>Engine</button></span></div><div id="engProcs"></div><div id="engine"><p class="empty">Reading the facts…</p></div></section>
   </div>
 
-  <section class="panel"><div class="head"><h2>Engine changes (patches built by workers)</h2><span class="small muted">Audited, approved by you, tested on a copy, installed with a backup.</span></div><div class="scroll" id="changes"></div></section>
+  <section class="panel" id="changesPanel" hidden><div class="head"><h2>Engine changes (patches built by workers)</h2><span class="small muted">Audited, approved by you, tested on a copy, installed with a backup.</span></div><div class="scroll" id="changes"></div></section>
 
   <section class="panel"><div class="head"><h2>Organisation</h2><span class="small muted" id="orgCount"></span></div><p class="small muted">Click anyone to see what it is, who it reports to, what it is doing now and what it did. An outlined name is working right now.</p><div class="org" id="org"></div></section>
 
@@ -205,7 +206,7 @@ button.chip.busy { outline: 2px solid var(--accent) }
 
   <div class="grid">
     <section class="panel"><div class="head"><h2>Hiring</h2></div><div class="scroll" id="hires"></div></section>
-    <section class="panel"><div class="head"><h2>Build requests (need code or data)</h2></div><div id="builds"></div></section>
+    <section class="panel"><div class="head"><h2 id="buildsT">Build requests</h2></div><div id="builds"></div></section>
   </div>
 
   <div class="grid">
@@ -224,6 +225,8 @@ button.chip.busy { outline: 2px solid var(--accent) }
       <label>Autopilot: a cycle every (hours)<input id="c-hours" type="number" min="0.25" step="0.25"></label>
       <label>Hiring<select id="c-hiring"><option value="auto">Automatic (read-only agents)</option><option value="observe">Ask me first</option><option value="off">Off</option></select></label>
       <label>Hires per day, at most<input id="c-hires" type="number" min="0" step="1"></label>
+      <label>Questions to you<select id="c-autonomy"><option value="high">Only owner-only matters (the company decides the rest)</option><option value="ask">Ask me everything</option></select></label>
+      <label>Owner-only questions per day, at most<input id="c-questions" type="number" min="0" max="20" step="1"></label>
       <label>Proposals to the gate per cycle<input id="c-props" type="number" min="0" max="5" step="1"></label>
       <label class="wide">Rules (one per line)<textarea id="c-rules" style="min-height:170px"></textarea></label>
       <div class="wide"><button class="primary" type="submit">Save the charter</button></div>
@@ -273,6 +276,7 @@ $('dlgX').onclick = () => $('dlg').close()
 function renderTop() {
   const c = O.charter, b = O.budget
   $('mission').textContent = c.mission + ' ' + c.scope
+  if (O.profile) { $('coName').textContent = O.profile.label + ' desk'; document.title = O.profile.label + ' desk' }
   const st = $('state')
   st.className = 'pill ' + (O.busy ? 'info' : O.paused ? 'warn' : c.autopilot.enabled ? 'good' : '')
   st.textContent = O.busy ? 'Cycle running' : O.paused ? 'Paused' : c.autopilot.enabled ? `Autopilot on, every ${c.autopilot.everyHours} h` : 'Autopilot off'
@@ -283,9 +287,21 @@ function renderTop() {
   const open = O.decisions.filter(d => d.status === 'open')
   $('need').className = 'panel need' + (open.length ? '' : ' none')
   $('decisions').innerHTML = open.length ? open.map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
-    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. ${esc(d.why)}</div>
+    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}${d.category ? ' · ' + esc(d.category) : ''}. ${esc(d.why)}${d.ifNoAnswer ? ' Meanwhile: ' + esc(d.ifNoAnswer) : ''}</div>
     <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div>
     <div class="small muted">Recommended: ${esc(d.recommendation)}</div></div>`).join('') : ''
+  // what the company decided itself (you can overrule it), and owner-only questions held until you are free
+  const autos = O.decisions.filter(d => d.status === 'auto'), held = O.decisions.filter(d => d.status === 'held')
+  const au = c.autonomy || { level: 'ask', maxQuestionsPerDay: 0 }
+  $('needHint').textContent = au.level === 'high' ? `Only owner-only matters reach you, one at a time, at most ${au.maxQuestionsPerDay} a day. Everything else the company decides.` : 'Every question from the company comes to you.'
+  $('autoPanel').hidden = !autos.length && !held.length
+  $('autoCount').textContent = `${autos.length} decided by the company${held.length ? ` · ${held.length} held for you` : ''}`
+  $('autoList').innerHTML = held.map(d => `<div class="decision"><div class="q">${esc(d.question)} <span class="pill warn">held · ${esc(d.category)}</span></div>
+    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. It will be asked when nothing else is waiting. Meanwhile: ${esc(d.ifNoAnswer || 'the company continues')}</div>
+    <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div></div>`).join('') +
+    autos.slice(0, 30).map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
+    <div class="small muted">${esc(d.from)} decided: <strong>${esc(d.choice)}</strong> · ${when(d.decidedAt || d.ts)}${d.why ? '. ' + esc(d.why) : ''}</div>
+    ${d.options.filter(o => o !== d.choice).length ? `<div class="opts"><span class="small muted">Overrule:</span>${d.options.filter(o => o !== d.choice).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>` : ''}</div>`).join('')
   const waits = SA ? SA.needsYou : []
   $('decisions').innerHTML += waits.map(t => `<div class="decision"><div class="q">${esc(t.attention ? t.attention.question : t.stage === 'person:failed' ? 'This ticket failed.' : 'This ticket is blocked.')}</div>
     <div class="small muted">Ticket: ${esc(t.title)} · ${esc(t.stage.replace('person:', ''))}. ${esc((t.summary || '').slice(0, 280))}</div>
@@ -294,13 +310,14 @@ function renderTop() {
   $('need').className = 'panel need' + (open.length || waits.length ? '' : ' none')
 
   const spentShare = b.dailyUsd ? Math.min(100, 100 * b.spentTodayUsd / b.dailyUsd) : 0
-  const paper = O.initiatives.filter(i => i.stage === 'paper').length, active = O.initiatives.filter(i => !['paper', 'killed'].includes(i.stage)).length
+  const PF = O.profile, gated = PF.gatedStage
+  const paper = O.initiatives.filter(i => i.stage === gated).length, active = O.initiatives.filter(i => ![gated, 'killed'].includes(i.stage)).length
   const ns = O.cycles.find(x => x.odds)
   $('stats').innerHTML = `
     <div class="panel stat"><h2>Spent today</h2><div class="big">${usd(b.spentTodayUsd)}</div><div class="bar"><i style="width:${spentShare}%"></i></div><div class="small muted">of ${usd(b.dailyUsd, 0)} daily budget · ${b.cyclesToday} cycle${b.cyclesToday === 1 ? '' : 's'} · cap ${usd(b.cycleUsd, 0)} each</div></div>
-    <div class="panel stat"><h2>DeepSeek balance</h2><div class="big">${usd(b.balanceUsd)}</div><div class="small muted">${b.balanceUsd != null && b.balanceUsd < b.dailyUsd ? `This, not the ${usd(b.dailyUsd, 0)} budget, is the real limit today. ` : ''}Reserve ${usd(b.reserveUsd, 0)} · read ${when(b.balanceAt)}</div></div>
-    <div class="panel stat"><h2>Initiatives</h2><div class="big">${paper} <span class="small muted">executing on paper</span></div><div class="small muted">${active} in progress · ${O.initiatives.filter(i => i.stage === 'killed').length} killed · ${O.orders.length} execution order${O.orders.length === 1 ? '' : 's'}</div></div>
-    <div class="panel stat"><h2>North star: ${usd(c.northStar.targetDailyUsd, 0)} a day</h2><div class="small">${ns ? esc(ns.odds) : 'The CEO states the odds after its first cycle.'}</div></div>`
+    ${PF.metering === 'balance' ? `<div class="panel stat"><h2>${esc(PF.provider)} balance</h2><div class="big">${usd(b.balanceUsd)}</div><div class="small muted">${b.balanceUsd != null && b.balanceUsd < b.dailyUsd ? `This, not the ${usd(b.dailyUsd, 0)} budget, is the real limit today. ` : ''}Reserve ${usd(b.reserveUsd, 0)} · read ${when(b.balanceAt)}</div></div>` : `<div class="panel stat"><h2>Models</h2><div class="big" style="font-size:20px">${esc(PF.provider === 'claude-code' ? 'Claude subscription' : PF.provider)}</div><div class="small muted">Spend is estimated from what each run reports; on a subscription it is notional and your plan's usage limits are the real limit.</div></div>`}
+    <div class="panel stat"><h2>${esc(PF.stageLabels[gated] || gated)}</h2><div class="big">${paper}</div><div class="small muted">${active} in progress · ${O.initiatives.filter(i => i.stage === 'killed').length} killed · ${O.orders.length} ${esc(PF.text.orderNoun)}${O.orders.length === 1 ? '' : 's'}</div></div>
+    <div class="panel stat"><h2>${esc(PF.text.northStarLabel)}: ${esc(c.northStar.text || usd(c.northStar.targetDailyUsd, 0) + ' a day')}</h2><div class="small">${ns ? esc(ns.odds) : 'The CEO states the odds after its first cycle.'}</div></div>`
 }
 
 function renderLive() {
@@ -312,12 +329,15 @@ function renderLive() {
     <pre class="log">${esc(r.log.map(l => l.ts.slice(11, 19) + '  ' + l.msg).join('\n'))}</pre>`
 }
 
-const STAGE_LABEL = { idea: 'Idea', research: 'Research', model: 'Model', rehearsal: 'Rehearsal', gate: 'At the gate', paper: 'Paper (executing)', killed: 'Killed' }
+let STAGE_LABEL = {}
 function renderPipe() {
-  const cols = ['idea', 'research', 'model', 'rehearsal', 'gate', 'paper', 'killed']
+  const PF = O.profile
+  STAGE_LABEL = PF.stageLabels
+  $('pipeT').textContent = PF.text.pipelineTitle; $('pipeH').textContent = PF.text.pipelineHint
+  const cols = O.stages
   $('pipe').innerHTML = cols.map(s => {
     const items = O.initiatives.filter(i => i.stage === s)
-    return `<div class="col ${s}"><div class="t"><span>${STAGE_LABEL[s]}</span><span class="num">${items.length}</span></div>${items.map(i => `<button class="card" data-ini="${i.id}">
+    return `<div class="col ${s === PF.gatedStage ? 'paper' : s}"><div class="t"><span>${STAGE_LABEL[s]}</span><span class="num">${items.length}</span></div>${items.map(i => `<button class="card" data-ini="${i.id}">
       <span class="ttl">${esc(i.title)}</span><span class="small muted">${esc(i.department)} · ${esc(i.kind || '')}</span>
       ${i.confidence != null ? `<span class="bar" title="${esc(i.confidenceBasis || '')}"><i style="width:${Math.round(i.confidence * 100)}%"></i></span><span class="small num">${pct(i.confidence)} <span class="muted">${esc(i.confidenceBasis || '')}</span></span>` : ''}
       ${i.gate ? `<span class="pill ${i.gate.passed ? 'good' : 'bad'}">gate ${i.gate.passed ? 'passed' : 'failed'}</span>` : ''}</button>`).join('') || '<span class="empty">–</span>'}</div>`
@@ -328,27 +348,31 @@ function showInitiative(id) {
   show(i.title, `<div class="md"><p><strong>Thesis.</strong> ${esc(i.thesis)}</p>
     <p><span class="pill">${esc(STAGE_LABEL[i.stage] || i.stage)}</span> ${i.confidence != null ? `<span class="num">${pct(i.confidence)}</span> <span class="muted">${esc(i.confidenceBasis || '')}</span>` : ''}</p>
     ${i.note ? `<p><strong>Latest.</strong> ${esc(i.note)}</p>` : ''}
-    ${i.gate ? `<h3>Gate</h3><p>${i.gate.passed ? 'Passed' : 'Failed'}${i.gate.pImprove != null ? `, P(better) ${Number(i.gate.pImprove).toFixed(3)}` : ''}. ${esc((i.gate.reasons || []).join('; '))}</p>` : ''}
+    ${i.gate ? `<h3>Gate</h3><p>${i.gate.passed ? 'Passed' : 'Failed'}${i.gate.pImprove != null ? `, ${esc(O.profile.text.scoreLabel)} ${Number(i.gate.pImprove).toFixed(3)}` : ''}. ${esc((i.gate.reasons || []).join('; '))}</p>` : ''}
     ${(i.evidence || []).length ? `<h3>Evidence</h3><div class="scroll"><table><tr><th>Claim</th><th>Source</th><th>Strength</th></tr>${i.evidence.map(e => `<tr><td>${esc(e.claim)}</td><td>${esc(e.source)}</td><td><span class="pill ${e.strength === 'measured' ? 'good' : e.strength === 'simulated' ? 'info' : 'warn'}">${esc(e.strength)}</span></td></tr>`).join('')}</table></div>` : ''}
     ${(i.blockers || []).length ? `<h3>Blockers</h3><ul>${i.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
     <h3>History</h3><ul>${(i.history || []).slice().reverse().map(h => `<li>${when(h.ts)} · ${esc(h.stage)} · ${esc(h.note || '')}</li>`).join('')}</ul></div>`)
 }
 
 function renderTables() {
-  $('orders').innerHTML = O.orders.length ? `<table><tr><th>When</th><th>Paper book</th><th class="r">P(better)</th><th class="r">Bar</th><th>Audit</th><th>Status</th></tr>${O.orders.map(o => `<tr><td>${when(o.ts)}</td><td class="num">${esc(o.book)}</td><td class="r num">${Number(o.pImprove).toFixed(3)}</td><td class="r num">${Number(o.required).toFixed(3)}</td><td>${o.audit ? (o.audit.fatal ? 'fatal' : 'no fatal objection') : 'not required'}</td><td><span class="pill ${o.status === 'awaiting-owner' ? 'warn' : o.status === 'declined' ? '' : 'good'}">${o.status === 'awaiting-owner' ? 'waiting for your approval' : o.status === 'declined' ? 'declined' : 'running'}</span></td></tr>`).join('')}</table>` : '<p class="empty">No execution order yet. A proposal must pass the audit, the safety invariants and the validator on the holdout; then the CEO asks you, and it starts only when you answer Start.</p>'
+  const T = O.profile.text
+  $('ordersT').textContent = T.ordersTitle; $('buildsT').textContent = T.buildsTitle
+  $('orders').innerHTML = O.orders.length ? `<table><tr><th>When</th><th>${esc(T.orderNoun)}</th><th class="r">${esc(T.scoreLabel)}</th><th class="r">Bar</th><th>Audit</th><th>Status</th></tr>${O.orders.map(o => `<tr><td>${when(o.ts)}</td><td class="num">${esc(o.book)}</td><td class="r num">${o.pImprove == null ? '–' : Number(o.pImprove).toFixed(3)}</td><td class="r num">${o.required == null ? '–' : Number(o.required).toFixed(3)}</td><td>${o.audit ? (o.audit.fatal ? 'fatal' : 'no fatal objection') : 'not required'}</td><td><span class="pill ${o.status === 'awaiting-owner' ? 'warn' : o.status === 'declined' ? '' : 'good'}">${o.status === 'awaiting-owner' ? 'waiting for your approval' : o.status === 'declined' ? 'declined' : 'accepted'}</span></td></tr>`).join('')}</table>` : `<p class="empty">${esc(T.ordersEmpty)}</p>`
 
   $('cycles').innerHTML = O.cycles.length ? `<table><tr><th>Started</th><th>Status</th><th>Took</th><th class="r">Spend</th><th>Summary</th><th>Brief</th><th>Runs</th></tr>${O.cycles.map(c => `<tr><td>${when(c.startedAt)}<div class="small muted">${esc(c.trigger)}</div></td><td><span class="pill ${c.status === 'completed' ? 'good' : c.status === 'running' ? 'info' : 'bad'}">${esc(c.status)}</span></td><td class="num">${mins(c.startedAt, c.endedAt)}</td><td class="r num">${usd(c.spendUsd)}</td><td>${esc(c.summary || c.error || c.assessment || '')}</td><td>${c.report ? `<button class="link" data-report="${esc(c.report)}">Read</button>` : '–'}</td><td><button class="link" data-run="${esc(c.runId)}">CEO</button>${(c.subRuns || []).map(s => ` <button class="link" data-run="${esc(s.runId)}">${esc(s.department)}</button>`).join('')}</td></tr>`).join('')}</table>` : '<p class="empty">No cycle yet. Run one to see the CEO plan, the departments work and the gate decide.</p>'
 
   $('hires').innerHTML = O.hires.length ? `<table><tr><th>When</th><th>Agent</th><th>Team</th><th>Status</th><th>Why</th></tr>${O.hires.map(h => `<tr><td>${when(h.ts)}</td><td>${esc(h.name)}<div class="small muted">${esc(h.model || '')}</div></td><td>${esc(h.team)}</td><td><span class="pill ${h.status === 'hired' ? 'good' : h.status === 'proposed' ? 'warn' : 'bad'}">${esc(h.status)}</span></td><td>${esc(h.reason || h.why || '')}</td></tr>`).join('')}</table>` : '<p class="empty">HR has hired nobody yet. The CEO asks for a hire when a missing skill blocks an initiative.</p>'
 
-  $('builds').innerHTML = O.builds.length ? O.builds.map(b => `<div class="decision"><div class="q">${esc(b.title)} <span class="pill ${b.status === 'done' ? 'good' : b.status === 'dropped' ? 'bad' : 'warn'}">${esc(b.status)}</span></div><div class="small muted">${esc(b.department)} · ${when(b.ts)} · expected value: ${esc(b.expectedValue)}</div><div class="opts"><button class="link" data-build-show="${b.id}">Read the spec</button>${['accepted', 'done', 'dropped'].filter(s => s !== b.status).map(s => `<button data-build="${b.id}" data-status="${s}">Mark ${s}</button>`).join('')}</div></div>`).join('') : '<p class="empty">No build request. Agents are read-only, so work that needs new code or data lands here as a spec.</p>'
+  $('builds').innerHTML = O.builds.length ? O.builds.map(b => `<div class="decision"><div class="q">${esc(b.title)} <span class="pill ${b.status === 'done' ? 'good' : b.status === 'dropped' ? 'bad' : 'warn'}">${esc(b.status)}</span></div><div class="small muted">${esc(b.department)} · ${when(b.ts)} · expected value: ${esc(b.expectedValue)}</div><div class="opts"><button class="link" data-build-show="${b.id}">Read the spec</button>${['accepted', 'done', 'dropped'].filter(s => s !== b.status).map(s => `<button data-build="${b.id}" data-status="${s}">Mark ${s}</button>`).join('')}</div></div>`).join('') : `<p class="empty">${esc(T.buildsEmpty)}</p>`
 
-  $('days').innerHTML = O.days.length ? `<table><tr><th>Day</th><th class="r">DeepSeek</th><th class="r">Claude (notional)</th><th class="r">Cycles</th><th class="r">Start balance</th></tr>${O.days.slice().reverse().map(d => `<tr><td class="num">${esc(d.date)}</td><td class="r num">${usd(d.modelUsd)}</td><td class="r num">${usd(d.claudeEstUsd)}</td><td class="r num">${d.cycles}</td><td class="r num">${usd(d.startBalanceUsd)}</td></tr>`).join('')}</table>` : '<p class="empty">No spend recorded yet.</p>'
+  $('days').innerHTML = O.days.length ? `<table><tr><th>Day</th><th class="r">${O.profile.metering === 'balance' ? esc(O.profile.provider) : 'Models (est.)'}</th><th class="r">Claude (notional)</th><th class="r">Cycles</th><th class="r">Start balance</th></tr>${O.days.slice().reverse().map(d => `<tr><td class="num">${esc(d.date)}</td><td class="r num">${usd(d.modelUsd)}</td><td class="r num">${usd(d.claudeEstUsd)}</td><td class="r num">${d.cycles}</td><td class="r num">${usd(d.startBalanceUsd)}</td></tr>`).join('')}</table>` : '<p class="empty">No spend recorded yet.</p>'
 }
 
 function renderEngine() {
   if (!E) return
+  if (O && O.profile) $('engineT').textContent = O.profile.text.factsTitle
   $('engineAt').textContent = 'read ' + when(E.at)
+  if (!E.simulation) return renderFacts()
   const lvl = s => /critical/.test(s) ? 'bad' : /warning/.test(s) ? 'warn' : 'good'
   const sim = E.simulation || {}, inv = sim.invariants
   const bt = sim.backtest ? Object.entries(sim.backtest).filter(([, v]) => v) : []
@@ -359,6 +383,17 @@ function renderEngine() {
     ${bt.length ? `<p class="small muted">Backtest on ${esc(String(sim.source || '').split(':')[0])} data, whole period, from $1,000</p><div class="scroll"><table><tr><th>Profile</th>${Object.keys(bt[0][1]).map(k => `<th class="r">${esc(k.replace(/_/g, ' '))}</th>`).join('')}</tr>${bt.map(([k, v]) => `<tr><td>${esc(k)}</td>${Object.values(v).map(x => `<td class="r num">${x == null ? '–' : typeof x === 'number' ? (Math.abs(x) <= 10 && !Number.isInteger(x) ? (x * 100).toFixed(2) + '%' : x.toLocaleString('en-US', { maximumFractionDigits: 2 })) : esc(x)}</td>`).join('')}</tr>`).join('')}</table></div>` : `<p class="empty">${esc(sim.error || '')}</p>`}
     <p class="small muted">Approved proposals running as paper books: ${E.proposals.approved.length ? esc(E.proposals.approved.join(', ')) : 'none'}</p>
     <pre class="log">${esc(E.live.daemon || 'no daemon log')}</pre>`
+}
+
+function renderFacts() {
+  const lvl = c => /: warning/.test(c) ? 'warn' : /: critical/.test(c) ? 'bad' : 'good'
+  const h = E.health || { status: 'unknown', checks: [] }
+  const d = E.deliverables || {}, tk = E.tickets || {}
+  $('engine').innerHTML = `<p><span class="pill ${h.status === 'ok' ? 'good' : h.status === 'warning' ? 'warn' : 'bad'}">health ${esc(h.status)}</span>
+      <span class="pill">${d.total ?? 0} accepted in total</span> <span class="pill">${(d.today || []).length} today</span></p>
+    <div class="scroll"><table><tr><th>Check</th><th>Detail</th></tr>${(h.checks || []).map(c => { const m = String(c).match(/^(.*?): (\w+) \((.*)\)$/); return `<tr><td><span class="pill ${lvl(c)}">${esc(m ? m[1] : c)}</span></td><td>${esc(m ? m[3] : '')}</td></tr>` }).join('')}</table></div>
+    <p class="small muted">Recent: ${(d.recent || []).length ? esc(d.recent.slice(-5).join(', ')) : 'none yet'} · folder ${esc(d.folder || '')}</p>
+    ${(tk.open || []).length ? `<div class="scroll"><table><tr><th>Open ticket</th><th class="r">Turns</th><th>Last report</th></tr>${tk.open.map(t => `<tr><td>${esc(t.title)}</td><td class="r num">${t.turns}</td><td class="small">${esc((t.last || '').slice(0, 160))}</td></tr>`).join('')}</table></div>` : '<p class="empty">No open ticket.</p>'}`
 }
 
 // ---------------- super agent
@@ -406,12 +441,12 @@ function renderGoal() {
       <div class="small muted">${g.done} of ${g.total} steps done${g.next ? ` · next: ${esc(g.next.title)}` : ''}. The percentage counts steps, not money; the profit line below is the real measure.</div></div></div>
     <ol class="ladder">${g.steps.map((x, i) => `<li class="${x.done ? 'done' : i === firstOpen ? 'next' : 'later'}"><strong>${esc(x.title)}</strong> <span class="pill ${x.done ? 'good' : i === firstOpen ? 'warn' : ''}">${x.done ? 'done' : i === firstOpen ? 'next' : 'later'}</span> <span class="small muted">${esc(x.how)} · ${esc(x.detail)}</span></li>`).join('')}</ol>
     <div class="facts">
-      <div><span class="small muted">Paper profit per day</span><span class="v">${usd(m.paperProfitPerDayUsd)}</span><span class="small muted">${esc(m.basis)}</span></div>
+      <div><span class="small muted">${esc(m.label || 'Paper profit per day')}</span><span class="v">${usd(m.paperProfitPerDayUsd)}</span><span class="small muted">${esc(m.basis)}</span></div>
       <div><span class="small muted">Target per day</span><span class="v">${usd(m.targetDailyUsd, 0)}</span><span class="small muted">${(m.shareOfTarget * 100).toFixed(4)}% reached</span></div>
       <div><span class="small muted">Spent so far</span><span class="v">${usd(e.spentUsd)}</span><span class="small muted">over ${e.days} day${e.days === 1 ? '' : 's'}</span></div>
       <div><span class="small muted">Work done</span><span class="v">${e.tickets} tickets</span><span class="small muted">${e.workerTurns} worker turns · ${e.cycles} cycles · ${e.decisions} decisions</span></div>
       <div><span class="small muted">Ideas</span><span class="v">${e.ideasTried} tried</span><span class="small muted">${e.ideasKilled} killed · ${e.gateRuns} gate runs</span></div>
-      <div><span class="small muted">Engine changes</span><span class="v">${e.engineChanges} installed</span><span class="small muted">${SA.changes.filter(c => c.status === 'awaiting-owner').length} waiting for you</span></div>
+      ${SA.engine && !SA.engine.none ? `<div><span class="small muted">Engine changes</span><span class="v">${e.engineChanges} installed</span><span class="small muted">${SA.changes.filter(c => c.status === 'awaiting-owner').length} waiting for you</span></div>` : ''}
     </div>
     ${g.odds ? `<p class="small"><strong>The CEO's honest odds${g.oddsAt ? ` (${when(g.oddsAt)})` : ''}.</strong> ${esc(g.odds)}</p>` : ''}`
 }
@@ -443,7 +478,8 @@ $('planWho').onchange = renderPlan
 
 // ---------------- engine processes and changes
 function renderEngineOps() {
-  if (!SA || !SA.engine) return
+  if (!SA || !SA.engine || SA.engine.none) return   // this company has no engine to run or patch
+  $('changesPanel').hidden = false
   const e = SA.engine, b = $('engToggle')
   b.hidden = false; b.textContent = e.autostart ? 'Stop the engine' : 'Start the engine'; b.className = e.autostart ? '' : 'primary'
   const mins = s => s == null ? 'never' : s < 120 ? s + ' s ago' : Math.round(s / 60) + ' min ago'
@@ -472,7 +508,7 @@ function renderOrg() {
         <div class="indent" style="margin-top:8px">${c.departments.map(d => `<div class="dep"><div class="orgline"><button class="chip" data-who="department:${esc(d.id)}"><strong>${esc(d.name)}</strong> · department</button> <span class="small muted">lead</span> ${chip(d.lead)} ${d.superTeam ? `<button class="chip${d.superTeam.busy ? ' busy' : ''}" data-who="super-team:${esc(d.superTeam.id)}">its super team${d.superTeam.busy ? ' · working' : ''}</button>` : ''} <span class="small muted">${esc(d.mission)}</span></div>
           ${d.teams.map(t => `<div class="team"><button class="chip" data-who="team:${esc(t.name)}" style="min-width:150px;text-align:left">${esc(t.name)} · team</button>${t.members.map(chip).join('')}</div>`).join('')}</div>`).join('')}</div></div>
       ${ORG.others.length ? `<div><div class="orgline"><strong>Workers and others</strong> <span class="small muted">called by the super agents: ticket workers, the models behind super agents</span></div><div class="orgline" style="margin-top:6px">${ORG.others.map(chip).join('')}</div></div>` : ''}</div>
-    <p class="small muted">Dashed = Claude subscription (kept for the audit, so the checker is a different model). Everything else runs on DeepSeek.</p>`
+    <p class="small muted">${O && O.profile && O.profile.provider === 'claude-code' ? 'All agents run on your Claude subscription; the auditor uses a different model from the builders.' : 'Dashed = Claude subscription (kept for the audit, so the checker is a different model). Everything else runs on DeepSeek.'}</p>`
 }
 const evRow = e => `<div class="msg ${e.kind === 'you wrote' || e.kind === 'you answered' ? 'owner' : /question/.test(e.kind) ? 'q' : /gate|verification|installed/.test(e.kind) ? 'gate' : ''}"><div class="by">${when(e.ts)} · ${esc(e.who.filter((w, i, a) => a.indexOf(w) === i).slice(0, 3).join(', '))} · <strong>${esc(e.kind)}</strong>${e.ticket ? ` · <button class="link" data-ticket="${esc(e.ticket)}">ticket</button>` : ''}${e.run && e.file ? ` · <button class="link" data-run="${esc(e.run)}" data-file="${esc(e.file)}">transcript</button>` : e.run ? ` · <button class="link" data-run="${esc(e.run)}">run</button>` : ''}${e.report ? ` · <button class="link" data-report="${esc(e.report)}">brief</button>` : ''}${e.ini ? ` · <button class="link" data-ini="${esc(e.ini)}">initiative</button>` : ''}</div>${esc(e.text)}</div>`
 async function showWho(type, id) {
@@ -552,13 +588,14 @@ function fillCharter() {
   const c = O.charter
   $('c-mission').value = c.mission; $('c-daily').value = c.budget.dailyUsd; $('c-cycle').value = c.budget.cycleUsd; $('c-reserve').value = c.budget.reserveUsd
   $('c-target').value = c.northStar.targetDailyUsd; $('c-hours').value = c.autopilot.everyHours; $('c-hiring').value = c.hiring.mode; $('c-hires').value = c.hiring.maxPerDay
+  if (c.autonomy) { $('c-autonomy').value = c.autonomy.level; $('c-questions').value = c.autonomy.maxQuestionsPerDay }
   $('c-props').value = c.gate.maxProposalsPerCycle; $('c-rules').value = c.rules.join('\n')
 }
 $('charter').addEventListener('input', () => { charterDirty = true })
 $('charter').addEventListener('submit', e => {
   e.preventDefault()
   act(async () => {
-    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
+    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, autonomy: { level: $('c-autonomy').value, maxQuestionsPerDay: $('c-questions').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
     charterDirty = false
   }, 'Charter saved')
 })

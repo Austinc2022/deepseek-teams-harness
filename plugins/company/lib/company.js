@@ -8,48 +8,33 @@
  *   reports/         one CEO brief per cycle
  *
  * What agents may never do is enforced here and in cycle.js, in code, not in prompts:
- *   - an initiative reaches "paper" only through the deterministic gate (quant validator + audit);
- *   - nothing here places a real order: the engine is paper-only and promotion to real money is a human decision;
- *   - a cycle does not start when the day's budget or the provider balance would be exceeded.
+ *   - an initiative reaches the profile's gated stage only through the profile's gate (checks in code + audit);
+ *   - nothing here publishes, sells or spends: that is a human decision;
+ *   - a cycle does not start when the day's budget (or, with balance metering, the provider balance) would be exceeded.
+ * What the company is (organisation, rules, stages, facts, gate) comes from the active profile (profiles/).
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ROOT, QUANT, STAGES, AGENT_STAGES, now, today, newId, round, str } from './paths.js'
+import { ROOT, now, today, newId, round, str } from './paths.js'
+import { profile as P, PROFILE_ID } from './profile.js'
 import { providerBalance } from '../../agent-forge/lib/providers.js'
 import { runCycle, enroll } from './cycle.js'
 import { seed } from './setup.js'
 
-export { ROOT, QUANT, STAGES, AGENT_STAGES, today, newId }
+export const STAGES = P.stages
+export const AGENT_STAGES = P.agentStages
+export { ROOT, today, newId }
 
+/** The active profile's charter (profiles/<id>.js); the owner edits it on the Company page. */
 export const DEFAULT_CHARTER = {
-  mission: 'Turn a budget of $1,000 a day into as much crypto trading profit as possible. The north star is $10,000,000 a day.',
-  scope: 'Crypto only.',
-  northStar: { dailyBudgetUsd: 1000, targetDailyUsd: 10_000_000 },
-  rules: [
-    'Report honest odds. $1,000 a day to $10,000,000 a day is a 10,000x daily return; say plainly how likely each step is and what evidence supports it.',
-    'No execution without evidence: an initiative is executed only after it passes the deterministic gate (holdout validation with trial-adjusted significance, safety invariants) and an independent audit.',
-    'No execution without the owner: when a proposal passes the gate the CEO asks the owner, and nothing starts until the owner answers Start.',
-    'Every proposal sent to the validator raises the significance bar for all later ones. Submit few, well-argued proposals.',
-    'Agents are read-only. They never edit config, place, size or close orders, clear the kill switch, or touch the freqtrade bot on port 8080. Deterministic code does the acting.',
-    'Paper first. Real-money trading is not built; asking for it is a decision only the owner can make.',
-    'Loss limits in the engine config may only be tightened by proposals. Loosening is the owner\'s decision.',
-    'Spend the budget where it raises the probability of profit: research, simulation and rehearsal first. Do not spend to look busy.',
-    'One question at a time for the owner, with a recommendation. Stay silent otherwise.',
-  ],
-  budget: {
-    dailyUsd: 1000,      // everything the company may spend in a day (models now; data, servers and capital need the owner)
-    cycleUsd: 15,        // a cycle is stopped when its model spend passes this
-    reserveUsd: 5,       // never spend the provider balance below this
-  },
-  gate: {
-    maxProposalsPerCycle: 2,
-    requireAudit: true,
-    minConfidence: 0.95, // floor on P(better); the validator's own trial-adjusted bar applies on top
-  },
   hiring: { mode: 'auto', maxPerDay: 3, maxAgents: 40 }, // auto | observe (ask the owner) | off
-  execution: { ownerApproval: true }, // a proposal that passed the gate starts only after the owner says Start
+  // high: the company decides everything that is not owner-only, and asks at most maxQuestionsPerDay owner-only
+  // questions, one at a time. ask: every question goes to the owner (docs/SUPER-AGENT-AUTONOMY.md).
+  autonomy: { level: 'high', maxQuestionsPerDay: 1 },
+  execution: { ownerApproval: false }, // true: a proposal that passed the gate is held until the owner says Start (the quant profile turns it on)
   autopilot: { enabled: false, everyHours: 6 },
-  models: { lead: 'deepseek-v4-pro', worker: 'deepseek-flash', auditor: 'opus' },
+  ...P.charter,
+  models: { lead: P.models.lead, worker: P.models.worker, auditor: P.models.auditor },
 }
 
 export class Company {
@@ -64,6 +49,9 @@ export class Company {
     fs.mkdirSync(this.reports, { recursive: true })
     this.live = null // { cycleId, runId, cancel }
     this.timer = null
+    this.profile = P
+    /** balance: spend = drop of the provider balance (DeepSeek). runs: spend = cost the runs report (Claude subscription, notional). */
+    this.metering = P.models.provider === 'deepseek' ? 'balance' : 'runs'
   }
 
   // ---------------- state
@@ -71,7 +59,7 @@ export class Company {
     let s
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { s = {} }
     s.charter = { ...DEFAULT_CHARTER, ...(s.charter ?? {}) }
-    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
+    for (const k of ['northStar', 'budget', 'gate', 'hiring', 'autonomy', 'execution', 'autopilot', 'models']) s.charter[k] = { ...DEFAULT_CHARTER[k], ...(s.charter[k] ?? {}) }
     for (const k of ['departments', 'initiatives', 'decisions', 'hires', 'orders', 'cycles', 'builds']) s[k] ??= []
     s.days ??= {}
     return s
@@ -91,7 +79,8 @@ export class Company {
   // ---------------- budget
   /** Record the provider balance now; a drop since the last reading is model spend of the current day. */
   async meter(note) {
-    const bal = await providerBalance('deepseek')
+    if (this.metering !== 'balance') return { balanceUsd: null, ...this.budget() }
+    const bal = await providerBalance(P.models.provider)
     if (!bal) return { balanceUsd: null, ...this.budget() }
     const date = today()
     let spent = 0
@@ -102,7 +91,7 @@ export class Company {
       s.lastBalanceUsd = bal.usd
       s.lastBalanceAt = now()
     })
-    if (spent > 0) this.ledger({ kind: 'model', provider: 'deepseek', usd: spent, note: note ?? 'balance change' })
+    if (spent > 0) this.ledger({ kind: 'model', provider: P.models.provider, usd: spent, note: note ?? 'balance change' })
     return { balanceUsd: bal.usd, ...this.budget() }
   }
 
@@ -118,6 +107,43 @@ export class Company {
     }
   }
 
+  /** Run metering: add the cost a finished run reported to today's spend. */
+  charge(usd, note, extra = {}) {
+    if (this.metering !== 'runs' || !(usd > 0)) return
+    const date = today()
+    this.update(s => {
+      const day = (s.days[date] ??= { startBalanceUsd: null, modelUsd: 0, claudeEstUsd: 0, cycles: 0 })
+      day.modelUsd = round(day.modelUsd + usd)
+      day.claudeEstUsd = round((day.claudeEstUsd ?? 0) + usd)
+    })
+    this.ledger({ kind: 'model', provider: P.models.provider, usd: round(usd), note, ...extra })
+  }
+
+  runCost(runId) { try { return this.forge.engine.getRun(runId).costUsd ?? 0 } catch { return 0 } }
+
+  /** What a cycle has spent so far: its own run plus its departments' super-team runs. */
+  async cycleSpend(cycleId) {
+    const c = this.read().cycles.find(x => x.id === cycleId)
+    if (!c) return 0
+    if (this.metering === 'balance') {
+      const m = await this.meter(`cycle ${cycleId}`)
+      return typeof c.startBalanceUsd === 'number' && m.balanceUsd != null ? Math.max(0, c.startBalanceUsd - m.balanceUsd) : 0
+    }
+    return [c.runId, ...(c.subRuns ?? []).map(r => r.runId)].reduce((n, id) => n + this.runCost(id), 0)
+  }
+
+  /** Why no new model work may start now, or null (shared by cycles and the super agent). */
+  async holdReason() {
+    const m = await this.meter('budget check')
+    if (this.metering === 'balance') {
+      if (m.balanceUsd == null) return `the ${P.models.provider} balance cannot be read (check the API key in .dsh-home/.env and the network)`
+      if (m.balanceUsd - m.reserveUsd < 0.5) return `the ${P.models.provider} balance ($${m.balanceUsd}) is at the reserve ($${m.reserveUsd}); top up or lower the reserve`
+    }
+    if (m.remainingTodayUsd <= 0) return `today's budget ($${m.dailyUsd}) is spent`
+    if (fs.existsSync(path.join(this.dir, 'PAUSED'))) return 'paused (delete forge/company/PAUSED to resume)'
+    return null
+  }
+
   ledger(entry) {
     fs.appendFileSync(this.ledgerFile, JSON.stringify({ ts: now(), date: today(), ...entry }) + '\n')
   }
@@ -128,14 +154,10 @@ export class Company {
 
   /** Why a cycle may not start now, or null. */
   async blocked() {
-    const m = await this.meter('before cycle')
     const s = this.read()
     if (!s.departments.length) return 'the company is not set up yet (run setup)'
-    if (m.balanceUsd == null) return 'the DeepSeek balance cannot be read (check DEEPSEEK_API_KEY in .dsh-home/.env and the network)'
-    if (m.balanceUsd - m.reserveUsd < 0.5) return `the DeepSeek balance ($${m.balanceUsd}) is at the reserve ($${m.reserveUsd}); top up or lower the reserve`
-    if (m.remainingTodayUsd <= 0) return `today's budget ($${m.dailyUsd}) is spent`
-    if (fs.existsSync(path.join(this.dir, 'PAUSED'))) return 'paused (delete forge/company/PAUSED to resume)'
-    return null
+    if (s.profile && s.profile !== PROFILE_ID) return `the company was set up with profile "${s.profile}" but "${PROFILE_ID}" is active; run setup again or select "${s.profile}"`
+    return this.holdReason()
   }
 
   // ---------------- setup
@@ -168,7 +190,7 @@ export class Company {
     const cycleId = newId('c')
     const startBalance = this.read().lastBalanceUsd
     const { engine } = this.forge
-    const { id: runId, done } = engine.startCustom('company: CEO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: QUANT, meta: { company: cycleId } })
+    const { id: runId, done } = engine.startCustom('company: CEO cycle', api => runCycle(this, api, { cycleId, focus }), { trigger, focus: focus ?? '' }, { cwd: P.projectDir, meta: { company: cycleId } })
     this.live = { cycleId, runId }
     this.update(s => {
       s.cycles.push({ id: cycleId, runId, trigger, focus: focus ?? null, status: 'running', startedAt: now(), startBalanceUsd: startBalance, subRuns: [] })
@@ -177,14 +199,15 @@ export class Company {
       day.cycles++
     })
     const finished = done.then(async st => {
-      const m = await this.meter(`cycle ${cycleId}`)
+      const spend = round(await this.cycleSpend(cycleId))
+      this.charge(spend, `cycle ${cycleId}`, { cycle: cycleId })
       this.update(s => {
         const c = s.cycles.find(x => x.id === cycleId)
         if (!c) return
         c.status = st.status
         c.endedAt = now()
         c.error = st.error ? String(st.error).split('\n')[0] : undefined
-        c.spendUsd = typeof c.startBalanceUsd === 'number' && m.balanceUsd != null ? round(Math.max(0, c.startBalanceUsd - m.balanceUsd)) : null
+        c.spendUsd = spend
         c.claudeEstUsd = c.claudeEstUsd ?? 0
         if (st.result?.summary) c.summary = str(st.result.summary, 600)
         if (st.result?.report) c.report = st.result.report
@@ -211,6 +234,7 @@ export class Company {
 
   async tick() {
     const s = this.read()
+    if (s.decisions.some(x => x.status === 'held')) this.update(x => { this.promoteHeld(x) })
     const ap = s.charter.autopilot
     if (!ap.enabled || this.active()) return
     const last = s.cycles.at(-1)
@@ -246,6 +270,10 @@ export class Company {
         c.hiring.maxPerDay = num(patch.hiring.maxPerDay, 0, 20, c.hiring.maxPerDay)
         c.hiring.maxAgents = num(patch.hiring.maxAgents, 1, 200, c.hiring.maxAgents)
       }
+      if (patch.autonomy) {
+        if (['high', 'ask'].includes(patch.autonomy.level)) c.autonomy.level = patch.autonomy.level
+        c.autonomy.maxQuestionsPerDay = num(patch.autonomy.maxQuestionsPerDay, 0, 20, c.autonomy.maxQuestionsPerDay)
+      }
       if (patch.execution?.ownerApproval !== undefined) c.execution.ownerApproval = patch.execution.ownerApproval !== false
       if (patch.gate) {
         c.gate.maxProposalsPerCycle = num(patch.gate.maxProposalsPerCycle, 0, 5, c.gate.maxProposalsPerCycle)
@@ -256,16 +284,22 @@ export class Company {
     })
   }
 
-  /** The owner answers a decision. choice is one of its options (or free text); the next cycle sees it. */
+  /**
+   * The owner answers a decision. choice is one of its options (or free text); the next cycle sees it.
+   * The owner may also overrule something the company decided for them, or answer a held question early.
+   */
   decide(id, { choice, note } = {}) {
     return this.update(s => {
       const d = s.decisions.find(x => x.id === id)
       if (!d) throw new Error('no such decision')
-      if (d.status !== 'open') throw new Error('this decision is already answered')
+      if (d.status === 'answered') throw new Error('this decision is already answered')
+      if (d.status === 'auto') { d.overruled = true; d.companyChoice = d.choice }
       d.status = 'answered'
       d.choice = str(choice, 600).trim()
       d.note = str(note, 2000).trim() || undefined
       d.answeredAt = now()
+      d.seenByCeo = false
+      this.promoteHeld(s)
       return d
     })
   }
@@ -284,25 +318,25 @@ export class Company {
     return d
   }
 
-  /** The owner's answer on a verified proposal: Start moves it to proposals/approved/ (the paper daemon runs it). */
+  /**
+   * The owner's answer on a proposal the gate held (charter.execution.ownerApproval). What "start" does to the
+   * world is the profile's business (profile.resolveOrder, e.g. the quant profile moves the proposal file).
+   */
   #resolveOrder(orderId, start) {
     const o = this.read().orders.find(x => x.id === orderId)
     if (!o || o.status !== 'awaiting-owner') return
-    const held = path.join(QUANT, 'proposals', 'awaiting-owner', o.proposal)
-    const dest = start ? path.join(QUANT, 'proposals', 'approved', o.proposal) : path.join(QUANT, 'proposals', 'done', `declined-by-owner-${o.proposal}`)
-    fs.mkdirSync(path.dirname(dest), { recursive: true })
-    fs.renameSync(held, dest)
+    if (P.resolveOrder && P.resolveOrder(this, o, start) === false) return
     this.update(s => {
       const x = s.orders.find(y => y.id === orderId)
       x.status = start ? 'active' : 'declined'; x.decidedAt = now()
       const i = s.initiatives.find(y => y.id === x.initiative)
       if (i) {
         delete i.awaitingOwner
-        if (start) i.stage = 'paper'
-        i.history.push({ ts: now(), stage: i.stage, note: start ? `the owner approved: paper book ${x.book} started` : 'the owner declined to start it' })
+        if (start) i.stage = P.gatedStage
+        i.history.push({ ts: now(), stage: i.stage, note: start ? `the owner approved: ${x.book} started` : 'the owner declined to start it' })
       }
     })
-    this.ledger({ kind: 'order', usd: 0, note: start ? `owner approved: paper execution order ${o.book}` : `owner declined ${o.book}` })
+    this.ledger({ kind: 'order', usd: 0, note: start ? `owner approved: ${P.text.orderNoun} ${o.book}` : `owner declined ${o.book}` })
   }
 
   /** Mark a build request as accepted, done or dropped (the owner or a developer does the building). */
@@ -315,6 +349,50 @@ export class Company {
     const f = path.join(this.dir, 'PAUSED')
     if (on) fs.writeFileSync(f, `paused ${now()}\n`); else fs.rmSync(f, { force: true })
     return { paused: !!on }
+  }
+
+  // ---------------- the one door for an agent's question (docs/SUPER-AGENT-AUTONOMY.md)
+  /** True when an owner-only question may be shown now: none is waiting and today's limit is not reached. */
+  #slotFree(s) {
+    const asked = x => !x.kind && x.askedAt
+    if (s.decisions.some(x => x.status === 'open' && !x.kind)) return false
+    const day = today()
+    const local = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    return s.decisions.filter(x => asked(x) && local(x.askedAt) === day).length < s.charter.autonomy.maxQuestionsPerDay
+  }
+
+  /** A held question is asked when the place is free. Called inside update(). */
+  promoteHeld(s) {
+    const h = s.decisions.find(x => x.status === 'held')
+    if (!h || !this.#slotFree(s)) return null
+    h.status = 'open'; h.askedAt = now()
+    return h
+  }
+
+  /**
+   * An agent wants the owner to decide something. Called inside update(). Returns { status, rec }:
+   *   auto   it is not an owner-only matter: the recommendation is the decision (the owner can overrule it)
+   *   open   it is owner-only and is now waiting under "Needs you"
+   *   held   it is owner-only but one is already waiting, or today's limit is reached; the company continues
+   *          with d.ifNoAnswer and the question is asked when the place is free
+   */
+  askOwner(s, d) {
+    const keys = P.ownerOnly.map(o => o.key)
+    const category = keys.includes(d.category) ? d.category : 'internal'
+    const base = {
+      ...d, category,
+      question: str(d.question, 600), options: (d.options ?? []).map(o => str(o, 200)).slice(0, 4),
+      recommendation: str(d.recommendation, 300), why: str(d.why, 1200), ifNoAnswer: str(d.ifNoAnswer, 600),
+    }
+    const same = s.decisions.find(x => x.question === base.question && ['open', 'held'].includes(x.status))
+    if (same) return { status: same.status, rec: same }
+    if (s.charter.autonomy.level === 'ask') return { status: 'open', rec: this.addDecision(s, { ...base, askedAt: now() }) }
+    const push = rec => { s.decisions.push(rec); s.decisions = s.decisions.slice(-300); return rec }
+    if (category === 'internal') {
+      return { status: 'auto', rec: push({ id: newId('d'), ts: now(), ...base, status: 'auto', choice: base.recommendation || base.options[0] || 'as recommended', decidedAt: now() }) }
+    }
+    if (this.#slotFree(s)) return { status: 'open', rec: this.addDecision(s, { ...base, askedAt: now() }) }
+    return { status: 'held', rec: push({ id: newId('d'), ts: now(), ...base, status: 'held' }) }
   }
 
   addDecision(s, d) {
@@ -351,6 +429,8 @@ export class Company {
       departments, initiatives: s.initiatives, decisions: s.decisions.slice(-80).reverse(), hires: s.hires.slice(-60).reverse(),
       orders: s.orders.slice(-60).reverse(), builds: s.builds.slice(-40).reverse(), cycles: s.cycles.slice(-40).reverse(),
       busy: !!act, run, stages: STAGES, setUp: s.departments.length > 0, updatedAt: s.updatedAt,
+      ownerOnly: P.ownerOnly,
+      profile: { id: P.id, label: P.label, setUpWith: s.profile ?? null, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: this.metering, provider: P.models.provider, projectDir: P.projectDir, text: P.text },
       paused: fs.existsSync(path.join(this.dir, 'PAUSED')),
     }
   }

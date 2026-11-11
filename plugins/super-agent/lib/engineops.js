@@ -17,9 +17,8 @@ import path from 'node:path'
 import net from 'node:net'
 import crypto from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
-import { QUANT } from '../../company/lib/paths.js'
+import { QUANT, CRYPTO } from '../../company/profiles/quant.js'
 import { now, newId, str, clip } from './store.js'
-import { CRYPTO } from './org.js'
 
 const FT = path.join(CRYPTO, 'freqtrade')
 const LIVE = path.join(QUANT, 'data', 'live')
@@ -31,6 +30,20 @@ const PROCS = {
   ftchain: { pattern: 'chain-overrides.json', title: 'Dry-run chain bot' },
   collector: { pattern: 'quantcore collect', title: 'Market data collector' },
   daemon: { pattern: 'quantcore daemon', title: 'Paper trading daemon' },
+}
+
+/** Stand-ins for profiles that have no engine to run or patch (every profile except quant). */
+export class NullOps {
+  constructor() { this.checkedAt = 0 }
+  snapshot() { return { none: true, engineAgeS: null, collectorAgeS: null, engineFresh: false, collectorFresh: false, kill: false, books: [], startEquity: 0, signals: null, procs: {}, autostart: false, paused: false, note: null, checkedAt: null } }
+  async refresh() {}
+  async ensure() {}
+  async stop() {}
+}
+export class NullChanges {
+  poll() {}
+  submit() { throw new Error('this company has no engine to change; deliver work as a ticket and send it to the gate') }
+  decide() { throw new Error('this company has no engine changes') }
 }
 
 export class EngineOps {
