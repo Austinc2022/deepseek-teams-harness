@@ -1,0 +1,8 @@
+#!/bin/bash
+# Company CLI (standalone; does not need the harness running).
+#   ./company-cli setup | status | cycle ["focus"] | decide <id> <choice> | autopilot on|off [hours] | serve
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$PATH"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
+exec node "$ROOT/plugins/company/bin/company.js" "$@"

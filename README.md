@@ -11,6 +11,8 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/project-board` | A **Projects** page: projects with categorized tasks; each task runs its own orchestration of agents and workflows. |
 | `plugins/cli-workbench` | A **CLI workbench** page in the web UI: many interactive Claude Code, Codex and OpenCode terminals side by side, each in its own git worktree. |
 | `plugins/super-team` | A **Super team** page: one supervisor agent orchestrates many agent teams, in parallel or in sequence depending on the task, with every Agent chat mode at both levels. |
+| `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. |
+| `plugins/company-dashboard` | A **Company** page: spend against the budget, decisions waiting for you, the initiative pipeline and gate results, execution orders, the organisation, engine health, cycles, hires and the charter. |
 
 DSH's own **Agent Teams** bundle is also enabled in the `web` profile (`spawn_teammate`, a shared task board, and a team UI).
 
@@ -185,6 +187,47 @@ Messages from a super team show as **Supervisor** with a `super team: …` tag i
 **Projects (tabs):** the tab bar at the top groups super teams by project, so one project can hold many super teams, each with its own supervisor, mode and teams. **+ Project** creates one, with a name, a color, an optional default folder (new super teams in it start there) and a description that every supervisor and team in it gets as context. The ✎ on the active tab edits or deletes the project; deleting moves its super teams to **General** or deletes them. **All** shows every super team, labelled by project. Settings → Project moves a super team to another project.
 
 Each message is one Agent Forge run, so it also shows on Workflows → Runs. Click any agent in the timeline to open its transcript. Follow-up messages see the earlier requests and answers. `FORGE_MAX_PARALLEL` (default 4) caps how many agents run at once across all teams. Chats are saved in `forge/super-teams/` and projects in `forge/super-team-projects.json` (both excluded from git).
+
+## Company: a CEO over departments, with a budget and a gate
+
+The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.
+
+```
+you (owner)  ->  CEO  ->  department leads  ->  agent teams  ->  agents
+                  |         (each department is a super team; the lead is its supervisor)
+                  +-> HR team (hires new read-only agents)      +-> independent auditor (a different model)
+```
+
+**A cycle** (`Run a CEO cycle`, `./company-cli cycle`, or autopilot every N hours):
+
+1. **Facts.** Code measures the engine: health, paper books, simulation safety invariants, validator state, budget.
+2. **CEO plan.** The CEO picks at most four initiatives, writes a brief and the expected proof for each department, asks for hires, kills what failed, and asks you at most two questions.
+3. **Hiring.** The HR recruiter drafts each agent and the HR reviewer checks it. Code forces the template: read-only tools, no Bash or file edits, DeepSeek model, name starting `quant-`.
+4. **Departments.** Each brief runs in the department's super team. The lead reports evidence (measured, simulated or argued), up to two config proposals, and build specs for work that needs code.
+5. **Gate.** For each proposal, in this order: independent audit, engine safety invariants, then the quant validator on the holdout. A pass writes the proposal to `quant/proposals/approved/`, which the paper daemon runs as a shadow book. That file is the execution order.
+6. **CEO review.** The CEO updates the initiatives and writes a brief to `forge/company/reports/`.
+
+**What is goal-driven and what is not.** The charter states the goal and the rules; agents get no KPI to chase. Numbers are used only as limits and as proof: the daily budget, the cap per cycle, and the validator's P(better) with a bar that rises with every trial.
+
+**Limits enforced in code, not in prompts**
+
+- Only the gate can move an initiative to **Paper**. No agent output can.
+- Nothing here places a real order. The engine is paper-only; real money is the owner's decision and is not built.
+- A cycle does not start when the day's budget is spent or the DeepSeek balance is at the reserve, and it stops when it passes its own cap. Spend is measured on the DeepSeek account balance, not on agent estimates.
+- Every proposal validated raises the significance bar for later ones, so the gate takes at most two per cycle and audits before validating.
+
+**Models.** Company agents use `provider: deepseek` (`deepseek-v4-pro` for the CEO, leads and researchers, `deepseek-flash` for the rest). They run as normal Claude Code sessions pointed at DeepSeek's Anthropic-compatible API, so memory, skills and tools still work. The key is read from `DEEPSEEK_API_KEY` or `.dsh-home/.env` and is never written to an agent file. The auditor stays on Claude Opus so the checker is a different model from the author.
+
+```bash
+./company-cli setup            # create the CEO, leads, HR, teams, departments (safe to repeat)
+./company-cli status
+./company-cli cycle ["focus"]  # one cycle now
+./company-cli autopilot on 6   # a cycle every 6 hours while ./dsh web (or company-cli serve) runs
+./company-cli serve            # the dashboard on its own port, without the harness
+touch forge/company/PAUSED     # stop new cycles; delete the file to resume
+```
+
+State is in `forge/company/` (excluded from git): `company.json`, `ledger.jsonl`, `reports/`, and `backup/` with the original agent files from before the move to DeepSeek.
 
 ## CLI workbench: many Claude Code terminals on one page
 

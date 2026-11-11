@@ -1,0 +1,17 @@
+{
+  "name": "@local/company",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Company: a CEO agent that owns one goal and a daily budget, directs department leads (each a super team of agent teams), hires through HR, and executes only through a deterministic gate.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "lib/*.js", "bin/*.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

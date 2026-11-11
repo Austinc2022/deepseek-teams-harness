@@ -27,6 +27,7 @@ import { filesSummary } from './agent-files.js'
 import { McpLibrary } from './mcp.js'
 import { runCli, CLI_BACKENDS } from './cli-backends.js'
 import { deepMerge, normalizeAgent } from './registry.js'
+import { providerEnv } from './providers.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits', auto: 'auto', plan: 'plan', deny: 'dontAsk' }
@@ -209,6 +210,8 @@ async function runClaudeCode(p, mem, cwd, write) {
   const env = { ...cleanEnv(), CLAUDE_AGENT_SDK_CLIENT_APP: 'agent-forge/0.1.0' }
   if (!def.useApiKey) { delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL }
   Object.assign(env, def.env ?? {})
+  // provider: deepseek (and similar) sends this session's model calls to that provider's Anthropic-compatible API
+  Object.assign(env, providerEnv(def))
 
   const permissionMode = PERMISSION_MODE[def.permission]
   const mcp = new McpLibrary(registry.d.mcp).forAgent(def)

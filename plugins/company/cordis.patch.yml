@@ -1,0 +1,5 @@
+# Company: the CEO, its departments and the autopilot timer. No page of its own;
+# the page is plugins/company-dashboard.
+- insert:
+    - id: company
+      name: '@local/company'

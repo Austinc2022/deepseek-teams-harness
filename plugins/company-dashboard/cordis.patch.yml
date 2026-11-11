@@ -1,0 +1,5 @@
+# Company dashboard inside the DSH web UI: serves the page and the company API under /company on DSH's own
+# web server (DSH login required) and adds a sidebar page in the browser.
+- insert:
+    - id: company-dashboard
+      name: '@local/company-dashboard'

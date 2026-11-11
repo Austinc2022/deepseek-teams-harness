@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company desk</title>
+<style>
+/* Layout: one scrolling desk. Top band = what needs the owner and the money; then the live cycle,
+   the initiative pipeline (the core), then reference panels in a two-column grid. */
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec;
+  --accent: #8a5a12; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em }
+h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 }
+p { margin: 0 }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+.small { font-size: 12px }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-start; justify-content: space-between }
+header.top .who { min-width: 0; flex: 1 1 420px; display: flex; flex-direction: column; gap: 4px }
+header.top .mission { color: var(--muted); max-width: 78ch }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+button, .btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
+button.danger { color: var(--bad); border-color: var(--bad) }
+button:disabled { opacity: .5; cursor: default }
+button.link { border: 0; background: none; padding: 0; color: var(--info); text-decoration: underline; text-underline-offset: 2px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.panel > .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)) }
+.stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)) }
+.stat .big { font: 600 24px/1.1 var(--mono); font-variant-numeric: tabular-nums }
+.bar { height: 8px; background: var(--soft); border-radius: 4px; overflow: hidden }
+.bar > i { display: block; height: 100%; background: var(--accent); min-width: 2px }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted) }
+.pill.good::before { background: var(--good) } .pill.warn::before { background: var(--warn) } .pill.bad::before { background: var(--bad) } .pill.info::before { background: var(--info) }
+.pill.good { border-color: var(--good) } .pill.bad { border-color: var(--bad) } .pill.warn { border-color: var(--warn) }
+.need { border-left: 4px solid var(--warn) }
+.need.none { border-left-color: var(--good) }
+.decision { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line) }
+.decision:first-of-type { border-top: 0; padding-top: 0 }
+.decision .q { font-weight: 600 }
+.opts { display: flex; flex-wrap: wrap; gap: 6px }
+.pipe { display: grid; gap: 10px; align-items: start; grid-template-columns: repeat(7, minmax(150px, 1fr)); overflow-x: auto; padding-bottom: 4px }
+.col { background: var(--soft); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.col > .t { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between }
+.col.paper { outline: 2px solid var(--good); outline-offset: -2px }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; text-align: left; width: 100% }
+.card .ttl { font-weight: 600; overflow-wrap: anywhere }
+.empty { color: var(--muted); font-size: 12px }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600 }
+td.r, th.r { text-align: right }
+.scroll { overflow-x: auto }
+.org { display: flex; flex-direction: column; gap: 10px }
+.org .ceo { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.dep { border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px }
+.dep .team { display: flex; flex-wrap: wrap; gap: 5px; align-items: center }
+.chip { font-size: 12px; padding: 1px 7px; border-radius: 4px; background: var(--soft); white-space: nowrap }
+.chip.claude { background: none; border: 1px dashed var(--info); color: var(--info) }
+.chip.hired { border: 1px solid var(--good) }
+.live { border-color: var(--accent) }
+.agents { display: flex; flex-wrap: wrap; gap: 6px }
+pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere }
+.log { max-height: 160px; overflow: auto; background: var(--soft); border-radius: 6px; padding: 8px }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted) }
+input, textarea, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100% }
+textarea { min-height: 96px; resize: vertical }
+.form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)) }
+.form .wide { grid-column: 1 / -1 }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(880px, calc(100vw - 32px)); max-height: 86vh }
+dialog::backdrop { background: rgba(0, 0, 0, .45) }
+dialog .dh { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel) }
+dialog .db { padding: 16px; overflow: auto }
+.md h1, .md h2, .md h3 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 14px 0 6px }
+.md h1 { font-size: 18px; margin-top: 0 }
+.md p { margin: 0 0 8px; max-width: 78ch }
+.md ul { margin: 0 0 8px; padding-left: 20px; max-width: 78ch }
+.md code { font-family: var(--mono); background: var(--soft); padding: 0 3px; border-radius: 3px }
+.md table { margin-bottom: 8px }
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; max-width: calc(100vw - 32px) }
+@media (max-width: 520px) { .stat .big { font-size: 20px } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="who">
+      <h1>Company desk</h1>
+      <p class="mission" id="mission">Loading…</p>
+    </div>
+    <div class="controls">
+      <span class="pill" id="state">…</span>
+      <button class="primary" id="run">Run a CEO cycle</button>
+      <button class="danger" id="stop" hidden>Stop the cycle</button>
+      <button id="auto">Autopilot</button>
+      <button id="pause">Pause</button>
+    </div>
+  </header>
+
+  <section class="panel need" id="need"><div class="head"><h2>Needs you</h2></div><div id="decisions"><p class="empty">Loading…</p></div></section>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="panel live" id="live" hidden></section>
+
+  <section class="panel">
+    <div class="head"><h2>Initiatives: idea to paper execution</h2><span class="small muted">Only the gate moves an initiative to Paper. Click a card for its evidence.</span></div>
+    <div class="pipe" id="pipe"></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel"><div class="head"><h2>Execution orders (paper books)</h2></div><div class="scroll" id="orders"></div></section>
+    <section class="panel"><div class="head"><h2>Engine, measured now</h2><span class="small muted" id="engineAt"></span></div><div id="engine"><p class="empty">Reading the engine…</p></div></section>
+  </div>
+
+  <section class="panel"><div class="head"><h2>Organisation</h2><span class="small muted" id="orgCount"></span></div><div class="org" id="org"></div></section>
+
+  <section class="panel"><div class="head"><h2>Cycles</h2></div><div class="scroll" id="cycles"></div></section>
+
+  <div class="grid">
+    <section class="panel"><div class="head"><h2>Hiring</h2></div><div class="scroll" id="hires"></div></section>
+    <section class="panel"><div class="head"><h2>Build requests (need code or data)</h2></div><div id="builds"></div></section>
+  </div>
+
+  <div class="grid">
+    <section class="panel"><div class="head"><h2>Spend by day</h2></div><div class="scroll" id="days"></div></section>
+    <section class="panel"><div class="head"><h2>Ledger</h2></div><div class="scroll" id="ledger"></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="head"><h2>Charter</h2><span class="small muted">What every agent is told, and the limits code enforces.</span></div>
+    <form class="form" id="charter">
+      <label class="wide">Mission<textarea id="c-mission"></textarea></label>
+      <label>Daily budget, USD<input id="c-daily" type="number" min="0" step="1"></label>
+      <label>Cap per cycle, USD<input id="c-cycle" type="number" min="0.5" step="0.5"></label>
+      <label>Keep in reserve, USD<input id="c-reserve" type="number" min="0" step="1"></label>
+      <label>North-star target per day, USD<input id="c-target" type="number" min="1" step="1"></label>
+      <label>Autopilot: a cycle every (hours)<input id="c-hours" type="number" min="0.25" step="0.25"></label>
+      <label>Hiring<select id="c-hiring"><option value="auto">Automatic (read-only agents)</option><option value="observe">Ask me first</option><option value="off">Off</option></select></label>
+      <label>Hires per day, at most<input id="c-hires" type="number" min="0" step="1"></label>
+      <label>Proposals to the gate per cycle<input id="c-props" type="number" min="0" max="5" step="1"></label>
+      <label class="wide">Rules (one per line)<textarea id="c-rules" style="min-height:170px"></textarea></label>
+      <div class="wide"><button class="primary" type="submit">Save the charter</button></div>
+    </form>
+  </section>
+</div>
+
+<dialog id="dlg"><div class="dh"><strong id="dlgT"></strong><button id="dlgX">Close</button></div><div class="db" id="dlgB"></div></dialog>
+<div id="toast" hidden></div>
+
+<script>
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const usd = (n, d = 2) => n == null || Number.isNaN(Number(n)) ? '–' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+const pct = n => n == null ? '–' : (Number(n) * 100).toFixed(1) + '%'
+const when = t => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
+const mins = (a, b) => a && b ? Math.max(1, Math.round((new Date(b) - new Date(a)) / 60000)) + ' min' : '–'
+let O = null, E = null, charterDirty = false
+
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || ('request failed: ' + r.status))
+  return j
+}
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true }, 5000) }
+async function act(fn, ok) { try { await fn(); if (ok) toast(ok); await load() } catch (e) { toast(e.message) } }
+
+function md(src) {
+  const lines = esc(src).split('\n'); const out = []; let list = false, table = false
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>')
+  const close = () => { if (list) { out.push('</ul>'); list = false } if (table) { out.push('</table></div>'); table = false } }
+  for (const l of lines) {
+    let m
+    if ((m = l.match(/^(#{1,3})\s+(.*)/))) { close(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`) }
+    else if ((m = l.match(/^\s*[-*]\s+(.*)/))) { if (table) close(); if (!list) { out.push('<ul>'); list = true } out.push(`<li>${inline(m[1])}</li>`) }
+    else if (/^\s*\|.*\|\s*$/.test(l)) { if (list) close(); if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) continue; if (!table) { out.push('<div class="scroll"><table>'); table = true } out.push('<tr>' + l.trim().slice(1, -1).split('|').map(c => `<td>${inline(c.trim())}</td>`).join('') + '</tr>') }
+    else if (!l.trim()) close()
+    else { close(); out.push(`<p>${inline(l)}</p>`) }
+  }
+  close(); return out.join('\n')
+}
+function show(title, html) { $('dlgT').textContent = title; $('dlgB').innerHTML = html; if (!$('dlg').open) $('dlg').showModal() }
+$('dlgX').onclick = () => $('dlg').close()
+
+function renderTop() {
+  const c = O.charter, b = O.budget
+  $('mission').textContent = c.mission + ' ' + c.scope
+  const st = $('state')
+  st.className = 'pill ' + (O.busy ? 'info' : O.paused ? 'warn' : c.autopilot.enabled ? 'good' : '')
+  st.textContent = O.busy ? 'Cycle running' : O.paused ? 'Paused' : c.autopilot.enabled ? `Autopilot on, every ${c.autopilot.everyHours} h` : 'Autopilot off'
+  $('run').disabled = O.busy || !O.setUp; $('stop').hidden = !O.busy || (O.run && O.run.elsewhere)
+  $('auto').textContent = c.autopilot.enabled ? 'Turn autopilot off' : 'Turn autopilot on'
+  $('pause').textContent = O.paused ? 'Resume' : 'Pause'
+
+  const open = O.decisions.filter(d => d.status === 'open')
+  $('need').className = 'panel need' + (open.length ? '' : ' none')
+  $('decisions').innerHTML = open.length ? open.map(d => `<div class="decision"><div class="q">${esc(d.question)}</div>
+    <div class="small muted">From ${esc(d.from)} · ${when(d.ts)}. ${esc(d.why)}</div>
+    <div class="opts">${(d.options.length ? d.options : ['Yes', 'No']).map(o => `<button data-dec="${d.id}" data-choice="${esc(o)}"${o === d.recommendation ? ' class="primary"' : ''}>${esc(o)}</button>`).join('')}</div>
+    <div class="small muted">Recommended: ${esc(d.recommendation)}</div></div>`).join('') : '<p class="empty">Nothing is waiting for you.</p>'
+
+  const spentShare = b.dailyUsd ? Math.min(100, 100 * b.spentTodayUsd / b.dailyUsd) : 0
+  const paper = O.initiatives.filter(i => i.stage === 'paper').length, active = O.initiatives.filter(i => !['paper', 'killed'].includes(i.stage)).length
+  const ns = O.cycles.find(x => x.odds)
+  $('stats').innerHTML = `
+    <div class="panel stat"><h2>Spent today</h2><div class="big">${usd(b.spentTodayUsd)}</div><div class="bar"><i style="width:${spentShare}%"></i></div><div class="small muted">of ${usd(b.dailyUsd, 0)} daily budget · ${b.cyclesToday} cycle${b.cyclesToday === 1 ? '' : 's'} · cap ${usd(b.cycleUsd, 0)} each</div></div>
+    <div class="panel stat"><h2>DeepSeek balance</h2><div class="big">${usd(b.balanceUsd)}</div><div class="small muted">${b.balanceUsd != null && b.balanceUsd < b.dailyUsd ? `This, not the ${usd(b.dailyUsd, 0)} budget, is the real limit today. ` : ''}Reserve ${usd(b.reserveUsd, 0)} · read ${when(b.balanceAt)}</div></div>
+    <div class="panel stat"><h2>Initiatives</h2><div class="big">${paper} <span class="small muted">executing on paper</span></div><div class="small muted">${active} in progress · ${O.initiatives.filter(i => i.stage === 'killed').length} killed · ${O.orders.length} execution order${O.orders.length === 1 ? '' : 's'}</div></div>
+    <div class="panel stat"><h2>North star: ${usd(c.northStar.targetDailyUsd, 0)} a day</h2><div class="small">${ns ? esc(ns.odds) : 'The CEO states the odds after its first cycle.'}</div></div>`
+}
+
+function renderLive() {
+  const el = $('live'); el.hidden = !O.run
+  if (!O.run) return
+  const r = O.run
+  el.innerHTML = `<div class="head"><h2>Cycle in progress: ${esc(r.phase || 'starting')}</h2><span class="small muted">run ${esc(r.id)}</span></div>
+    <div class="agents">${r.agents.map(a => `<span class="pill ${a.status === 'completed' ? 'good' : a.status === 'failed' ? 'bad' : a.status === 'running' ? 'info' : ''}" title="${esc(a.lastTool || '')}">${esc(a.label)} · ${esc(a.model)}${a.tools ? ` · ${a.tools} tools` : ''}</span>`).join('') || '<span class="empty">Measuring the engine…</span>'}</div>
+    <pre class="log">${esc(r.log.map(l => l.ts.slice(11, 19) + '  ' + l.msg).join('\n'))}</pre>`
+}
+
+const STAGE_LABEL = { idea: 'Idea', research: 'Research', model: 'Model', rehearsal: 'Rehearsal', gate: 'At the gate', paper: 'Paper (executing)', killed: 'Killed' }
+function renderPipe() {
+  const cols = ['idea', 'research', 'model', 'rehearsal', 'gate', 'paper', 'killed']
+  $('pipe').innerHTML = cols.map(s => {
+    const items = O.initiatives.filter(i => i.stage === s)
+    return `<div class="col ${s}"><div class="t"><span>${STAGE_LABEL[s]}</span><span class="num">${items.length}</span></div>${items.map(i => `<button class="card" data-ini="${i.id}">
+      <span class="ttl">${esc(i.title)}</span><span class="small muted">${esc(i.department)} · ${esc(i.kind || '')}</span>
+      ${i.confidence != null ? `<span class="bar" title="${esc(i.confidenceBasis || '')}"><i style="width:${Math.round(i.confidence * 100)}%"></i></span><span class="small num">${pct(i.confidence)} <span class="muted">${esc(i.confidenceBasis || '')}</span></span>` : ''}
+      ${i.gate ? `<span class="pill ${i.gate.passed ? 'good' : 'bad'}">gate ${i.gate.passed ? 'passed' : 'failed'}</span>` : ''}</button>`).join('') || '<span class="empty">–</span>'}</div>`
+  }).join('')
+}
+function showInitiative(id) {
+  const i = O.initiatives.find(x => x.id === id); if (!i) return
+  show(i.title, `<div class="md"><p><strong>Thesis.</strong> ${esc(i.thesis)}</p>
+    <p><span class="pill">${esc(STAGE_LABEL[i.stage] || i.stage)}</span> ${i.confidence != null ? `<span class="num">${pct(i.confidence)}</span> <span class="muted">${esc(i.confidenceBasis || '')}</span>` : ''}</p>
+    ${i.note ? `<p><strong>Latest.</strong> ${esc(i.note)}</p>` : ''}
+    ${i.gate ? `<h3>Gate</h3><p>${i.gate.passed ? 'Passed' : 'Failed'}${i.gate.pImprove != null ? `, P(better) ${Number(i.gate.pImprove).toFixed(3)}` : ''}. ${esc((i.gate.reasons || []).join('; '))}</p>` : ''}
+    ${(i.evidence || []).length ? `<h3>Evidence</h3><div class="scroll"><table><tr><th>Claim</th><th>Source</th><th>Strength</th></tr>${i.evidence.map(e => `<tr><td>${esc(e.claim)}</td><td>${esc(e.source)}</td><td><span class="pill ${e.strength === 'measured' ? 'good' : e.strength === 'simulated' ? 'info' : 'warn'}">${esc(e.strength)}</span></td></tr>`).join('')}</table></div>` : ''}
+    ${(i.blockers || []).length ? `<h3>Blockers</h3><ul>${i.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
+    <h3>History</h3><ul>${(i.history || []).slice().reverse().map(h => `<li>${when(h.ts)} · ${esc(h.stage)} · ${esc(h.note || '')}</li>`).join('')}</ul></div>`)
+}
+
+function renderTables() {
+  $('orders').innerHTML = O.orders.length ? `<table><tr><th>When</th><th>Paper book</th><th class="r">P(better)</th><th class="r">Bar</th><th>Audit</th></tr>${O.orders.map(o => `<tr><td>${when(o.ts)}</td><td class="num">${esc(o.book)}</td><td class="r num">${Number(o.pImprove).toFixed(3)}</td><td class="r num">${Number(o.required).toFixed(3)}</td><td>${o.audit ? (o.audit.fatal ? 'fatal' : 'no fatal objection') : 'not required'}</td></tr>`).join('')}</table>` : '<p class="empty">No execution order yet. An order is issued only when a proposal passes the audit, the safety invariants and the validator on the holdout.</p>'
+
+  const agents = new Set(); O.departments.forEach(d => d.teams.forEach(t => t.members.forEach(m => agents.add(m.name))))
+  $('orgCount').textContent = `${O.departments.length} departments · ${O.departments.reduce((n, d) => n + d.teams.length, 0)} teams · ${agents.size + O.departments.length + 1} agents`
+  const chip = a => `<span class="chip${a.provider === 'deepseek' ? '' : ' claude'}${a.hired ? ' hired' : ''}" title="${esc(a.description || '')}">${esc(a.name)} · ${esc(a.model || '?')}</span>`
+  $('org').innerHTML = `<div class="ceo"><strong>CEO</strong> ${O.ceo ? chip(O.ceo) : '<span class="empty">not set up</span>'} <strong>Independent auditor</strong> ${O.auditor ? chip(O.auditor) : ''} <span class="small muted">Dashed = Claude subscription, kept for the audit so the checker is a different model. Green border = hired by HR.</span></div>` +
+    O.departments.map(d => `<div class="dep"><div><strong>${esc(d.name)}</strong> <span class="muted">· lead</span> ${chip(d.leadInfo)} <span class="small muted">${esc(d.mission)}</span></div>${d.teams.map(t => `<div class="team"><span class="small muted" style="min-width:150px">${esc(t.name)}</span>${t.members.map(chip).join('')}</div>`).join('')}</div>`).join('')
+
+  $('cycles').innerHTML = O.cycles.length ? `<table><tr><th>Started</th><th>Status</th><th>Took</th><th class="r">Spend</th><th>Summary</th><th>Brief</th><th>Runs</th></tr>${O.cycles.map(c => `<tr><td>${when(c.startedAt)}<div class="small muted">${esc(c.trigger)}</div></td><td><span class="pill ${c.status === 'completed' ? 'good' : c.status === 'running' ? 'info' : 'bad'}">${esc(c.status)}</span></td><td class="num">${mins(c.startedAt, c.endedAt)}</td><td class="r num">${usd(c.spendUsd)}</td><td>${esc(c.summary || c.error || c.assessment || '')}</td><td>${c.report ? `<button class="link" data-report="${esc(c.report)}">Read</button>` : '–'}</td><td><button class="link" data-run="${esc(c.runId)}">CEO</button>${(c.subRuns || []).map(s => ` <button class="link" data-run="${esc(s.runId)}">${esc(s.department)}</button>`).join('')}</td></tr>`).join('')}</table>` : '<p class="empty">No cycle yet. Run one to see the CEO plan, the departments work and the gate decide.</p>'
+
+  $('hires').innerHTML = O.hires.length ? `<table><tr><th>When</th><th>Agent</th><th>Team</th><th>Status</th><th>Why</th></tr>${O.hires.map(h => `<tr><td>${when(h.ts)}</td><td>${esc(h.name)}<div class="small muted">${esc(h.model || '')}</div></td><td>${esc(h.team)}</td><td><span class="pill ${h.status === 'hired' ? 'good' : h.status === 'proposed' ? 'warn' : 'bad'}">${esc(h.status)}</span></td><td>${esc(h.reason || h.why || '')}</td></tr>`).join('')}</table>` : '<p class="empty">HR has hired nobody yet. The CEO asks for a hire when a missing skill blocks an initiative.</p>'
+
+  $('builds').innerHTML = O.builds.length ? O.builds.map(b => `<div class="decision"><div class="q">${esc(b.title)} <span class="pill ${b.status === 'done' ? 'good' : b.status === 'dropped' ? 'bad' : 'warn'}">${esc(b.status)}</span></div><div class="small muted">${esc(b.department)} · ${when(b.ts)} · expected value: ${esc(b.expectedValue)}</div><div class="opts"><button class="link" data-build-show="${b.id}">Read the spec</button>${['accepted', 'done', 'dropped'].filter(s => s !== b.status).map(s => `<button data-build="${b.id}" data-status="${s}">Mark ${s}</button>`).join('')}</div></div>`).join('') : '<p class="empty">No build request. Agents are read-only, so work that needs new code or data lands here as a spec.</p>'
+
+  $('days').innerHTML = O.days.length ? `<table><tr><th>Day</th><th class="r">DeepSeek</th><th class="r">Claude (notional)</th><th class="r">Cycles</th><th class="r">Start balance</th></tr>${O.days.slice().reverse().map(d => `<tr><td class="num">${esc(d.date)}</td><td class="r num">${usd(d.modelUsd)}</td><td class="r num">${usd(d.claudeEstUsd)}</td><td class="r num">${d.cycles}</td><td class="r num">${usd(d.startBalanceUsd)}</td></tr>`).join('')}</table>` : '<p class="empty">No spend recorded yet.</p>'
+}
+
+function renderEngine() {
+  if (!E) return
+  $('engineAt').textContent = 'read ' + when(E.at)
+  const lvl = s => /critical/.test(s) ? 'bad' : /warning/.test(s) ? 'warn' : 'good'
+  const sim = E.simulation || {}, inv = sim.invariants
+  const bt = sim.backtest ? Object.entries(sim.backtest).filter(([, v]) => v) : []
+  $('engine').innerHTML = `<p><span class="pill ${E.health.status === 'ok' ? 'good' : E.health.status === 'warning' ? 'warn' : 'bad'}">health ${esc(E.health.status)}</span>
+      <span class="pill ${inv && inv.all_pass ? 'good' : 'bad'}">safety invariants ${inv && inv.all_pass ? 'pass' : 'not confirmed'}</span>
+      <span class="pill">validator: ${E.validator.trialsSoFar} trials, next needs P ≥ ${E.validator.requiredConfidenceNext}</span></p>
+    <div class="scroll"><table><tr><th>Check</th><th>Detail</th></tr>${(E.health.checks || [E.health.error]).map(c => { const m = String(c).match(/^(.*): (ok|warning|critical) \((.*)\)$/); return `<tr><td><span class="pill ${lvl(m ? m[2] : c)}">${esc(m ? m[1] : 'error')}</span></td><td>${esc(m ? m[3] : c)}</td></tr>` }).join('')}</table></div>
+    ${bt.length ? `<p class="small muted">Backtest on ${esc(String(sim.source || '').split(':')[0])} data, whole period, from $1,000</p><div class="scroll"><table><tr><th>Profile</th>${Object.keys(bt[0][1]).map(k => `<th class="r">${esc(k.replace(/_/g, ' '))}</th>`).join('')}</tr>${bt.map(([k, v]) => `<tr><td>${esc(k)}</td>${Object.values(v).map(x => `<td class="r num">${x == null ? '–' : typeof x === 'number' ? (Math.abs(x) <= 10 && !Number.isInteger(x) ? (x * 100).toFixed(2) + '%' : x.toLocaleString('en-US', { maximumFractionDigits: 2 })) : esc(x)}</td>`).join('')}</tr>`).join('')}</table></div>` : `<p class="empty">${esc(sim.error || '')}</p>`}
+    <p class="small muted">Approved proposals running as paper books: ${E.proposals.approved.length ? esc(E.proposals.approved.join(', ')) : 'none'}</p>
+    <pre class="log">${esc(E.live.daemon || 'no daemon log')}</pre>`
+}
+
+function fillCharter() {
+  if (charterDirty) return
+  const c = O.charter
+  $('c-mission').value = c.mission; $('c-daily').value = c.budget.dailyUsd; $('c-cycle').value = c.budget.cycleUsd; $('c-reserve').value = c.budget.reserveUsd
+  $('c-target').value = c.northStar.targetDailyUsd; $('c-hours').value = c.autopilot.everyHours; $('c-hiring').value = c.hiring.mode; $('c-hires').value = c.hiring.maxPerDay
+  $('c-props').value = c.gate.maxProposalsPerCycle; $('c-rules').value = c.rules.join('\n')
+}
+$('charter').addEventListener('input', () => { charterDirty = true })
+$('charter').addEventListener('submit', e => {
+  e.preventDefault()
+  act(async () => {
+    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
+    charterDirty = false
+  }, 'Charter saved')
+})
+
+async function load() {
+  try {
+    O = await api('overview')
+    if (!O.setUp) { $('mission').textContent = 'The company is not set up yet.'; $('decisions').innerHTML = '<p>Create the CEO, the department leads, HR and the teams.</p><div class="opts"><button class="primary" id="setup">Set up the company</button></div>'; $('setup').onclick = () => act(() => api('setup', 'POST', {}), 'Company set up'); return }
+    renderTop(); renderLive(); renderPipe(); renderTables(); fillCharter()
+  } catch (e) { $('mission').textContent = 'Cannot reach the company service: ' + e.message }
+}
+async function loadEngine() { try { E = await api('engine'); renderEngine() } catch (e) { $('engine').innerHTML = `<p class="empty">${esc(e.message)}</p>` } }
+async function loadLedger() {
+  try {
+    const rows = await api('ledger')
+    $('ledger').innerHTML = rows.length ? `<table><tr><th>When</th><th>Kind</th><th class="r">USD</th><th>Note</th></tr>${rows.slice(0, 60).map(r => `<tr><td>${when(r.ts)}</td><td>${esc(r.kind)}</td><td class="r num">${usd(r.usd)}</td><td>${esc(r.note || '')}</td></tr>`).join('')}</table>` : '<p class="empty">The ledger is empty.</p>'
+  } catch {}
+}
+
+$('run').onclick = () => act(() => api('cycle', 'POST', {}), 'Cycle started')
+$('stop').onclick = () => act(() => api('cancel', 'POST', {}), 'Stopping the cycle')
+$('auto').onclick = () => act(() => api('charter', 'PUT', { autopilot: { enabled: !O.charter.autopilot.enabled } }), O.charter.autopilot.enabled ? 'Autopilot off' : 'Autopilot on')
+$('pause').onclick = () => act(() => api('pause', 'POST', { paused: !O.paused }), O.paused ? 'Resumed' : 'Paused')
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-dec],[data-ini],[data-report],[data-run],[data-build],[data-build-show],[data-file]'); if (!t) return
+  const d = t.dataset
+  try {
+    if (d.dec) return act(() => api('decisions/' + d.dec, 'POST', { choice: d.choice }), 'Answer recorded. The CEO sees it in the next cycle.')
+    if (d.ini) return showInitiative(d.ini)
+    if (d.report) { const r = await api('reports/' + encodeURIComponent(d.report)); return show(d.report, `<div class="md">${md(r.text)}</div>`) }
+    if (d.build) return act(() => api('builds/' + d.build, 'POST', { status: d.status }), 'Updated')
+    if (d.buildShow) { const b = O.builds.find(x => x.id === d.buildShow); return show(b.title, `<div class="md">${md(b.spec)}</div>`) }
+    if (d.run && d.file) { const f = await api(`runs/${d.run}/file?path=${encodeURIComponent(d.file)}`); return show(d.file, `<pre>${esc(f.text)}</pre>`) }
+    if (d.run) { const r = await api('runs/' + d.run); return show(`${r.orchestration} · ${r.status}`, `<div class="scroll"><table><tr><th>#</th><th>Agent</th><th>Model</th><th>Status</th><th class="r">Tools</th><th>Transcript</th></tr>${r.agents.map(a => `<tr><td class="num">${a.n}</td><td>${esc(a.label)}</td><td>${esc(a.model)}</td><td><span class="pill ${a.status === 'completed' ? 'good' : a.status === 'failed' ? 'bad' : 'info'}">${esc(a.status)}</span></td><td class="r num">${a.tools}</td><td><button class="link" data-run="${esc(r.id)}" data-file="${esc(a.file)}">Open</button></td></tr>`).join('')}</table></div>${r.error ? `<p class="small" style="color:var(--bad)">${esc(r.error)}</p>` : ''}<pre class="log" style="max-height:260px;margin-top:10px">${esc(r.log.map(l => l.ts.slice(11, 19) + '  ' + l.msg).join('\n'))}</pre>`) }
+  } catch (err) { toast(err.message) }
+})
+
+load(); loadEngine(); loadLedger()
+setInterval(load, 4000); setInterval(loadEngine, 60000); setInterval(loadLedger, 30000)
+</script>
+</body>
+</html>
