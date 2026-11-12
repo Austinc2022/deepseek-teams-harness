@@ -173,7 +173,7 @@ export class Org {
     const teams = [...new Set((a.teams ?? []).map(String))].filter(t => teamExists(registry, t))
     if (!teams.length) throw new Error('a super team needs at least one existing team')
     const st = co.supers.create({
-      title: str(a.title, 100).trim() || 'Super team', project: co.read().superProject, supervisor, mode: 'auto', maxRounds: 2, maxHops: 1, cwd: P.projectDir,
+      title: str(a.title, 100).trim() || 'Super team', project: co.read().superProject, supervisor, mode: 'auto', maxRounds: 4, maxHops: 1, cwd: P.projectDir,
       teams: teams.map(team => ({ team, mode: 'parallel', chat: 'copy' })),
       instructions: str(a.instructions, 4000).trim() || undefined,
     })

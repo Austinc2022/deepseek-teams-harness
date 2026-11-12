@@ -31,7 +31,7 @@ export const COO_TOOLS = [
     brief: { type: 'string', description: 'self-contained brief: goal, what to examine, deliverable' },
     proof: { type: 'string', description: 'what result counts as evidence, and what result kills the initiative' },
   }, ['department', 'brief', 'proof']),
-  tool('set_initiative', `Move an initiative to another stage (not "${P.gatedStage}": only the gate does that), kill it, or record your confidence.`, { id: S, stage: { type: 'string', enum: P.agentStages }, confidence: { type: 'number', description: '0..1' }, note: S }, ['id', 'stage', 'note']),
+  tool('set_initiative', `Move an initiative to another stage (not "${P.gatedStage}": only the gate does that), kill it, or record your confidence.`, { id: S, stage: { type: 'string', enum: P.agentStages }, confidence: { type: 'number', description: '0..1' }, note: S, attempts: { type: 'array', description: 'for a kill: the distinct approaches tried, each with its result (at least three)', items: { type: 'object', properties: { approach: S, result: S }, required: ['approach', 'result'] } }, exempt: { type: 'string', enum: ['duplicate', 'superseded', 'owner-asked', 'out-of-scope'] }, challenge: { type: 'string', description: 'id of a finished rescue challenge, to proceed with the kill after reading it' } }, ['id', 'stage', 'note']),
   tool('decide_build', 'Decide a build request from a department. ticket: open the ticket yourself now (give title, brief, doneWhen). forward: hand it to the CEO with your reason. drop: reject it with the reason.', { id: S, decision: { type: 'string', enum: ['ticket', 'forward', 'drop'] }, reason: S, title: S, brief: S, doneWhen: S, workstream: S }, ['id', 'decision', 'reason']),
   tool('hire', 'Ask HR for a new analyst in a department team when a missing skill blocks an initiative. It runs in the background; the result reaches you as an event.', { department: { type: 'string', enum: [] }, team: { type: 'string', description: `existing team name, or a new one starting with ${P.prefix}` }, need: S, why: S }),
   tool('write_brief', 'Write the brief for the owner (Markdown): state of the company, what was learned with numbers, what the gate decided, honest odds for the north star, what happens next. It is filed with the company briefs and the CEO is told.', { markdown: S, summary: { type: 'string', description: 'two sentences' } }),
@@ -39,7 +39,7 @@ export const COO_TOOLS = [
 
 export const DEPT_TOOLS = [
   tool('run_super_team', 'Give your super team (you as supervisor over your teams, all working in parallel) a task. It runs in the background; the result reaches you as an event. One super-team run at a time; use ask_team or ask_agent for more at once.', { message: S }),
-  tool('report_to_coo', `Report on an initiative to the COO, in the fixed form. Code applies it: stage, confidence, evidence, build requests; proposals go to the gate. ${P.proposal.reportRule} ${P.prompts.report}`, { initiativeId: S, ...REPORT.properties }, ['initiativeId', ...REPORT.required]),
+  tool('report_to_coo', `Report on an initiative to the COO, in the fixed form. Code applies it: stage, confidence, evidence, build requests; proposals go to the gate. ${P.proposal.reportRule} ${P.prompts.report}`, { initiativeId: S, ...REPORT.properties, attempts: { type: 'array', description: 'for a kill: the distinct approaches tried, each with its result (at least three)', items: { type: 'object', properties: { approach: S, result: S }, required: ['approach', 'result'] } }, exempt: { type: 'string', enum: ['duplicate', 'superseded', 'owner-asked', 'out-of-scope'] }, challenge: { type: 'string', description: 'id of a finished rescue challenge, to proceed with the kill after reading it' } }, ['initiativeId', ...REPORT.required]),
 ]
 
 export function toolsFor(kind, departments) {
@@ -68,7 +68,8 @@ export function seedLeaders(sa) {
     reports: { superTeams: c.departments.map(d => d.superTeamId).filter(Boolean), teams: c.departments.flatMap(d => d.teams), agents: [...new Set([...c.departments.map(d => d.lead), ...members(registry, c.departments.flatMap(d => d.teams))])] },
   }, ...c.departments.map(d => ({
     id: deptLeaderId(d.id), kind: 'dept', dept: d.id, title: d.name, agent: d.lead, parent: COO_ID, mission: d.mission,
-    reports: { superTeams: d.superTeamId ? [d.superTeamId] : [], teams: [...d.teams], agents: members(registry, d.teams) },
+    // the People head is the coach: it may improve any of the company's agents
+    reports: { superTeams: d.superTeamId ? [d.superTeamId] : [], teams: [...d.teams], agents: d.id === 'people' ? registry.listAgents().filter(x => !x.invalid && P.isOurs(x.name)).map(x => x.name) : members(registry, d.teams) },
   }))]
   const sig = JSON.stringify([on, want.map(w => [w.id, w.agent, w.parent, w.reports])])
   if (sa.leadersSig === sig) return
@@ -149,6 +150,11 @@ export async function companyAct(sa, me, name, a, ctx) {
       }
       case 'set_initiative': {
         if (!P.agentStages.includes(a.stage)) throw new Error(`stage must be one of ${P.agentStages.join(', ')}`)
+        if (a.stage === 'killed') {
+          const ini = co.read().initiatives.find(x => x.id === a.id)
+          const wait = sa.growth?.guard(me, { action: 'kill the initiative', ref: a.id, title: ini?.title ?? a.id, attempts: a.attempts, exempt: a.exempt, challenge: a.challenge })
+          if (wait) return wait
+        }
         co.update(s => {
           const i = s.initiatives.find(x => x.id === a.id)
           if (!i) throw new Error(`no initiative ${a.id}`)
@@ -205,6 +211,10 @@ export async function companyAct(sa, me, name, a, ctx) {
         const ini = c.initiatives.find(x => x.id === a.initiativeId && x.department === d.id)
         if (!ini) throw new Error(`no initiative ${a.initiativeId} in your department`)
         const report = Object.fromEntries(REPORT.required.map(k => [k, a[k]]))
+        if (report.recommendedStage === 'killed') {
+          const wait = sa.growth?.guard(me, { action: 'recommend killing the initiative', ref: ini.id, title: ini.title, attempts: a.attempts, exempt: a.exempt, challenge: a.challenge })
+          if (wait) return wait
+        }
         if (str(report.summary, 4000).trim().length < 40) throw new Error('the summary is too short')
         applyReports(co, [{ department: d.id, initiativeId: ini.id, report }], me.id)
         const props = (report.proposals ?? []).filter(p => P.proposal.has(p)).slice(0, 2)

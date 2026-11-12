@@ -244,6 +244,47 @@ function gantt(el, A) {
 
 
 /** Every leader's threads, plan and capacity: is anyone idle while work is ready? */
+/** How the company gets better: checks, know-how, skills on trial, lessons, gaps found and fixed, rescues. */
+/** One agent: is it getting better, what reviews found, what it is learning. */
+function capabilityPanel(c) {
+  const pts = c.scores.map(x => Math.round(x.value * 100))
+  return `<section class="panel"><div class="head"><h2>Capability and learning</h2><span class="small muted">${c.score == null ? 'no scored work yet' : 'recent quality ' + Math.round(c.score * 100) + '%'}${c.playbook ? ' · playbook: ' + esc(c.playbook) : ''}</span></div>
+    ${pts.length ? `<p class="small muted">Scores of its checked work, oldest first: ${pts.join(' · ')}</p>` : ''}
+    <div class="grid3">
+      <div><h3>Gaps reviews found</h3>${c.gaps.length ? `<ul>${c.gaps.map(g => `<li>${esc(g.category)}: ${esc(g.gap)} <span class="small muted">→ ${esc(g.remedy)}${g.detail ? ' ' + esc(g.detail) : ''} (${esc(g.source)})</span></li>`).join('')}</ul>` : '<p class="empty">None.</p>'}</div>
+      <div><h3>Skills on trial</h3>${c.trials.length ? `<ul>${c.trials.map(t => `<li><span class="pill">${esc(t.status)}</span> ${esc(t.skill)} <span class="small muted">${esc(t.from)} · ${t.uses} uses</span></li>`).join('')}</ul>` : '<p class="empty">None.</p>'}
+        ${c.changes.length ? `<h3 style="margin-top:10px">Changes made to it</h3><ul>${c.changes.map(x => `<li><span class="pill">${esc(x.status)}</span> ${esc(x.what)} <span class="small muted">${x.before ?? '–'} → ${x.after ?? '…'}</span></li>`).join('')}</ul>` : ''}</div>
+      <div><h3>What it learned</h3>${c.lessons.length ? `<ul>${c.lessons.map(l => `<li><span class="pill">${esc(l.kind)}</span> ${esc(l.text)}</li>`).join('')}</ul>` : '<p class="empty">No lesson yet.</p>'}</div>
+    </div></section>`
+}
+
+function growthPanel() {
+  const G = B.growth
+  if (!G) return ''
+  const pct = v => v == null ? '–' : Math.round(v * 100) + '%'
+  const pill = st => `<span class="pill ${st === 'promoted' || st === 'kept' || st === 'done' || st === 'written' ? 'good' : st === 'retired' || st === 'rolled-back' || st === 'failed' || st === 'refused' ? 'bad' : 'info'}">${esc(st)}</span>`
+  return `<section class="panel">
+    <div class="head"><h2>Quality and learning</h2><span class="small muted">checks before done · know-how searches · skills on trial · lessons · capability gaps and coaching</span></div>
+    <div class="facts">
+      <div><span class="small muted">Passed the check at first try</span><span class="v">${pct(G.verify.firstPassRate)}</span><span class="small muted">${G.verify.firstPass} of ${G.verify.delivered} verified tickets</span></div>
+      <div><span class="small muted">Critiqued</span><span class="v">${G.critique.tickets}</span><span class="small muted">of ${G.critique.of} finished tickets</span></div>
+      <div><span class="small muted">Know-how searches</span><span class="v">${G.knowhow.total}</span><span class="small muted">${G.knowhow.today} today · ${G.knowhow.skillsAttached} skills attached</span></div>
+      <div><span class="small muted">Skills on trial</span><span class="v">${G.trials.trial}</span><span class="small muted">${G.trials.promoted} kept · ${G.trials.retired} retired</span></div>
+      <div><span class="small muted">Lessons learned</span><span class="v">${G.lessons.total}</span><span class="small muted">${G.lessons.playbooks} playbooks · ${G.smith.written} skills written here</span></div>
+      <div><span class="small muted">Capability gaps</span><span class="v">${G.gaps.week}</span><span class="small muted">this week · ${G.gaps.total} in all</span></div>
+      <div><span class="small muted">Rescue challenges</span><span class="v">${G.challenges.total}</span><span class="small muted">before giving up</span></div>
+    </div>
+    <div class="grid3">
+      <div><h3>Recent know-how</h3>${G.knowhow.recent.length ? `<ul>${G.knowhow.recent.map(k => `<li>${pill(k.status)} ${esc(k.problem.slice(0, 120))} <span class="small muted">${esc(k.why || '')}${k.skills.length ? ' · skills: ' + k.skills.map(esc).join(', ') : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No search yet.</p>'}</div>
+      <div><h3>Skills on trial and decided</h3>${G.trials.list.length ? `<ul>${G.trials.list.map(t => `<li>${pill(t.status)} <strong>${esc(t.skill)}</strong> for ${esc(t.agent)} <span class="small muted">${esc(t.from)} · ${t.uses} use${t.uses === 1 ? '' : 's'}${t.mean != null ? ' · ' + t.mean + '%' : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No skill on trial yet.</p>'}
+        ${G.smith.recent.length ? `<h3 style="margin-top:10px">Written by the Skill Smith</h3><ul>${G.smith.recent.map(x => `<li>${pill(x.status)} ${esc(x.skill || 'new skill')} <span class="small muted">${esc(x.reason)}</span></li>`).join('')}</ul>` : ''}</div>
+      <div><h3>Capability gaps found</h3>${G.gaps.recent.length ? `<ul>${G.gaps.recent.map(g => `<li><strong>${esc(g.who)}</strong> · ${esc(g.category)}: ${esc(g.gap.slice(0, 140))} <span class="small muted">→ ${esc(g.remedy)} (${esc(g.source)})</span></li>`).join('')}</ul>` : '<p class="empty">No gap recorded yet.</p>'}
+        ${G.changes.length ? `<h3 style="margin-top:10px">Coaching changes</h3><ul>${G.changes.map(c => `<li>${pill(c.status)} ${esc(c.agent)}: ${esc(c.what)} <span class="small muted">${c.before ?? '–'} → ${c.after ?? '…'}</span></li>`).join('')}</ul>` : ''}</div>
+    </div>
+    ${G.lessons.recent.length ? `<h3>Latest lessons</h3><ul>${G.lessons.recent.map(l => `<li><span class="pill">${esc(l.kind)}</span> ${esc(l.text)} <span class="small muted">${esc(l.appliesTo)}${l.count > 1 ? ' · learned ' + l.count + ' times' : ''}</span></li>`).join('')}</ul>` : ''}
+  </section>`
+}
+
 function leadersPanel() {
   if (!B.leaders || !B.leaders.length) return ''
   const C = B.capacity, L = B.leaders.filter(l => !l.paused)
@@ -332,6 +373,8 @@ function overview() {
   </section>
 
   ${leadersPanel()}
+
+  ${growthPanel()}
 
   <section class="panel">
     <div class="head"><h2>Organisation: who is doing what</h2><span class="small muted">${B.tree.filter(x => x.type === 'Agent').map(x => x.ref).filter((x, i, a) => a.indexOf(x) === i).length} agents in ${B.tree.filter(x => x.type === 'Team').length} teams and ${B.tree.filter(x => x.type === 'Department').length} departments</span></div>
@@ -471,6 +514,8 @@ function entityView() {
 
   ${e.funnel ? `<div class="grid2"><section class="panel"><div class="head"><h3>Its ideas by stage</h3></div><div class="chart" id="eFunnel"></div></section>
     <section class="panel"><div class="head"><h3>Its initiatives</h3></div>${(d.initiatives || []).length ? `<ul>${d.initiatives.map(i => `<li><span class="pill">${esc(SLx()[i.stage] || i.stage)}</span> <strong>${esc(i.title)}</strong>${i.confidence != null ? ` <span class="small muted num">confidence ${Math.round(i.confidence * 100)}%</span>` : ''}${i.note ? `<br><span class="small muted">${esc(i.note)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="empty">None yet.</p>'}</section></div>` : ''}
+
+  ${E.capability ? capabilityPanel(E.capability) : ''}
 
   ${e.decisionsDaily ? `<div class="grid2"><section class="panel"><div class="head"><h3>Decisions per day</h3></div><div class="chart" id="eDec"></div></section>
     <section class="panel"><div class="head"><h3>Its tickets</h3></div><div class="chart" id="eTk"></div></section></div>

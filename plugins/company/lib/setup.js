@@ -74,7 +74,7 @@ export function seed(co, { force = false, refreshAgents = false } = {}) {
       if (dep.superTeamId) { try { co.supers.get(dep.superTeamId); live = true } catch {} }
       if (!live && dep.teams.length) {
         const st = co.supers.create({
-          title: `${P.label} · ${dep.name}`, project: projectId, supervisor: dep.lead, mode: 'auto', maxRounds: 2, maxHops: 1, cwd: P.projectDir,
+          title: `${P.label} · ${dep.name}`, project: projectId, supervisor: dep.lead, mode: 'auto', maxRounds: 4, maxHops: 1, cwd: P.projectDir,
           teams: dep.teams.map(team => ({ team, mode: 'parallel', chat: 'copy' })),
           instructions: `You are the head of the ${dep.name} department. Department mission: ${dep.mission}\nThe request you receive is a brief from the COO. Deliver exactly what it asks for, with the evidence. Keep assignments few and concrete.`,
         })

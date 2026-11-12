@@ -297,6 +297,11 @@ Every leader (the CEO, the super agents below it, the COO and the department hea
 works several threads at once, and starts planned work by itself as soon as it is unblocked. By default the company
 runs continuously instead of in batch cycles. See [docs/LEADERS.md](docs/LEADERS.md).
 
+Work is checked before it counts as done, every review says who fell short and why, agents search for know-how
+(skills and best methods) when work is new or stuck, giving up needs three distinct approaches and a rescue
+challenge, and lessons become playbooks and new skills that are kept only when they help. See
+[docs/GROWTH.md](docs/GROWTH.md).
+
 ## Company: a CEO over departments, with a budget and a gate
 
 The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.

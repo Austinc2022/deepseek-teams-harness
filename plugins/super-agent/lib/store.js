@@ -30,9 +30,11 @@ export const DEFAULT_SETTINGS = {
   maxTicketsPerDay: 30,
   maxEvalsPerDay: 400,
   maxSuperAgents: 8,
-  maxSkillsPerDay: 5,
+  maxSkillsPerDay: 15,
   sources: { company: true, engine: true, clock: true },
-  leaders: { company: true }, // the COO and the department heads run as leaders (with the company in continuous mode)
+  leaders: { company: true },
+  // how agents get better: verification before done, know-how searches, after-action learning, skill writing
+  growth: { verify: true, learning: true, critiqueImportant: true, maxKnowHowPerDay: 40, maxInstallsPerDay: 15, maxSmithPerDay: 8, maxReviewsPerDay: 40 }, // the COO and the department heads run as leaders (with the company in continuous mode)
   engine: { autostart: false }, // the host starts and keeps the paper engine's processes running
   ...P.scale,             // the active profile's scale (maxWorkers, maxTicketsPerDay, maxSuperAgents, ...)
 }
@@ -54,9 +56,9 @@ export class Store {
     let s
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { s = {} }
     s.enabled = s.enabled === true
-    s.settings = { ...DEFAULT_SETTINGS, ...(s.settings ?? {}), sources: { ...DEFAULT_SETTINGS.sources, ...(s.settings?.sources ?? {}) }, leaders: { ...DEFAULT_SETTINGS.leaders, ...(s.settings?.leaders ?? {}) } }
+    s.settings = { ...DEFAULT_SETTINGS, ...(s.settings ?? {}), sources: { ...DEFAULT_SETTINGS.sources, ...(s.settings?.sources ?? {}) }, leaders: { ...DEFAULT_SETTINGS.leaders, ...(s.settings?.leaders ?? {}) }, growth: { ...DEFAULT_SETTINGS.growth, ...(s.settings?.growth ?? {}) } }
     // settings saved before leaders worked in parallel kept the old, lower limits: raise them once
-    if ((s.settingsVersion ?? 1) < 2) for (const k of ['maxWorkers', 'maxEvals', 'maxTicketsPerDay', 'maxEvalsPerDay']) s.settings[k] = Math.max(s.settings[k], DEFAULT_SETTINGS[k])
+    if ((s.settingsVersion ?? 1) < 3) for (const k of ['maxWorkers', 'maxEvals', 'maxTicketsPerDay', 'maxEvalsPerDay', 'maxSkillsPerDay']) s.settings[k] = Math.max(s.settings[k], DEFAULT_SETTINGS[k])
     for (const k of LISTS) s[k] ??= []
     s.sourceState ??= {}
     s.teamChats ??= {}
@@ -74,7 +76,7 @@ export class Store {
     s.jobs = s.jobs.slice(-200)
     if (s.changes) s.changes = s.changes.slice(-60)
     s.updatedAt = now()
-    s.settingsVersion = 2
+    s.settingsVersion = 3
     const tmp = `${this.file}.${process.pid}.tmp`
     fs.writeFileSync(tmp, JSON.stringify(s, null, 1))
     fs.renameSync(tmp, this.file)

@@ -177,6 +177,7 @@ export function board(sa, { hours = 24 } = {}) {
     profile: { id: P.id, label: P.label, hasEngine: P.hasEngine, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: sa.co.metering, text: P.text },
     tree: orgTree(sa),
     ...leaderStats(sa),
+    growth: (() => { try { return sa.growth?.stats() ?? null } catch { return null } })(),
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },
     health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, hasEngine: P.hasEngine, engineOk: P.hasEngine ? eng.engineFresh && eng.collectorFresh : true, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },
@@ -452,5 +453,7 @@ export function entity(sa, ref, { hours = 24 } = {}) {
     out.detail = { ...(out.detail ?? {}), plan: L.plan ?? null }
     out.leader = leaderStats(sa).leaders.find(x => x.id === L.id) ?? null
   }
+  // an agent's capability: scores over time, gaps found in reviews, skills on trial, coaching changes, its playbook
+  if (ref.startsWith('agent:')) { try { out.capability = sa.growth?.agentView(ref.slice(6)) ?? null } catch {} }
   return out
 }
