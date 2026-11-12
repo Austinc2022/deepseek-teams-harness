@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Company CLI (works without the harness running).
- *   company setup [--force]        create the CEO, leads, HR, teams, departments (safe to repeat)
+ *   company setup [--force]        create the COO, leads, HR, teams, departments (safe to repeat)
  *   company setup --refresh-agents rewrite the profile's agents after the profile changed (teams and hires are kept)
  *   company status                 charter, budget, org, initiatives, open decisions
- *   company cycle ["focus"]        run one CEO cycle now and wait for it
+ *   company cycle ["focus"]        run one COO cycle now and wait for it
  *   company decide <id> <choice>   answer a decision
  *   company autopilot on|off [hours]
  *   company serve [--port 3093]    the dashboard on its own port (no harness needed)
@@ -32,7 +32,7 @@ function status() {
     `Profile: ${o.profile.id} (${o.profile.label}); models on ${o.profile.provider}; project folder ${o.profile.projectDir}`,
     `Mission: ${o.charter.mission}`,
     `Budget ${o.budget.date}: spent ${money(o.budget.spentTodayUsd)} of ${money(o.budget.dailyUsd)}${o.profile.metering === 'balance' ? `; ${o.profile.provider} balance ${money(o.budget.balanceUsd)}` : ' (estimated from run costs)'}; autopilot ${o.charter.autopilot.enabled ? `on, every ${o.charter.autopilot.everyHours} h` : 'off'}`,
-    '', 'Organisation:', `  CEO ${o.ceo?.name ?? '(not set up)'}  auditor ${o.auditor?.name ?? '-'} (${o.auditor?.model ?? '-'})`,
+    '', 'Organisation:', `  COO ${o.ceo?.name ?? '(not set up)'}  auditor ${o.auditor?.name ?? '-'} (${o.auditor?.model ?? '-'})`,
     ...o.departments.map(d => `  ${d.name} — lead ${d.lead}\n${d.teams.map(t => `      ${t.name}: ${t.members.map(m => `${m.name} (${m.model})`).join(', ')}`).join('\n')}`),
     '', 'Initiatives:', ...(o.initiatives.length ? o.initiatives.map(i => `  ${i.id} [${i.stage}] ${i.title}  confidence ${i.confidence ?? '-'}`) : ['  (none)']),
     '', 'Open decisions:', ...(o.decisions.filter(d => d.status === 'open').map(d => `  ${d.id} ${d.question}\n      options: ${d.options.join(' | ')}; recommended: ${d.recommendation}`)),

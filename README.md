@@ -293,6 +293,10 @@ that wait for each other (`dependsOn`), with principal builders on the hardest o
 
 The design is in [docs/SUPER-AGENT-AUTONOMY.md](docs/SUPER-AGENT-AUTONOMY.md).
 
+Every leader (the CEO, the super agents below it, the COO and the department heads) keeps a plan with dependencies,
+works several threads at once, and starts planned work by itself as soon as it is unblocked. By default the company
+runs continuously instead of in batch cycles. See [docs/LEADERS.md](docs/LEADERS.md).
+
 ## Company: a CEO over departments, with a budget and a gate
 
 The **Company** sidebar page (and `./company-cli`) runs a small company of agents toward one goal.

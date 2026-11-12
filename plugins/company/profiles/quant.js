@@ -230,7 +230,7 @@ const P = makeProfile({
     rules: [
       'Report honest odds. $1,000 a day to $10,000,000 a day is a 10,000x daily return; say plainly how likely each step is and what evidence supports it.',
       'No execution without evidence: an initiative is executed only after it passes the deterministic gate (holdout validation with trial-adjusted significance, safety invariants) and an independent audit.',
-      'No execution without the owner: when a proposal passes the gate the CEO asks the owner, and nothing starts until the owner answers Start.',
+      'No execution without the owner: when a proposal passes the gate the COO asks the owner, and nothing starts until the owner answers Start.',
       'Every proposal sent to the validator raises the significance bar for all later ones. Submit few, well-argued proposals.',
       'Agents are read-only. They never edit config, place, size or close orders, clear the kill switch, or touch the freqtrade bot on port 8080. Deterministic code does the acting.',
       'Paper first. Real-money trading is not built; asking for it is a decision only the owner can make.',
@@ -247,8 +247,8 @@ const P = makeProfile({
   },
   agents: [
     { name: 'ceo', tools: WEB_TOOLS, skills: ['quant-gates', 'quant-risk-guard', 'quant-research-rigor'], memory: { mode: 'hybrid', scope: 'agent' }, maxTurns: 30,
-      description: 'CEO of the crypto company: owns the charter, sets objectives, directs the department leads, issues execution orders only through the gate.',
-      role: `You are the CEO of a small crypto trading company made of AI agent teams. The owner gives you a daily budget and one goal (the charter). You decide where the budget and the teams' effort go.
+      description: 'COO of the crypto company (reports to the CEO super agent): owns the charter, sets objectives, directs the department leads, issues execution orders only through the gate.',
+      role: `You are the COO (chief operating officer) of a small crypto trading company made of AI agent teams. You report to the CEO super agent, which sits above you and talks to the owner. The owner gives you a daily budget and one goal (the charter). You decide where the budget and the teams' effort go.
 
 How you work:
 - You do not do the departments' work. You choose a few initiatives, brief the department leads (goal, deliverable, what counts as proof), and judge what comes back.
@@ -261,7 +261,7 @@ How you work:
     { name: 'head-research', tools: WEB_TOOLS, skills: ['quant-gates', 'quant-research-rigor', 'quant-event-sources', 'quant-risk-guard'],
       description: 'Head of Research and Alpha: runs the alpha, scout and model-lab teams to find and prove edges.',
       role: `You lead Research and Alpha. Your teams look for trading edges in crypto and turn them into testable proposals.
-- Split the CEO's brief into assignments for your teams, run independent work in parallel, and review results critically.
+- Split the COO's brief into assignments for your teams, run independent work in parallel, and review results critically.
 - An edge is a claim with a mechanism, a data source, a way to test it on existing data, and a reason it survives fees, slippage and one minute of delay. Reject ideas that lack any of these.
 - When a change can be expressed as engine config overrides (stops, sizes, stream settings), write it as a proposal for the validator, following the quant-risk-guard change rules. When it needs new code or data, write a short build spec instead.
 - Report what is measured, what is simulated and what is only argued.` },
@@ -334,7 +334,7 @@ How you work:
   resolveOrder,
   hasEngine: true,
   milestones: [
-    { key: 'gate_ready', title: 'Verification gate can score a new strategy', missing: 'The CEO has not reported this yet.' },
+    { key: 'gate_ready', title: 'Verification gate can score a new strategy', missing: 'The COO has not reported this yet.' },
     { key: 'train_positive', title: 'A strategy is profitable on training data', missing: 'No strategy has shown a profit after fees yet.' },
   ],
   goalSteps: ({ c, s, eng, said, ms }) => {
@@ -345,8 +345,8 @@ How you work:
     return [
       { key: 'org', title: 'Organisation set up', done: c.departments.length > 0 && s.agents.length > 0, how: 'measured', detail: `${c.departments.length} departments, ${s.agents.length} super agents` },
       { key: 'engine', title: 'Engine and market data running', done: eng.engineFresh && eng.collectorFresh, how: 'measured', detail: eng.engineFresh && eng.collectorFresh ? 'Both heartbeats are fresh.' : `Engine heartbeat ${eng.engineAgeS == null ? 'missing' : `${Math.round(eng.engineAgeS / 60)} min old`}; collector ${eng.collectorAgeS == null ? 'missing' : `${Math.round(eng.collectorAgeS / 60)} min old`}.` },
-      { key: 'gate_ready', title: 'Verification gate can score a new strategy', done: ms.gate_ready?.done === true, how: 'reported by the CEO', detail: said('gate_ready') },
-      { key: 'train_positive', title: 'A strategy is profitable on training data', done: ms.train_positive?.done === true, how: 'reported by the CEO', detail: said('train_positive') },
+      { key: 'gate_ready', title: 'Verification gate can score a new strategy', done: ms.gate_ready?.done === true, how: 'reported by the COO', detail: said('gate_ready') },
+      { key: 'train_positive', title: 'A strategy is profitable on training data', done: ms.train_positive?.done === true, how: 'reported by the COO', detail: said('train_positive') },
       { key: 'verified', title: 'A strategy passed verification', done: c.orders.length > 0, how: 'measured', detail: c.orders.length ? `${c.orders.length} passed the audit, the safety checks and the validator.` : 'Nothing has passed the gate.' },
       { key: 'paper', title: 'Approved by you and trading on paper', done: active.length > 0, how: 'measured', detail: active.length ? `${active.length} paper book(s) running.` : c.orders.some(o => o.status === 'awaiting-owner') ? 'One is waiting for your answer.' : 'Nothing approved yet.' },
       { key: 'paper30', title: '30 days of paper trading in profit', done: !!oldest && Date.now() - oldest >= 30 * DAY && approvedPnl > 0, how: 'measured', detail: oldest ? `Day ${Math.floor((Date.now() - oldest) / DAY)} of 30; paper profit so far $${approvedPnl.toFixed(2)}.` : 'Starts when the first paper book runs.' },
@@ -364,6 +364,6 @@ How you work:
   orderLine: o => `- ${o.ts.slice(0, 10)} ${o.proposal} -> paper book ${o.book} (P(better) ${o.pImprove}; ${o.status === 'awaiting-owner' ? 'verified, waiting for the owner to approve the start' : o.status === 'declined' ? 'the owner declined to start it' : 'running'})`,
 })
 
-// the original setup kept the CEO and leads on the lead model and HR on the fast one; the auditor is an existing agent
+// the original setup kept the COO and leads on the lead model and HR on the fast one; the auditor is an existing agent
 P.agents = P.agents.filter(a => ![P.verifierName].includes(a.name))
 export default P

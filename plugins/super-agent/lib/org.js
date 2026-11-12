@@ -68,7 +68,7 @@ export class Org {
     const skills = fs.readdirSync(registry.d.skills).filter(n => (quant(n) || P.skills.all.includes(n)) && skillExists(registry, n))
     return [
       '# Super agents',
-      ...s.agents.map(a => `- ${a.id}${a.id === me.id ? ' (you)' : ''}: ${a.title}; above it: ${a.parent ?? 'the owner'}; mission: ${clip(a.mission, 200)}`),
+      ...s.agents.map(a => `- ${a.id}${a.id === me.id ? ' (you)' : ''}: ${a.title}${a.kind === 'coo' ? ' (COO)' : a.kind === 'dept' ? ' (department head)' : ''}; above it: ${a.parent ?? 'the owner'}${a.paused ? '; paused' : ''}; mission: ${clip(a.mission, 200)}`),
       '', '# Super teams (ask_super_team by id)',
       ...pick(supers, 'superTeams', x => x.id).map(x => `- ${x.id}: ${x.title}; supervisor ${x.supervisor}; teams ${x.teams.join(', ')}${x.busy ? '; busy' : ''}`),
       '', '# Teams (ask_team by name)',
@@ -182,7 +182,7 @@ export class Org {
   createSuperAgent(me, a) {
     const { registry } = this
     const s = this.sa.store.read()
-    if (s.agents.length >= s.settings.maxSuperAgents) throw new Error(`the limit of ${s.settings.maxSuperAgents} super agents is reached`)
+    if (s.agents.filter(x => (x.kind ?? 'super') === 'super').length >= s.settings.maxSuperAgents) throw new Error(`the limit of ${s.settings.maxSuperAgents} super agents is reached`)
     if (this.depth(s, me) >= 2) throw new Error('super agents can be at most three levels deep')
     const id = slug(a.id ?? a.title, 24)
     if (id.length < 3 || s.agents.some(x => x.id === id)) throw new Error('give the super agent a new id of 3+ letters')

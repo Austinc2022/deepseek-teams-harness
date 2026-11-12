@@ -2,7 +2,7 @@
  * Super agent: an always-on lead that reacts to events, modelled on DeepSeek's dsh-superagent prototype
  * (Source -> Trigger -> Eval -> Ticket -> Executor -> Channel), pointed at the company charter instead of a repository.
  *
- *   Sources    the owner's messages, the company (build requests, finished CEO cycles), the profile's health checks,
+ *   Sources    the owner's messages, the company (build requests, finished COO cycles), the profile's health checks,
  *              a daily clock, and replies from agents, teams, super teams and other super agents
  *   Trigger    one event, addressed to one super agent
  *   Eval       that super agent reads its pending triggers and acts through tools (it has no other way to act)
@@ -25,11 +25,21 @@ import { Org, seedSuper, WORKER } from './org.js'
 import { EngineOps, Changes, NullOps, NullChanges } from './engineops.js'
 import { progress, rightNow } from './views.js'
 import { recordMetrics } from './board.js'
+import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
+import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
 
 const WORKDIR = P.projectDir
 
 const S = { type: 'string' }
 const obj = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: false })
+/** How every leader works, in every turn (the agents' role files predate parallel work, so it is said here). */
+const HOW_YOU_WORK = `# How you work
+- You decide: handle each trigger by ignoring it, answering it, or starting work, using your tools. Read files when you need facts.
+- Work in parallel. Everything slow runs in the background and reports back as an event: tickets, asks to agents, teams and super teams, critiques, department directives. In one turn, start every independent piece of work that is worth it now (several tickets, several asks, several departments), up to your free capacity. Never wait for one result before starting work that does not depend on it.
+- Plan ahead. Your plan holds the next steps too, not only the current ones: give items dependencies (dependsOn), and give build work a ready ticket so it opens by itself the moment its dependencies are done. When a result arrives, the next step should already be in the plan.
+- Keep the plan current: plan_items to add, start (doing), finish (done) or block single items; update_plan to rewrite focus and priorities. The owner reads it instead of asking you.
+- You have several threads. This turn is one of them; other threads may run at the same time and handle other events. Stay in your thread's area and do not redo work another thread started.
+- Finish with a short note of what you decided and why, written so the owner can follow it.`
 const NOTE = obj({ note: { type: 'string', description: 'what you decided for each trigger and why, in a few lines' } })
 const REPORT = obj({
   status: { type: 'string', enum: ['ready', 'progress', 'waiting', 'blocked', 'failed', 'dropped'], description: 'ready: the ticket is delivered. progress: real progress, another turn is needed. waiting: you need an answer (put it in question). blocked: you cannot continue and say why. failed: it does not work. dropped: nothing to do.' },
@@ -41,18 +51,26 @@ const REPORT = obj({
 
 const tool = (name, description, properties = {}, required = Object.keys(properties)) => ({ name, description, inputSchema: { type: 'object', properties, required } })
 const A = { type: 'array', items: S }
+const PLAN_ITEM = { type: 'object', properties: {
+  id: { type: 'string', description: 'keep the id of an existing item; leave out for a new one' },
+  text: S, owner: { type: 'string', description: 'who does it: you, a super agent, a department, a team, a ticket id, or the owner' },
+  status: { type: 'string', enum: ['todo', 'doing', 'blocked', 'done'] }, note: S,
+  dependsOn: { type: 'array', items: S, description: 'ids of items (or tickets) that must be done first' },
+  workstream: { type: 'string', description: 'the workstream it belongs to; work in different workstreams runs in parallel threads' },
+  ticket: { type: 'object', description: 'optional: a ticket that opens by itself as soon as the dependencies are done, without waiting for you', properties: { title: S, brief: S, doneWhen: S, worker: S, talent: { type: 'string', enum: ['standard', 'principal'] } }, required: ['title', 'brief', 'doneWhen'] },
+}, required: ['text', 'owner', 'status'] }
 const ALL_TOOLS = [
   tool('reply_owner', 'Write to the owner. purpose result: a finished result the owner can use. purpose cannot-finish: something that cannot be finished, with what was tried. purpose question: an owner-only matter you cannot decide; give category, recommendation and ifNoAnswer. The host decides whether a question is sent: an internal one is not sent and your recommendation stands, and only one owner-only question waits at a time. Never use this for progress.', {
     text: S, purpose: { type: 'string', enum: ['result', 'question', 'cannot-finish'] },
     category: { type: 'string', enum: [...P.ownerOnly.map(o => o.key), 'internal'], description: 'for a question: which owner-only matter it is; internal is anything else' },
     options: A, recommendation: S, ifNoAnswer: { type: 'string', description: 'for a question: what you do until the owner answers; work must be able to continue' },
   }, ['text', 'purpose']),
-  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' }, workstream: { type: 'string', description: 'optional: the workstream of a larger programme this ticket belongs to, e.g. "world", "combat", "audio", "integration"' }, dependsOn: { type: 'array', items: S, description: 'optional ticket ids that must be delivered first; this ticket starts when they are, and its worker can read their folders. Use it for integration and for anything built on another ticket' }, talent: { type: 'string', enum: ['standard', 'principal'], description: 'principal: the strongest model, for the hardest or most important tickets' } }, ['title', 'brief', 'doneWhen']),
-  tool('critique', 'Send a ticket\'s folder to the critique panel. Every critic reads the work through its own lens at the same time and returns a score, what must be fixed and what would lift it. Use it before the gate, and again after a fix pass, until nothing must be fixed. Then send the fixes to the ticket with message_ticket.', { ticket: S, focus: { type: 'string', description: 'optional: what you most want judged' } }, ['ticket']),
+  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' }, workstream: { type: 'string', description: 'optional: the workstream of a larger programme this ticket belongs to, e.g. "world", "combat", "audio", "integration"' }, dependsOn: { type: 'array', items: S, description: 'optional ticket ids that must be delivered first; this ticket starts when they are, and its worker can read their folders. Use it for integration and for anything built on another ticket' }, talent: { type: 'string', enum: ['standard', 'principal'], description: 'principal: the strongest model, for the hardest or most important tickets' }, planItem: { type: 'string', description: 'optional id of the plan item this ticket carries out; the item is marked done when the ticket is delivered' } }, ['title', 'brief', 'doneWhen']),
+  tool('critique', 'Send a ticket\'s folder to the critique panel. Every critic reads the work through its own lens at the same time and returns a score, what must be fixed and what would lift it. It runs in the background; the verdicts reach you as an event. Use it before the gate, and again after a fix pass, until nothing must be fixed. Then send the fixes to the ticket with message_ticket.', { ticket: S, focus: { type: 'string', description: 'optional: what you most want judged' } }, ['ticket']),
   tool('message_ticket', 'Send more context or a correction to a ticket. Its worker reads it on the next turn; an ended ticket resumes.', { ticket: S, text: S }),
   tool('read_ticket', 'Read a ticket: its reports, its notes and its file list.', { ticket: S }),
   tool('stop_ticket', 'Stop a ticket.', { ticket: S, reason: S }),
-  tool('ask_agent', 'Talk to one agent directly and get its answer now.', { agent: S, message: S }),
+  tool('ask_agent', 'Ask one agent. A quick answer comes back in this turn; a longer one reaches you later as an event, so ask several agents at once when you need several views.', { agent: S, message: S }),
   tool('ask_team', 'Give a task to a team. It works in its own chat; the reply reaches you later as a trigger.', { team: S, message: S }),
   tool('ask_super_team', 'Give a task to a super team (a lead over several teams). The reply reaches you later as a trigger.', { id: S, message: S }),
   tool('delegate', 'Hand an area of work to a super agent directly below you. Its answer reaches you later as a trigger.', { to: S, message: S }),
@@ -68,16 +86,28 @@ const ALL_TOOLS = [
   tool('update_plan', 'Rewrite your plan. The owner reads it to know what you are doing, so keep it current, concrete and short: call it whenever your priorities, to-do list or blockers change. It replaces the previous plan.', {
     focus: { type: 'string', description: 'one or two sentences: what you are working toward right now and why this, not something else' },
     priorities: { type: 'array', description: 'at most 3, most important first', items: { type: 'object', properties: { text: S, why: S }, required: ['text', 'why'] } },
-    todo: { type: 'array', description: 'at most 12 concrete items', items: { type: 'object', properties: { text: S, owner: { type: 'string', description: 'who does it: you, a super agent, a team, a ticket id, or the owner' }, status: { type: 'string', enum: ['todo', 'doing', 'blocked', 'done'] }, note: S }, required: ['text', 'owner', 'status'] } },
+    todo: { type: 'array', description: 'at most 30 concrete items, including the steps after the current ones so they can start the moment they are unblocked', items: PLAN_ITEM },
     blockers: { type: 'array', items: S, description: 'what stops progress now, each with what would remove it' },
     waitingOnOwner: { type: 'array', items: S, description: 'what you need from the owner, or empty' },
   }, ['focus', 'priorities', 'todo']),
+  tool('plan_items', 'Change single items of your plan: add new ones (with dependencies and, for build work, a ticket that opens by itself when they are done), update the status or note of existing ones, remove finished ones. Prefer this to update_plan when only items change: your other threads may be editing the plan at the same time.', {
+    add: { type: 'array', items: PLAN_ITEM }, update: { type: 'array', items: { type: 'object', properties: { id: S, status: { type: 'string', enum: ['todo', 'doing', 'blocked', 'done'] }, note: S, text: S, owner: S, dependsOn: A }, required: ['id'] } }, remove: A,
+  }, []),
   tool('report_milestone', 'Tell the owner a milestone of the goal ladder is reached or lost. Only with evidence the owner can check (a file, a ticket, a number).', { key: { type: 'string', enum: P.milestones.map(m => m.key), description: P.milestones.map(m => `${m.key}: ${m.title}.`).join(' ') }, done: { type: 'boolean' }, evidence: S }),
   tool('submit_engine_change', 'Ask for a finished patch from one of your tickets to be installed into the engine. Code checks it, the independent auditor reads it, then the owner is asked; on Install it is tested on a copy, applied with a backup and rolled back if the engine tests fail. The patch must be a unified diff that applies from inside the engine folder and may only touch quantcore/, config/ and tests/. Submit only what you have reviewed yourself.', { ticket: S, patch: { type: 'string', description: 'file name of the patch inside the ticket folder' }, title: S, summary: { type: 'string', description: 'what it changes and why, in plain words' } }),
-  tool('run_company_cycle', 'Run one full CEO cycle of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
+  tool('run_company_cycle', 'Run one full company cycle (led by the COO) of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
 ]
 /** A company without an engine has no engine change to submit. */
 const TOOLS = ALL_TOOLS.filter(t => P.hasEngine || t.name !== 'submit_engine_change')
+const pick = names => TOOLS.filter(t => names.includes(t.name))
+const COMMON = ['update_plan', 'plan_items', 'list_org', 'ask_agent', 'ask_team']
+/** What each kind of leader can do. The COO and department heads add their own company tools. */
+function leaderTools(me, departments) {
+  const k = kindOf(me)
+  if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'ask_super_team', 'delegate']), ...toolsFor('coo', departments)]
+  if (k === 'dept') return [...pick(COMMON), ...toolsFor('dept', departments)]
+  return TOOLS
+}
 const CRITIQUE = obj({
   score: { type: 'number', description: '0..1 through your lens; 1 is the best work in the field' },
   verdict: { type: 'string', description: 'two sentences: what this is and how good' },
@@ -98,6 +128,16 @@ export function stage(t, running) {
   return 'idle'
 }
 
+/** Keep a ticket's plan item in step with the ticket: delivered is done, anything else that ended is blocked. */
+function syncItem(s, t) {
+  if (!t?.planItem) return
+  const it = s.agents.find(a => a.id === t.owner)?.plan?.todo?.find(x => x.id === t.planItem)
+  if (!it || t.status !== 'ended') return
+  it.status = t.outcome === 'completed' ? 'done' : 'blocked'
+  it.note = str(t.outcome === 'completed' ? `delivered by ticket ${t.id}` : `ticket ${t.id} ended: ${t.outcome}${t.note ? ` (${t.note})` : ''}`, 300)
+  it.updatedAt = now()
+}
+
 export class SuperAgent {
   constructor(forge, co, { log = () => {} } = {}) {
     this.forge = forge
@@ -108,7 +148,9 @@ export class SuperAgent {
     // the engine runner and the patch installer exist only for profiles that have an engine (quant)
     this.ops = P.hasEngine ? new EngineOps(this) : new NullOps()
     this.changes = P.hasEngine ? new Changes(this) : new NullChanges()
+    // evals are keyed "<leader>|<lane>": one turn per thread, several threads per leader
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
+    this.wakes = new Map() // leader id -> when it was last woken for spare capacity or to plan ahead
     this.holdReason = null
     this.holdAt = 0
     this.recovered = false
@@ -154,13 +196,15 @@ export class SuperAgent {
       if (!s.agents.length) return
       await this.ops.ensure().catch(e => this.log(`engine: ${e.message}`))
       this.changes.poll()
-      this.#seed(s)
+      if (Date.now() - (this.leadersAt ?? 0) > 60_000) { this.leadersAt = Date.now(); try { seedLeaders(this) } catch (e) { this.log(`leaders: ${e.message}`) } }
+      this.#seed(this.store.read())
       if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
-      this.#startEvals()
       this.#dispatch()
+      this.#wake()
+      this.#startEvals()
     } finally { this.ticking = false }
   }
 
@@ -206,7 +250,16 @@ export class SuperAgent {
 
   /** Once per super agent: ask for a written plan, so the owner always has one to read. */
   #seed(s) {
+    // plans written before items had ids get them once
+    if (s.agents.some(a => a.plan?.todo?.some(t => !t.id))) {
+      this.store.update(x => { for (const a of x.agents) for (const t of a.plan?.todo ?? []) if (!t.id) { t.id = newId('p'); t.updatedAt = a.plan.updatedAt } })
+    }
     for (const a of s.agents) {
+      if (a.paused) continue
+      if (a.plan && !a.plan.v3) {
+        this.store.update(x => { const y = x.agents.find(z => z.id === a.id); if (y?.plan) y.plan.v3 = true })
+        this.trigger({ key: `plan:v3:${a.id}`, source: 'system', kind: 'work-in-parallel', to: a.id, text: 'New: you now work in parallel and plan ahead. Several of your turns can run at once (one per thread); asks to agents and critiques run in the background; worker slots are shared fairly between the leaders. Rewrite your plan once with update_plan: list the next steps after the current ones too, give items dependencies (dependsOn), give build work a ready ticket so it opens by itself when its dependencies are done, and group items into workstreams. Then start every independent item that is ready now.' })
+      }
       if (a.plan) continue
       this.trigger({ key: `plan:init:${a.id}`, source: 'system', kind: 'write-your-plan', to: a.id, text: `The owner cannot see what you are doing or planning. Write your plan now with update_plan (focus, top priorities with reasons, a concrete to-do list with owners and status, blockers, what you need from the owner) and keep it current from now on.${a.parent ? '' : `\nAlso new for you: (1) submit_engine_change installs a finished, reviewed patch from a ticket into the engine (audit, the owner's approval, tested install with rollback). Until now nothing a worker built ever reached the engine; look at the finished tickets and decide what to submit, one change at a time. (2) The host now starts and keeps the engine processes running when the owner switches that on. (3) report_milestone tells the owner when the gate can score a new strategy and when a strategy is profitable on training data.`}` })
     }
@@ -249,8 +302,10 @@ export class SuperAgent {
     } else if (c.type === 'settings') {
       this.store.update(s => {
         const num = (k, lo, hi) => { const n = Number(c.patch?.[k]); if (Number.isFinite(n)) s.settings[k] = Math.min(hi, Math.max(lo, Math.round(n))) }
-        num('maxWorkers', 1, 6); num('maxEvals', 1, 4); num('assignmentMinutes', 5, 180); num('maxAssignments', 1, 30)
-        num('maxTicketsPerDay', 0, 100); num('maxEvalsPerDay', 1, 2000); num('maxSuperAgents', 1, 20); num('maxSkillsPerDay', 0, 50)
+        num('maxWorkers', 1, 12); num('maxEvals', 1, 8); num('maxLanes', 1, 6); num('maxJobs', 1, 20); num('assignmentMinutes', 5, 180); num('maxAssignments', 1, 30)
+        num('maxTicketsPerDay', 0, 200); num('maxEvalsPerDay', 1, 3000); num('maxSuperAgents', 1, 20); num('maxSkillsPerDay', 0, 50)
+        num('idleWakeMinutes', 5, 240); num('planAheadMinutes', 30, 1440)
+        if (typeof c.patch?.leaders?.company === 'boolean') { s.settings.leaders = { ...(s.settings.leaders ?? {}), company: c.patch.leaders.company }; this.leadersSig = null }
         for (const k of ['company', 'engine', 'clock']) if (typeof c.patch?.sources?.[k] === 'boolean') s.settings.sources[k] = c.patch.sources[k]
       })
     } else if (c.type === 'engine') {
@@ -269,6 +324,7 @@ export class SuperAgent {
       const t = s.tickets.find(x => x.id === id)
       if (!t) throw new Error('no such ticket')
       t.status = 'ended'; t.stopped = true; t.outcome = 'stopped'; t.endedAt = now(); t.attention = null; t.note = str(reason, 300)
+      syncItem(s, t)
     })
   }
 
@@ -279,13 +335,24 @@ export class SuperAgent {
     const since = s.sourceState.since ?? now()
     if (src.company) {
       const c = this.co.read()
+      const coo = companyLeadersOn(this, s) && s.agents.some(a => a.id === COO_ID && !a.paused)
+      // in continuous mode the COO reviews on the autopilot timer instead of running a batch cycle
+      const ap = c.charter.autopilot
+      if (coo && ap.enabled) {
+        const every = Math.max(0.25, Number(ap.everyHours) || 6) * 3600_000
+        const lastReview = c.cycles.filter(x => x.endedAt).at(-1)?.endedAt
+        if (!lastReview || Date.now() - new Date(lastReview).getTime() >= every) {
+          this.trigger({ key: `review:${Math.floor(Date.now() / every)}`, source: 'company', kind: 'review', to: COO_ID, text: `Time for your review (every ${ap.everyHours} h). ${P.prompts.review.replace(/Write the brief for the owner/, 'Then write the brief for the owner with write_brief')} Before that, make sure every department has work: give directives where a department is idle, decide the waiting build requests, and plan the next steps.` })
+        }
+      }
       for (const b of c.builds) {
         if (b.status !== 'requested') continue
+        if (coo) { this.trigger({ key: `coo-build:${b.id}`, source: 'company', kind: 'build-request', to: COO_ID, text: `The ${b.department} department asks for a build (id ${b.id}): ${b.title}\nSpec: ${b.spec}\nExpected value: ${b.expectedValue}\nDecide it with decide_build: open the ticket now, forward it to the CEO, or drop it.` }); continue }
         this.trigger({ key: `build:${b.id}`, source: 'company', kind: 'build-request', text: `The company's ${b.department} department asks for a build (id ${b.id}): ${b.title}\nSpec: ${b.spec}\nExpected value: ${b.expectedValue}\nDecide whether it is worth a ticket now. Pass build: "${b.id}" to open_ticket when you take it.` })
       }
       const last = c.cycles.at(-1)
       if (last && last.status !== 'running' && last.endedAt && last.endedAt > since) {
-        this.trigger({ key: `cycle:${last.id}`, source: 'company', kind: 'cycle-finished', text: `A company CEO cycle finished (${last.status}; spend $${last.spendUsd ?? '?'}). Summary: ${last.summary ?? '(none)'}\nBrief: ${last.report ? path.join(this.co.reports, last.report) : '(none)'}\nRead the brief and decide what follows.` })
+        this.trigger({ key: `cycle:${last.id}`, source: 'company', kind: 'cycle-finished', text: `A company cycle (COO) finished (${last.status}; spend $${last.spendUsd ?? '?'}). Summary: ${last.summary ?? '(none)'}\nBrief: ${last.report ? path.join(this.co.reports, last.report) : '(none)'}\nRead the brief and decide what follows.` })
       }
     }
     if (src.engine && Date.now() - (this.healthAt ?? 0) > 10 * 60_000) {
@@ -308,19 +375,74 @@ export class SuperAgent {
   }
 
   // ---------------- eval
+  /** Start a turn for every thread that has events waiting: your messages first, then the oldest waiting event. */
   #startEvals() {
     const s = this.store.read()
     if (this.store.day(s).evals >= s.settings.maxEvalsPerDay) return
-    for (const me of s.agents) {
-      if (this.live.evals.size >= s.settings.maxEvals) break
-      if (this.live.evals.has(me.id)) continue
-      const mine = s.triggers.filter(t => t.status === 'pending' && t.to === me.id).slice(0, 8)
-      if (!mine.length) continue
-      this.#eval(me, mine)
+    const pending = s.triggers.filter(t => t.status === 'pending')
+    const groups = new Map()
+    for (const t of pending) {
+      const me = s.agents.find(a => a.id === t.to)
+      if (!me || me.paused) continue
+      const key = `${me.id}|${laneOf(t, s)}`
+      if (!groups.has(key)) groups.set(key, { me, lane: laneOf(t, s), triggers: [] })
+      groups.get(key).triggers.push(t)
+    }
+    const order = [...groups.values()].sort((a, b) => (b.lane === 'owner') - (a.lane === 'owner') || a.triggers[0].ts.localeCompare(b.triggers[0].ts))
+    const lanesOf = id => [...this.live.evals.keys()].filter(k => k.startsWith(`${id}|`)).length
+    for (const g of order) {
+      const key = `${g.me.id}|${g.lane}`
+      if (this.live.evals.has(key)) continue
+      // the owner's thread may use one turn more than the limit, so your message never waits behind long work
+      if (this.live.evals.size >= s.settings.maxEvals + (g.lane === 'owner' ? 1 : 0)) continue
+      if (lanesOf(g.me.id) >= s.settings.maxLanes && g.lane !== 'owner') continue
+      this.#eval(g.me, g.triggers.slice(0, 8), g.lane)
     }
   }
 
-  #context(me) {
+  /** What a leader has running and how many worker slots it may still use. */
+  #capacity(s, me) {
+    const mine = s.tickets.filter(t => t.owner === me.id && t.status === 'open')
+    const running = mine.filter(t => this.live.tickets.has(t.id)).length
+    const queued = mine.filter(t => !this.live.tickets.has(t.id) && stage(t, false) === 'queued').length
+    const owners = new Set(s.tickets.filter(t => t.status === 'open' && (this.live.tickets.has(t.id) || stage(t, false) === 'queued')).map(t => t.owner)).size || 1
+    const share = shareOf(s.settings.maxWorkers, owners)
+    const freeAll = s.settings.maxWorkers - this.live.tickets.size
+    const jobs = s.jobs.filter(j => j.status === 'running' && j.from === me.id).length
+    const lanes = [...this.live.evals.keys()].filter(k => k.startsWith(`${me.id}|`)).map(k => k.split('|')[1])
+    // tickets are for super agents and the COO; department heads work through jobs (super team, teams, agents)
+    const free = kindOf(me) === 'dept' ? Math.max(0, 2 - jobs) : Math.max(0, Math.min(freeAll, share - running) - queued)
+    return { running, queued, share, freeAll, jobs, lanes, free, work: running + queued + jobs }
+  }
+
+  /** Wake leaders that sit idle while they could work: ready plan items and free slots, or nothing planned at all. */
+  #wake() {
+    const s = this.store.read()
+    if (this.store.day(s).evals >= s.settings.maxEvalsPerDay) return
+    for (const me of s.agents) {
+      if (me.paused) continue
+      const c = this.#capacity(s, me)
+      const lastEval = s.evals.filter(e => e.agent === me.id).at(-1)
+      const prev = this.wakes.get(me.id)
+      const sig = readyItems(me.plan).map(t => t.id).join(',')
+      // waking a leader again for the same ready items it chose not to start: back off 2x each time, up to 8x
+      const backoff = prev && prev.sig === sig ? 2 ** Math.min(3, prev.n) : 1
+      const why = wakeReason(me, {
+        busy: c.lanes.length > 0, pending: s.triggers.some(t => t.to === me.id && t.status === 'pending'), running: c.work,
+        free: c.free, lastEvalEnd: lastEval?.endedAt ?? lastEval?.startedAt, lastWake: prev?.at,
+        idleWakeMin: s.settings.idleWakeMinutes * backoff, planAheadMin: s.settings.planAheadMinutes * backoff,
+      })
+      if (!why) continue
+      this.wakes.set(me.id, { at: now(), sig, n: prev && prev.sig === sig ? prev.n + 1 : 1 })
+      if (why.kind === 'capacity') {
+        this.trigger({ source: 'system', kind: 'capacity', to: me.id, text: `You have free capacity (${c.free} slot${c.free === 1 ? '' : 's'}) and ${why.ready.length} plan item${why.ready.length === 1 ? ' is' : 's are'} ready to start: ${why.ready.slice(0, 6).map(t => `${t.id} "${t.text}"`).join('; ')}. Start the ones worth starting now, in parallel (each independent piece at once), mark them doing, and plan the steps that follow them. If an item should not start, say why in its note or remove it.` })
+      } else {
+        this.trigger({ source: 'system', kind: 'plan-ahead', to: me.id, text: 'Nothing of yours is running and your plan has no open items. Look ahead: what are the next steps toward your goal, and what could run in parallel? Put them in your plan (with dependencies, and with a ready ticket for build work so it starts by itself) and start what can start now. If there is truly nothing worth doing, say so in your note.' })
+      }
+    }
+  }
+
+  #context(me, lane) {
     const s = this.store.read()
     const c = this.co.read()
     const b = this.co.budget()
@@ -328,16 +450,34 @@ export class SuperAgent {
     const tk = s.tickets.filter(t => t.status === 'open' || (t.endedAt ?? '') > new Date(Date.now() - 3 * 86400_000).toISOString())
     return [
       `# Charter\nMission: ${ch.mission}\nScope: ${ch.scope}\nRules:\n${ch.rules.map(r => `- ${r}`).join('\n')}`,
-      `# You\nSuper agent "${me.id}" (${me.title}). Above you: ${me.parent ?? 'the owner'}. Below you: ${s.agents.filter(a => a.parent === me.id).map(a => a.id).join(', ') || 'no super agents yet'}.${me.parent ? `\nYou lead: super teams ${me.reports.superTeams.join(', ') || '-'}; teams ${me.reports.teams.join(', ') || '-'}; agents ${me.reports.agents.join(', ') || '-'}.` : '\nYou reach every super team, team and agent (list_org).'}`,
+      `# You\n${kindOf(me) === 'coo' ? `The COO ("${me.id}"), under the CEO super agent "${me.parent}". You lead the department heads: ${s.agents.filter(a => a.parent === me.id).map(a => a.id).join(', ') || '-'}.` : kindOf(me) === 'dept' ? `Head of the department "${me.title}" ("${me.id}"), under the COO.` : `Super agent "${me.id}" (${me.title}). Above you: ${me.parent ?? 'the owner'}. Below you: ${s.agents.filter(a => a.parent === me.id).map(a => a.id).join(', ') || 'no super agents yet'}.${me.parent ? `\nYou lead: super teams ${me.reports.superTeams.join(', ') || '-'}; teams ${me.reports.teams.join(', ') || '-'}; agents ${me.reports.agents.join(', ') || '-'}.` : '\nYou reach every super team, team and agent (list_org).'}`}`,
       `# Budget today\nSpent $${b.spentTodayUsd} of $${b.dailyUsd}${this.co.metering === 'balance' ? `; ${P.models.provider} balance $${b.balanceUsd ?? '?'} (reserve $${b.reserveUsd})` : ' (estimated from run costs)'}. Tickets opened today: ${this.store.day(s).tickets} of ${s.settings.maxTicketsPerDay}.`,
-      `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last CEO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
-      `# Your plan (the owner reads this; keep it current with update_plan)\n${me.plan ? `Updated ${me.plan.updatedAt.slice(0, 16)}\nFocus: ${me.plan.focus}\nPriorities:\n${me.plan.priorities.map((p, i) => `${i + 1}. ${p.text} (${p.why})`).join('\n')}\nTo do:\n${me.plan.todo.map(t => `- [${t.status}] ${t.text} (${t.owner})${t.note ? `: ${t.note}` : ''}`).join('\n')}\nBlockers: ${me.plan.blockers.join('; ') || '-'}\nWaiting on the owner: ${me.plan.waitingOnOwner.join('; ') || '-'}` : '(none yet: write it with update_plan)'}`,
-      this.#goalText(s),
+      kindOf(me) !== 'super' ? '' : `# Company state\nInitiatives:\n${c.initiatives.slice(-12).map(i => `- [${i.stage}] ${i.title}: ${clip(i.note ?? i.thesis ?? '', 200)}`).join('\n') || '(none)'}\n${P.text.ordersTitle} so far: ${c.orders.length}${c.orders.length ? ` (${c.orders.slice(-5).map(o => o.book).join(', ')})` : ''}. Open build requests: ${c.builds.filter(x => x.status === 'requested').length}. Last COO brief: ${c.cycles.filter(x => x.report).at(-1)?.report ? path.join(this.co.reports, c.cycles.filter(x => x.report).at(-1).report) : '(none)'}`,
+      `# Your plan (the owner reads this; ids are stable)\n${planText(me.plan)}`,
+      kindOf(me) === 'dept' ? '' : this.#goalText(s),
       `# Authority\n${P.ownerOnlyText()}\nQuestions waiting for the owner: ${c.decisions.filter(d => d.status === 'open').length}; held: ${c.decisions.filter(d => d.status === 'held').length}. Do not repeat them.`,
-      `# Tickets (up to ${s.settings.maxWorkers} worked at once)\n${tk.map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (${t.workstream ? `workstream ${t.workstream}; ` : ''}${t.dependsOn?.length ? `after ${t.dependsOn.join(', ')}; ` : ''}${t.talent ? 'principal; ' : ''}${t.critiques?.length ? `last critique: lowest ${t.critiques.at(-1).min}, ${t.critiques.at(-1).mustFix} must-fix; ` : 'not critiqued; '}owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
-      `# Asked and still running\n${s.jobs.filter(j => j.status === 'running').map(j => `- ${j.kind} ${j.target}: ${clip(j.message, 140)}`).join('\n') || '(nothing)'}`,
+      this.#capacityText(s, me, lane),
+      `# Tickets${me.parent ? ' you own' : ''}\n${tk.filter(t => !me.parent || t.owner === me.id).map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (${t.workstream ? `workstream ${t.workstream}; ` : ''}${t.dependsOn?.length ? `after ${t.dependsOn.join(', ')}; ` : ''}${t.talent ? 'principal; ' : ''}${t.critiques?.length ? `last critique: lowest ${t.critiques.at(-1).min}, ${t.critiques.at(-1).mustFix} must-fix; ` : 'not critiqued; '}owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
+      `# Asked and still running\n${s.jobs.filter(j => j.status === 'running' && (!me.parent || j.from === me.id)).map(j => `- ${j.kind} ${j.target}${j.from !== me.id ? ` (by ${j.from})` : ''}: ${clip(j.message, 140)}`).join('\n') || '(nothing)'}`,
+      ...(kindOf(me) === 'super' ? [] : [companyContext(this, me)]),
       `# Recent messages\n${s.feed.slice(-8).map(m => `- ${m.ts.slice(5, 16)} ${m.from}: ${clip(m.text, 240)}`).join('\n') || '(none)'}`,
-    ].join('\n\n')
+    ].filter(Boolean).join('\n\n')
+  }
+
+  /** Capacity and the leader's other threads, so it starts independent work at once and does not duplicate a thread. */
+  #capacityText(s, me, lane) {
+    const c = this.#capacity(s, me)
+    const others = s.evals.filter(e => e.agent === me.id && e.status === 'running' && (e.lane ?? 'main') !== lane)
+    const ready = readyItems(me.plan)
+    return [
+      `# Capacity and threads`,
+      kindOf(me) === 'dept'
+        ? `Background asks of yours running: ${c.jobs} (keep up to 2 going: your super team plus teams or agents).`
+        : `Worker slots: ${this.live.tickets.size} of ${s.settings.maxWorkers} in use across the company; yours: ${c.running} running, ${c.queued} queued; your fair share is ${c.share}, and slots others leave unused are lent to you. Free for you now: ${c.free}. Tickets opened today: ${this.store.day(s).tickets} of ${s.settings.maxTicketsPerDay}.`,
+      `Background asks running for you: ${c.jobs}.`,
+      `This turn is your "${lane}" thread. ${others.length ? `Your other threads running now: ${others.map(e => `"${e.lane ?? 'main'}" (handling ${s.triggers.filter(t => e.triggers.includes(t.id)).map(t => t.kind).join(', ')})`).join('; ')}. Do not redo their work; change only the plan items of this thread (plan_items).` : 'No other thread of yours is running.'}`,
+      ready.length ? `Plan items ready to start now: ${ready.map(t => t.id).join(', ')}.` : '',
+    ].filter(Boolean).join('\n')
   }
 
   #goalText(s) {
@@ -351,22 +491,24 @@ export class SuperAgent {
     ].join('\n\n')
   }
 
-  #eval(me, triggers) {
+  #eval(me, triggers, lane = 'main') {
     const { engine } = this.forge
     const evalId = newId('e')
     const ids = triggers.map(t => t.id)
     const actions = []
-    const prompt = `${this.#context(me)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n# Your job\nYou decide: handle each trigger by ignoring it, answering it, or starting work, using your tools. Read files when you need facts. Call update_plan in every turn in which your priorities, to-do list or blockers change (the owner reads the plan instead of asking you). Then return a short note of what you decided and why, written so the owner can follow it.`
-    const { id: runId, done } = engine.startCustom(`super agent: ${me.id}`, async api => {
-      const mcp = toolsMcp('super', TOOLS, (name, args) => this.#tool(me, name, args, api, actions))
+    const ctx = { lane, since: now(), evalId }
+    const prompt = `${this.#context(me, lane)}\n\n# Triggers to handle now\n${triggers.map((t, i) => `## ${i + 1}. ${t.source} / ${t.kind} (${t.ts.slice(0, 16)})\n${t.text}`).join('\n\n')}\n\n${HOW_YOU_WORK}`
+    const tools = leaderTools(me, this.co.read().departments.map(d => d.id))
+    const { id: runId, done } = engine.startCustom(`${kindOf(me) === 'super' ? 'super agent' : kindOf(me) === 'coo' ? 'COO' : 'department'}: ${me.id}${lane !== 'main' ? ` (${lane})` : ''}`, async api => {
+      const mcp = toolsMcp('super', tools, (name, args) => this.#tool(me, name, args, api, actions, ctx))
       const res = await api.agent(me.agent, prompt, { schema: NOTE, label: `eval:${me.id}`, full: true, extraMcp: { super: mcp }, signal: AbortSignal.timeout(30 * 60_000) })
       if (!res?.ok) throw new Error(res?.error ?? 'the super agent gave no answer')
       return { note: str(res.structured?.note ?? res.text, 3000) }
-    }, { agent: me.id, triggers: ids.length }, { cwd: WORKDIR, meta: { superAgent: me.id } })
-    this.live.evals.set(me.id, runId)
+    }, { agent: me.id, lane, triggers: ids.length }, { cwd: WORKDIR, meta: { superAgent: me.id, lane } })
+    this.live.evals.set(`${me.id}|${lane}`, runId)
     this.store.update(s => {
       for (const t of s.triggers) if (ids.includes(t.id)) { t.status = 'evaluating'; t.attempts++ }
-      s.evals.push({ id: evalId, agent: me.id, runId, triggers: ids, status: 'running', startedAt: now() })
+      s.evals.push({ id: evalId, agent: me.id, lane, runId, triggers: ids, status: 'running', startedAt: ctx.since })
       this.store.day(s).evals++
     })
     done.then(st => {
@@ -383,31 +525,36 @@ export class SuperAgent {
           if (ok || actions.length || t.attempts >= 2) { t.status = ok ? 'done' : 'failed'; t.note = str(note, 600); if (t.replyTo) back.push(t) } else t.status = 'pending'
         }
       })
-      for (const t of back) this.trigger({ source: 'super-agent', kind: 'reply', to: t.replyTo, text: `Super agent ${me.id} finished what you delegated ("${clip(t.text, 200)}").\nIts note: ${note}` })
+      for (const t of back) this.trigger({ source: 'super-agent', kind: 'reply', to: t.replyTo, ...(t.replyLane ? { lane: t.replyLane } : {}), text: `${me.title ?? me.id} finished what you delegated ("${clip(t.text, 200)}").\nIts note: ${note}` })
       if (!ok && triggers.some(t => t.source === 'owner')) this.say({ from: 'system', kind: 'system', text: `The super agent ${me.id} could not handle your message: ${clip(note, 300)}` })
-    }).catch(e => this.log(`eval ${me.id}: ${e.message}`)).finally(() => { this.live.evals.delete(me.id); this.holdAt = 0 })
+    }).catch(e => this.log(`eval ${me.id}: ${e.message}`)).finally(() => { this.live.evals.delete(`${me.id}|${lane}`); this.holdAt = 0 })
   }
 
-  async #tool(me, name, a, api, actions) {
-    const out = await this.#act(me, name, a, api)
-    if (name === 'update_plan') return clip(out, 12000)
+  async #tool(me, name, a, api, actions, ctx) {
+    const cur = this.store.read().agents.find(x => x.id === me.id) ?? me // the plan may have changed in another thread
+    const out = (await companyAct(this, cur, name, a, ctx)) ?? await this.#act(cur, name, a, api, ctx)
+    if (name === 'update_plan' || name === 'plan_items') return clip(out, 12000)
     if (name !== 'list_org' && name !== 'read_ticket' && name !== 'find_skills' && name !== 'list_repo_skills') actions.push({ tool: name, arg: clip(a.title ?? a.agent ?? a.team ?? a.id ?? a.to ?? a.name ?? a.ticket ?? a.text ?? '', 80) })
     return clip(out, 12000)
   }
 
-  async #act(me, name, a, api) {
+  async #act(me, name, a, api, ctx = { lane: 'main' }) {
     const { registry, engine } = this.forge
     const org = this.org
     switch (name) {
       case 'reply_owner': return this.#replyOwner(me, a)
-      case 'critique': return this.#critique(me, a, api)
-      case 'open_ticket': return this.#openTicket(me, a)
+      case 'critique': { const t = this.#myTicket(this.store.read(), me, a.ticket); return this.startJob(me, 'critique', t.id, `critique of "${t.title}"${a.focus ? `: ${str(a.focus, 300)}` : ''}`, ctx.lane, api2 => this.#critique(me, a, api2)) }
+      case 'open_ticket': return this.#openTicket(me, a, ctx)
       case 'message_ticket': {
         this.store.update(s => {
           const t = this.#myTicket(s, me, a.ticket)
           if (t.stopped) throw new Error('this ticket was stopped')
           t.inputs.push({ id: newId('i'), ts: now(), kind: 'lead', from: me.id, text: str(a.text, 8000) })
-          if (t.status === 'ended') { t.status = 'open'; delete t.outcome }
+          if (t.status === 'ended') {
+            t.status = 'open'; delete t.outcome
+            const it = t.planItem && s.agents.find(x => x.id === t.owner)?.plan?.todo?.find(x => x.id === t.planItem)
+            if (it) { it.status = 'doing'; it.updatedAt = now() }
+          }
         })
         return 'Delivered; the worker reads it on its next turn.'
       }
@@ -418,26 +565,31 @@ export class SuperAgent {
         const def = registry.getAgent(agent)
         if ((def.tags ?? []).includes('super-agent')) throw new Error('that is a super agent or a builder: use delegate or open_ticket')
         if (!org.canReach(me, 'agents', agent)) throw new Error(`${agent} is not one of your agents`)
-        const r = await api.agent(agent, `${str(a.message, 12000)}\n\n(Asked by super agent ${me.id}. Answer directly, with your evidence.)`, { label: `ask:${agent}`, full: true, signal: AbortSignal.timeout(12 * 60_000) })
-        return r?.ok ? r.text ?? JSON.stringify(r.structured) : `${agent} did not answer: ${r?.error ?? 'no result'}`
+        const msg = `${str(a.message, 12000)}\n\n(Asked by ${me.title ?? me.id}. Answer directly, with your evidence.)`
+        return this.startJob(me, 'agent', agent, msg, ctx.lane, async api2 => {
+          const r = await api2.agent(agent, msg, { label: `ask:${agent}`, full: true, signal: AbortSignal.timeout(12 * 60_000) })
+          if (!r?.ok) throw new Error(`${agent} did not answer: ${r?.error ?? 'no result'}`)
+          return r.text ?? JSON.stringify(r.structured)
+        }, { graceMs: 75_000 })
       }
       case 'ask_team': {
         const team = String(a.team ?? '')
         registry.getTeam(team)
         if (!org.canReach(me, 'teams', team)) throw new Error(`${team} is not one of your teams`)
-        return this.#job(me, 'team', team, str(a.message, 12000))
+        return this.startJob(me, 'team', team, str(a.message, 12000), ctx.lane)
       }
       case 'ask_super_team': {
         const id = String(a.id ?? '')
         this.co.supers.get(id)
         if (!org.canReach(me, 'superTeams', id)) throw new Error(`${id} is not one of your super teams`)
-        return this.#job(me, 'super-team', id, str(a.message, 12000))
+        return this.startJob(me, 'super-team', id, str(a.message, 12000), ctx.lane)
       }
       case 'delegate': {
         const child = this.store.read().agents.find(x => x.id === a.to && x.parent === me.id)
         if (!child) throw new Error(`${a.to} is not a super agent directly below you`)
-        this.trigger({ source: 'super-agent', kind: 'delegated', to: child.id, replyTo: me.id, text: `From super agent ${me.id} (above you): ${str(a.message, 10000)}` })
-        return `Delegated to ${child.id}. Its answer will reach you as a trigger.`
+        if (child.paused) throw new Error(`${child.id} is paused (the company is in cycle mode)`)
+        this.trigger({ source: 'super-agent', kind: 'delegated', to: child.id, replyTo: me.id, replyLane: workLane(ctx.lane), text: `From ${me.title ?? me.id} (above you): ${str(a.message, 10000)}` })
+        return `Delegated to ${child.id}. Its answer will reach you as an event.`
       }
       case 'list_org': return org.list(me)
       case 'create_agent': return org.createAgent(me, a)
@@ -449,18 +601,22 @@ export class SuperAgent {
       case 'list_repo_skills': return org.listRepoSkills(String(a.repo ?? ''))
       case 'install_skill': return org.installSkill(me, a, api)
       case 'update_plan': {
-        const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : [])
-        const plan = {
-          focus: str(a.focus, 600).trim(),
-          priorities: list(a.priorities, 3).map(p => ({ text: str(p?.text, 300), why: str(p?.why, 400) })).filter(p => p.text),
-          todo: list(a.todo, 12).map(t => ({ text: str(t?.text, 300), owner: str(t?.owner, 60), status: ['todo', 'doing', 'blocked', 'done'].includes(t?.status) ? t.status : 'todo', note: str(t?.note, 300) })).filter(t => t.text),
-          blockers: list(a.blockers, 8).map(b => str(b, 400)).filter(Boolean),
-          waitingOnOwner: list(a.waitingOnOwner, 6).map(b => str(b, 400)).filter(Boolean),
-          updatedAt: now(),
-        }
-        if (!plan.focus || !plan.priorities.length) throw new Error('a plan needs a focus and at least one priority')
-        this.store.update(s => { const x = s.agents.find(y => y.id === me.id); if (x) { if (x.plan) (x.planHistory ??= []).push({ at: x.plan.updatedAt, focus: x.plan.focus }); x.planHistory = (x.planHistory ?? []).slice(-20); x.plan = plan } })
-        return 'Plan saved; the owner sees it.'
+        let plan
+        this.store.update(s => {
+          const x = s.agents.find(y => y.id === me.id)
+          if (!x) return
+          plan = rewritePlan(x.plan, a, ctx)
+          if (x.plan) (x.planHistory ??= []).push({ at: x.plan.updatedAt, focus: x.plan.focus })
+          x.planHistory = (x.planHistory ?? []).slice(-20)
+          x.plan = plan
+        })
+        const ready = readyItems(plan)
+        return `Plan saved; the owner sees it. Item ids: ${plan.todo.map(t => `${t.id} "${clip(t.text, 50)}"`).join('; ')}.${ready.length ? ` Ready to start now: ${ready.map(t => t.id).join(', ')}.` : ''}`
+      }
+      case 'plan_items': {
+        let r
+        this.store.update(s => { const x = s.agents.find(y => y.id === me.id); if (!x) return; r = editItems(x.plan, a, ctx); x.plan = r.plan })
+        return `${r.lines.join('\n')}\nItems ready to start: ${readyItems(r.plan).map(t => t.id).join(', ') || 'none'}.`
       }
       case 'report_milestone': {
         if (me.parent) throw new Error('only the root super agent reports milestones')
@@ -535,17 +691,34 @@ export class SuperAgent {
   }
 
   // ---------------- asks that take time (teams, super teams)
-  #job(me, kind, target, message) {
+  /**
+   * Background work for a leader: an ask to a team or super team, or `fn` run as its own engine run (an agent, a
+   * critique panel, a hire). The result reaches the leader's thread as an event. With graceMs, a result that is ready
+   * within that time comes back in the same turn instead.
+   */
+  async startJob(me, kind, target, message, lane = 'main', fn = null, { graceMs = 0 } = {}) {
     const { chats, engine } = this.forge
     const supers = this.co.supers
+    const s0 = this.store.read()
+    if (this.live.jobs.size >= s0.settings.maxJobs) throw new Error(`${this.live.jobs.size} background asks are running, the limit is ${s0.settings.maxJobs}; wait for one to report, or open a ticket`)
+    if (kind === 'super-team' && supers.list().find(x => x.id === target)?.busy) throw new Error(`super team ${target} is still working; ask one of its teams (ask_team) or wait for its result`)
     const id = newId('j')
+    const back = workLane(lane)
     let work
-    if (kind === 'team') {
+    let runIdOf = null
+    if (fn) {
+      const { id: runId, done } = engine.startCustom(`${kind}: ${target}`, api => fn(api), { job: id, from: me.id }, { cwd: WORKDIR, meta: { superJob: id } })
+      work = done.then(st => { this.co.charge(st.costUsd, `${kind} ${target} for ${me.id}`); if (st.status !== 'completed') throw new Error(String(st.error ?? st.status).split('\n')[0]); return typeof st.result === 'string' ? st.result : JSON.stringify(st.result) })
+      runIdOf = runId
+    } else if (kind === 'team') {
       let chatId = this.store.read().teamChats[target]
       try { if (chatId) chats.get(chatId) } catch { chatId = null }
-      if (!chatId) {
-        chatId = chats.create({ title: `Super agent · ${target}`, team: target, mode: 'parallel', cwd: WORKDIR }).id
-        this.store.update(s => { s.teamChats[target] = chatId })
+      // a second ask while the team's chat is still answering the first gets a chat of its own
+      const busy = chatId && chats.list().find(r => r.id === chatId)?.busy
+      if (!chatId || busy) {
+        const fresh = chats.create({ title: `${me.title ?? me.id} · ${target}${busy ? ' (parallel)' : ''}`, team: target, mode: 'parallel', cwd: WORKDIR }).id
+        if (!chatId) this.store.update(s => { s.teamChats[target] = fresh })
+        chatId = fresh
       }
       work = chats.postAndWait(chatId, message, { timeoutMs: 40 * 60_000 }).then(r => r.replies.map(x => `## ${x.from}${x.ok ? '' : ' (failed)'}\n${x.text}`).join('\n\n') || '(no replies)')
     } else {
@@ -562,17 +735,31 @@ export class SuperAgent {
         return supers.get(target).messages.filter(m => m.from === 'supervisor').at(-1)?.text || '(the super team returned no text)'
       })()
     }
-    this.store.update(s => { s.jobs.push({ id, kind, target, from: me.id, message: str(message, 2000), status: 'running', startedAt: now() }) })
+    this.store.update(s => { s.jobs.push({ id, kind, target, from: me.id, lane: back, message: str(message, 2000), status: 'running', startedAt: now(), ...(runIdOf ? { runId: runIdOf } : {}) }) })
     this.live.jobs.set(id, true)
-    work.then(text => ({ ok: true, text }), e => ({ ok: false, text: e?.message ?? String(e) })).then(r => {
+    // with graceMs the turn waits briefly: a result in time is returned in the turn, a later one becomes an event
+    let mode = graceMs ? 'waiting' : 'event'
+    let early = null
+    const notify = r => this.trigger({ source: kind, kind: 'reply', to: me.id, lane: back, text: `${r.ok ? 'Reply' : 'No reply (it failed)'} from ${kind} ${target} to your message "${clip(message, 200)}":\n\n${clip(r.text, 9000)}` })
+    const settled = work.then(text => ({ ok: true, text }), e => ({ ok: false, text: e?.message || String(e ?? '') || `the ${kind} ended without an answer or an error message` })).then(r => {
       this.store.update(s => { const j = s.jobs.find(x => x.id === id); if (j) { j.status = r.ok ? 'done' : 'failed'; j.endedAt = now(); j.result = clip(r.text, 4000) } })
-      this.trigger({ source: kind, kind: 'reply', to: me.id, text: `${r.ok ? 'Reply' : 'No reply (it failed)'} from ${kind} ${target} to your message "${clip(message, 200)}":\n\n${clip(r.text, 9000)}` })
+      if (mode === 'event') notify(r); else early = r
+      return r
     }).finally(() => this.live.jobs.delete(id))
-    return `Sent to ${kind} ${target}. The reply will reach you as a trigger; do not wait for it in this turn.`
+    if (graceMs) {
+      const quick = await Promise.race([settled, new Promise(r => setTimeout(() => r(null), graceMs).unref?.())])
+      if (quick) { mode = 'in-turn'; return quick.ok ? quick.text : `${target} did not answer: ${quick.text}` }
+      mode = 'event'
+      if (early) notify(early)
+    }
+    return `Sent to ${kind} ${target}. The reply will reach you as an event; start other work meanwhile instead of waiting for it.`
   }
 
   // ---------------- tickets
-  #openTicket(me, a) {
+  /** open_ticket for the company leaders' tools (the COO's decide_build). */
+  openTicketFor(me, a, ctx) { return this.#openTicket(me, a, ctx) }
+
+  #openTicket(me, a, ctx = { lane: 'main' }) {
     const s = this.store.read()
     if (this.store.day(s).tickets >= s.settings.maxTicketsPerDay) throw new Error(`the limit of ${s.settings.maxTicketsPerDay} new tickets a day is reached`)
     const title = str(a.title, 140).trim()
@@ -583,6 +770,8 @@ export class SuperAgent {
     for (const d of dependsOn) if (!all.some(x => x.id === d)) throw new Error(`dependsOn: no ticket ${d}`)
     const workstream = a.workstream ? slug(a.workstream, 24) : undefined
     const talent = a.talent === 'principal' ? 'principal' : undefined
+    const lane = workLane(ctx.lane, workstream)
+    const planItem = a.planItem && me.plan?.todo?.some(t => t.id === String(a.planItem)) ? String(a.planItem) : undefined
     let worker = WORKER
     if (a.worker) {
       const def = this.forge.registry.getAgent(String(a.worker))
@@ -599,16 +788,44 @@ export class SuperAgent {
     fs.writeFileSync(path.join(dir, 'TICKET.md'), `# ${title}\n\nTicket ${id}, opened ${now()} by super agent ${me.id}.\n\n## Brief\n${brief}\n\n## Done when\n${str(a.doneWhen, 3000)}\n`)
     if (!fs.existsSync(path.join(dir, 'NOTES.md'))) fs.writeFileSync(path.join(dir, 'NOTES.md'), '# Notes\n\n(nothing yet)\n')
     this.store.update(st => {
-      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}), ...(workstream ? { workstream } : {}), ...(dependsOn.length ? { dependsOn } : {}), ...(talent ? { talent } : {}) })
+      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}), ...(workstream ? { workstream } : {}), ...(dependsOn.length ? { dependsOn } : {}), ...(talent ? { talent } : {}), lane, ...(planItem ? { planItem } : {}) })
       this.store.day(st).tickets++
+      if (planItem) { const x = st.agents.find(y => y.id === me.id); const it = x?.plan?.todo?.find(y => y.id === planItem); if (it) { it.status = 'doing'; it.ref = id; it.updatedAt = now() } }
     })
     if (build) { try { this.co.setBuild(build, 'accepted') } catch {} }
     this.say({ from: me.id, kind: 'ticket', ticket: id, text: `Opened ticket "${title}".` })
     return `Ticket ${id} opened${dependsOn.length ? `; it starts when ${dependsOn.join(', ')} ${dependsOn.length === 1 ? 'is' : 'are'} delivered` : '; a worker starts shortly'}. Its report will reach you as a trigger.`
   }
 
-  #dispatch() {
+  /** Planned tickets whose dependencies are done open by themselves, so the next step starts without a turn. */
+  #autostart() {
     const s = this.store.read()
+    for (const me of s.agents) {
+      if (me.paused || kindOf(me) === 'dept') continue
+      const c = this.#capacity(s, me)
+      let room = Math.max(0, c.share - c.running - c.queued)
+      for (const it of readyItems(me.plan).filter(t => t.ticket && !t.ref)) {
+        if (room <= 0) break
+        try {
+          const out = this.#openTicket(me, { ...it.ticket, workstream: it.workstream, planItem: it.id }, { lane: 'main' })
+          room--
+          this.log(`plan item ${me.id}/${it.id} opened its ticket: ${clip(out, 120)}`)
+        } catch (e) {
+          this.store.update(x => { const it2 = x.agents.find(y => y.id === me.id)?.plan?.todo?.find(y => y.id === it.id); if (it2) { it2.status = 'blocked'; it2.note = str(`could not open its ticket: ${e.message}`, 300); it2.updatedAt = now() } })
+          this.trigger({ source: 'system', kind: 'plan-item-blocked', to: me.id, text: `Plan item ${it.id} "${it.text}" could not open its ticket by itself: ${e.message}. Decide what to do with it.` })
+        }
+      }
+    }
+  }
+
+  #dispatch() {
+    try { this.#autostart() } catch (e) { this.log(`autostart: ${e.message}`) }
+    const s = this.store.read()
+    // fair shares: each leader with work gets an equal share of the worker slots; slots left over go to whoever waits
+    const owners = new Set(s.tickets.filter(t => t.status === 'open' && (this.live.tickets.has(t.id) || stage(t, false) === 'queued')).map(t => t.owner))
+    const share = shareOf(s.settings.maxWorkers, owners.size)
+    const runningOf = o => [...this.live.tickets.keys()].filter(id => s.tickets.find(x => x.id === id)?.owner === o).length
+    const deferred = []
     for (const t of s.tickets) {
       if (this.live.tickets.size >= s.settings.maxWorkers) break
       if (t.status !== 'open' || this.live.tickets.has(t.id)) continue
@@ -638,6 +855,11 @@ export class SuperAgent {
         }
         continue
       }
+      if (runningOf(t.owner) >= share) { deferred.push(t); continue }
+      this.#assign(t, s)
+    }
+    for (const t of deferred) {
+      if (this.live.tickets.size >= s.settings.maxWorkers) break
       this.#assign(t, s)
     }
   }
@@ -695,6 +917,7 @@ export class SuperAgent {
       // a worker's question goes to its lead; only in "ask" mode does it wait for the owner
       if (rep.question && rep.status !== 'ready' && this.co.read().charter.autonomy.level === 'ask') t.attention = { question: rep.question, ts: now() }
       if (proposal) t.proposal = { ...proposal, status: 'queued' }
+      syncItem(s, t)
     })
     if (!t) return
     if (rep.status === 'ready' && t.build && t.status === 'ended') { try { this.co.setBuild(t.build, 'done') } catch {} }
