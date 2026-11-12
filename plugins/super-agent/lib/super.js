@@ -27,6 +27,7 @@ import { progress, rightNow } from './views.js'
 import { recordMetrics } from './board.js'
 import { Growth, GAP } from './growth.js'
 import { Perf, perfTools, judgeDef, JUDGE } from './perf.js'
+import { Health } from './health.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
 import { Desk } from './desk.js'
@@ -196,6 +197,7 @@ export class SuperAgent {
     this.memory = new MemoryKeeper(this)
     this.growth = new Growth(this)
     this.perf = new Perf(this)
+    this.health = new Health(this)
     this.wakes = new Map() // leader id -> when it was last woken for spare capacity or to plan ahead
     this.holdReason = null
     this.holdAt = 0
@@ -253,6 +255,8 @@ export class SuperAgent {
         try { this.growth.seed() } catch (e) { this.log(`growth seed: ${e.message}`) }
         try { this.forge.registry.getAgent(JUDGE) } catch { try { this.forge.registry.saveAgent(judgeDef()) } catch (e) { this.log(`judge: ${e.message}`) } }
       }
+      // health checks in the background (a live model call each hour): they must never hold up the loop
+      if (!this.healthBusy && Date.now() - (this.healthAt ?? 0) > 15 * 60_000) { this.healthAt = Date.now(); this.healthBusy = true; this.health.tick().catch(e => this.log(`health: ${e.message}`)).finally(() => { this.healthBusy = false }) }
       if (Date.now() - (this.perfAt ?? 0) > 30 * 60_000) { this.perfAt = Date.now(); try { this.perf.tick() } catch (e) { this.log(`performance: ${e.message}`) } }
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
@@ -385,6 +389,8 @@ export class SuperAgent {
     } else if (c.type === 'enabled') {
       this.store.update(s => { s.enabled = c.on === true; if (s.enabled) s.sourceState.since ??= now() })
       this.say({ from: 'system', kind: 'system', text: c.on ? 'Proactive mode on: the super agent now reacts to company and engine events and a daily review.' : 'Proactive mode off: the super agent acts only on your messages.' })
+    } else if (c.type === 'health-check') {
+      if (!this.healthBusy) { this.healthBusy = true; this.health.tick({ force: true }).catch(e => this.log(`health: ${e.message}`)).finally(() => { this.healthBusy = false; this.healthAt = Date.now() }) }
     } else if (c.type === 'settings') {
       this.store.update(s => {
         const num = (k, lo, hi) => { const n = Number(c.patch?.[k]); if (Number.isFinite(n)) s.settings[k] = Math.min(hi, Math.max(lo, Math.round(n))) }

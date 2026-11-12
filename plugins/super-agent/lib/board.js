@@ -179,6 +179,7 @@ export function board(sa, { hours = 24 } = {}) {
     tree: orgTree(sa),
     ...leaderStats(sa),
     growth: (() => { try { return sa.growth?.stats() ?? null } catch { return null } })(),
+    healthChecks: (() => { try { return sa.health?.view() ?? null } catch (e) { return { error: e.message } } })(),
     perf: (() => { try { return sa.perf ? { tree: sa.perf.tree(), low: sa.perf.settings().low } : null } catch (e) { return { error: e.message } } })(),
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },

@@ -17,6 +17,8 @@ export async function handleSuper(sa, method, p, body, query) {
   if (method === 'PUT' && p === '/api/super/settings') return sa.store.command({ type: 'settings', patch: await body() })
   if (method === 'POST' && p === '/api/super/engine') return sa.store.command({ type: 'engine', action: (await body()).on === true ? 'start' : 'stop' })
   if (method === 'GET' && p === '/api/super/board') return board(sa, { hours: query.get('hours') || 24 })
+  if (method === 'GET' && p === '/api/super/health') return sa.health.view()
+  if (method === 'POST' && p === '/api/super/health/run') return sa.store.command({ type: 'health-check' })
   if (method === 'GET' && p === '/api/super/perf') return sa.perf.detail(query.get('ref') ?? '')
   if (method === 'GET' && p === '/api/super/entity') return entity(sa, query.get('ref') ?? 'company', { hours: query.get('hours') || 24 })
   if (method === 'GET' && p === '/api/super/chat') return sa.desk.read(query.get('ref') ?? 'company')

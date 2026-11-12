@@ -127,6 +127,14 @@ ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .title { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center }
 .title h1 { font-size: 22px }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(880px, calc(100vw - 32px)); max-height: 86vh }
+.hdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 2px }
+.hdot.ok { background: var(--good) } .hdot.warn { background: var(--warn) } .hdot.fail { background: var(--bad) }
+.panel.hbad { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) }
+.panel.hwarn { border-color: var(--warn) }
+#health details > summary { cursor: pointer; list-style: none } #health details > summary::-webkit-details-marker { display: none }
+#health h2 { display: flex; align-items: center; gap: 6px }
+.hlist { margin: 6px 0 10px; display: flex; flex-direction: column; gap: 6px }
+.pill.warnp { border-color: var(--warn); color: var(--warn) }
 .ptree, .ptree ul { list-style: none; margin: 0; padding: 0; display: block }
 .ptree li { display: block }
 .ptree details > summary { list-style: none; cursor: pointer }
@@ -438,6 +446,8 @@ function overview() {
       <div class="small muted">${h.hold ? esc(h.hold) + '. ' : ''}${h.hasEngine === false ? '' : `Engine ${h.engineOk ? 'and data running' : 'not running'}${h.engineKept ? ' (kept running)' : ''} · `}autopilot ${h.autopilot ? 'on' : 'off'} · proactive ${h.proactive ? 'on' : 'off'}${h.engineNote ? ' · ' + esc(h.engineNote) : ''}</div></div>
   </section>
 
+  ${healthPanel()}
+
   ${leadersPanel()}
 
   ${growthPanel()}
@@ -499,6 +509,27 @@ function overview() {
   </div>
 
   ${perfPanel()}`
+}
+
+/** What stops the company from working: health checks and recent errors, at the top of the page. */
+function healthPanel() {
+  const H = B.healthChecks
+  if (!H || H.error) return H && H.error ? `<section class="panel hbad"><div class="head"><h2>Health and problems</h2></div><p>Could not read the health checks: ${esc(H.error)}</p></section>` : ''
+  const icon = st => st === 'ok' ? '<span class="hdot ok" aria-label="ok"></span>' : st === 'warn' ? '<span class="hdot warn" aria-label="warning"></span>' : '<span class="hdot fail" aria-label="failing"></span>'
+  const sevPill = sv => `<span class="pill ${sv === 'showstopper' ? 'bad' : sv === 'warning' ? 'warnp' : 'good'}">${sv === 'showstopper' ? 'stopping work' : sv === 'warning' ? 'recent' : 'stopped happening'}</span>`
+  const stop = H.problems.filter(p => p.severity === 'showstopper'), active = H.problems.filter(p => p.severity !== 'resolved')
+  const failing = H.checks.filter(c => c.status === 'fail'), warning = H.checks.filter(c => c.status === 'warn')
+  const title = H.status === 'fail' ? `${failing.length + stop.length} problem${failing.length + stop.length === 1 ? '' : 's'} stopping work` : H.status === 'warn' ? `Working, with ${warning.length + active.length} warning${warning.length + active.length === 1 ? '' : 's'}` : H.status === 'ok' ? `All ${H.checks.length} health checks pass` : 'Health checks have not run yet'
+  const checksTable = `<div class="scroll"><table><tr><th></th><th>Check</th><th>Result</th><th>What to do</th></tr>${H.checks.map(c => `<tr><td>${icon(c.status)}</td><td>${esc(c.name)}</td><td class="small">${esc(c.detail)}</td><td class="small">${c.fix ? esc(c.fix) : '<span class="muted">–</span>'}</td></tr>`).join('')}</table></div>`
+  const probList = H.problems.length ? `<div class="scroll"><table><tr><th>Error</th><th class="r">Times</th><th>When</th><th>Agents</th><th>Fix</th></tr>${H.problems.map(p => `<tr><td>${sevPill(p.severity)} <span class="small">${esc(p.signature)}</span></td><td class="r num">${p.count}</td><td class="small muted">${esc(when(p.first))} → ${esc(when(p.last))}</td><td class="small">${p.agents.map(esc).join(', ')}</td><td class="small">${p.hint ? esc(p.hint) : '<span class="muted">see the agent\'s run</span>'}</td></tr>`).join('')}</table></div>` : '<p class="small muted">No failed agent runs in the last 6 hours.</p>'
+  const body = `<h3>Health checks</h3>${checksTable}<h3>Errors in agent runs (last 6 hours)</h3>${probList}
+    <p class="small muted">Checked ${H.at ? ago(H.at) : 'never'}; live model test ${H.liveAt ? ago(H.liveAt) : 'never'}. <button class="plain" data-healthrun>Run the checks now</button></p>`
+  const top = [...failing.map(c => `<li>${icon('fail')} <strong>${esc(c.name)}</strong>: ${esc(c.detail)}${c.fix ? `<br><span class="small">Fix: ${esc(c.fix)}</span>` : ''}</li>`), ...stop.map(p => `<li>${icon('fail')} <strong>${esc(p.signature)}</strong> <span class="small muted">${p.count} times, last ${esc(ago(p.last))}, agents: ${p.agents.slice(0, 5).map(esc).join(', ')}</span>${p.hint ? `<br><span class="small">Fix: ${esc(p.hint)}</span>` : ''}</li>`)]
+  return `<section class="panel ${H.status === 'fail' ? 'hbad' : H.status === 'warn' ? 'hwarn' : ''}" id="health">
+    <details ${H.status === 'fail' ? 'open' : ''}><summary class="head"><h2>${icon(H.status === 'unknown' ? 'warn' : H.status)} Health and problems: ${esc(title)}</h2><span class="small muted">${H.status === 'ok' ? 'click for the checks' : 'click for details'}</span></summary>
+    ${top.length ? `<ul class="hlist">${top.join('')}</ul>` : ''}
+    ${body}</details>
+  </section>`
 }
 
 /** Every unit in a tree with its performance score out of 100; click a row for its latest work. */
@@ -812,6 +843,12 @@ async function load() {
   } catch (err) { $('mission').textContent = 'Cannot load: ' + err.message + '. If the portal was restarted, reload this page.' }
 }
 window.addEventListener('hashchange', () => { chatLoad(true); E = null; lastHTML = ''; window.scrollTo(0, 0); $('view').innerHTML = '<p class="empty">Loading…</p>'; load() })
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-healthrun]'); if (!t) return
+  t.disabled = true; t.textContent = 'Running… (the live model test takes up to a minute)'
+  try { await post('super/health/run', {}) } catch {}
+  setTimeout(() => { lastHTML = ''; load() }, 60_000)
+})
 document.addEventListener('click', ev => {
   const t = ev.target.closest('[data-perf]'); if (!t) return
   ev.preventDefault() // a row inside a summary must not toggle the branch

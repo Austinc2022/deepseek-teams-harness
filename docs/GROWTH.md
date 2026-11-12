@@ -115,3 +115,24 @@ the latest work and the named gaps, and is asked to find the root cause and fix 
 At the check time code compares the score. Back above the bar (or up by 10) counts as worked. Otherwise the plan
 fails and goes one level up; a second failure is reported to the owner. A unit is reflected on at most once a day
 and not while a plan is open.
+
+## Health and problems
+
+`plugins/super-agent/lib/health.js`, shown at the top of the company dashboard (red when something stops work,
+one green line when all is well). Every 15 minutes the loop runs:
+
+| Check | Fails when |
+|---|---|
+| Agent SDK installed | the installed `@anthropic-ai/claude-agent-sdk` differs from the lock file (fix: `npm install` in `plugins/`) |
+| Model <name> | a live one-turn call to each model the agents use fails (hourly; catches an outdated Claude Code, a retired model, missing login or credit) |
+| Work loop, budget, proactive mode | no process runs the loop, a budget hold, proactive mode off (warning) |
+| Engine and data | heartbeats are stale while the host should keep them running |
+| Stuck work | turns, tickets or asks far past their limits |
+| Agent files, disk space | an agent file does not load; under 2 GB free |
+| Agent runs | an error keeps failing runs |
+
+Errors in agent runs over the last 6 hours are grouped by message with counts, times, agents and the fix for known
+errors (outdated Claude Code, unknown model, credit, login, disk, rate limits, turn limits, timeouts). An error is a
+showstopper while it keeps happening; it counts as fixed once an affected agent succeeds again, or, for a model
+error, once the live test of that model passes. Showstoppers and failing checks are posted to the owner's feed once
+(again after 6 hours). "Run the checks now" queues an immediate check. GET /api/super/health returns the results.
