@@ -32,7 +32,9 @@ export const DEFAULT_CHARTER = {
   // questions, one at a time. ask: every question goes to the owner (docs/SUPER-AGENT-AUTONOMY.md).
   autonomy: { level: 'high', maxQuestionsPerDay: 1 },
   execution: { ownerApproval: false }, // true: a proposal that passed the gate is held until the owner says Start (the quant profile turns it on)
-  autopilot: { enabled: false, everyHours: 6 },
+  // continuous: the COO and the department heads work all the time as leaders (super-agent plugin) and the timer only
+  // asks the COO for a review and brief; cycle: the original batch, one full company cycle every everyHours
+  autopilot: { enabled: false, everyHours: 6, mode: 'continuous' },
   ...P.charter,
   models: { lead: P.models.lead, worker: P.models.worker, auditor: P.models.auditor },
 }
@@ -236,7 +238,7 @@ export class Company {
     const s = this.read()
     if (s.decisions.some(x => x.status === 'held')) this.update(x => { this.promoteHeld(x) })
     const ap = s.charter.autopilot
-    if (!ap.enabled || this.active()) return
+    if (!ap.enabled || this.active() || this.continuous()) return
     const last = s.cycles.at(-1)
     const due = !last || Date.now() - new Date(last.startedAt).getTime() >= Math.max(0.25, Number(ap.everyHours) || 6) * 3600 * 1000
     if (!due) return
@@ -244,6 +246,18 @@ export class Company {
     if (why) { this.log(`autopilot: skipped, ${why}`); return }
     this.log('autopilot: starting a cycle')
     await this.startCycle({ trigger: 'autopilot' })
+  }
+
+  /** Continuous mode: the leaders run the company; the batch cycle runs only when someone starts it. */
+  continuous() { return (this.read().charter.autopilot.mode ?? 'continuous') === 'continuous' }
+
+  /** Record a COO review written outside a batch cycle, so the brief appears with the cycle briefs. */
+  recordReview({ by, markdown, summary, spendUsd = 0 }) {
+    const id = newId('c')
+    const name = `${today()}-${id}.md`
+    fs.writeFileSync(path.join(this.reports, name), str(markdown, 60000))
+    this.update(s => { s.cycles.push({ id, trigger: 'continuous-review', by, status: 'completed', startedAt: now(), endedAt: now(), report: name, summary: str(summary, 600), spendUsd, subRuns: [] }) })
+    return { id, report: name }
   }
 
   // ---------------- owner actions
@@ -264,6 +278,7 @@ export class Company {
       if (patch.autopilot) {
         if (patch.autopilot.enabled !== undefined) c.autopilot.enabled = patch.autopilot.enabled === true
         c.autopilot.everyHours = num(patch.autopilot.everyHours, 0.25, 168, c.autopilot.everyHours)
+        if (['continuous', 'cycle'].includes(patch.autopilot.mode)) c.autopilot.mode = patch.autopilot.mode
       }
       if (patch.hiring) {
         if (['auto', 'observe', 'off'].includes(patch.hiring.mode)) c.hiring.mode = patch.hiring.mode

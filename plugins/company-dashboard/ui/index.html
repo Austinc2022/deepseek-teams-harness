@@ -222,7 +222,8 @@ button.chip.busy { outline: 2px solid var(--accent) }
       <label>Cap per cycle, USD<input id="c-cycle" type="number" min="0.5" step="0.5"></label>
       <label>Keep in reserve, USD<input id="c-reserve" type="number" min="0" step="1"></label>
       <label>North-star target per day, USD<input id="c-target" type="number" min="1" step="1"></label>
-      <label>Autopilot: a cycle every (hours)<input id="c-hours" type="number" min="0.25" step="0.25"></label>
+      <label>How the company works<select id="c-mode"><option value="continuous">Continuously: the COO and department heads work all the time</option><option value="cycle">In cycles: one full company cycle at a time</option></select></label>
+      <label>Autopilot: a COO review (or a cycle) every (hours)<input id="c-hours" type="number" min="0.25" step="0.25"></label>
       <label>Hiring<select id="c-hiring"><option value="auto">Automatic (read-only agents)</option><option value="observe">Ask me first</option><option value="off">Off</option></select></label>
       <label>Hires per day, at most<input id="c-hires" type="number" min="0" step="1"></label>
       <label>Questions to you<select id="c-autonomy"><option value="high">Only owner-only matters (the company decides the rest)</option><option value="ask">Ask me everything</option></select></label>
@@ -279,7 +280,7 @@ function renderTop() {
   if (O.profile) { $('coName').textContent = O.profile.label + ' desk'; document.title = O.profile.label + ' desk' }
   const st = $('state')
   st.className = 'pill ' + (O.busy ? 'info' : O.paused ? 'warn' : c.autopilot.enabled ? 'good' : '')
-  st.textContent = O.busy ? 'Cycle running' : O.paused ? 'Paused' : c.autopilot.enabled ? `Autopilot on, every ${c.autopilot.everyHours} h` : 'Autopilot off'
+  st.textContent = O.busy ? 'Cycle running' : O.paused ? 'Paused' : c.autopilot.enabled ? `Autopilot on, ${(c.autopilot.mode || 'continuous') === 'continuous' ? 'working continuously; COO review' : 'a cycle'} every ${c.autopilot.everyHours} h` : 'Autopilot off'
   $('run').disabled = O.busy || !O.setUp; $('stop').hidden = !O.busy || (O.run && O.run.elsewhere)
   $('auto').textContent = c.autopilot.enabled ? 'Turn autopilot off' : 'Turn autopilot on'
   $('pause').textContent = O.paused ? 'Resume' : 'Pause'
@@ -587,7 +588,7 @@ function fillCharter() {
   if (charterDirty) return
   const c = O.charter
   $('c-mission').value = c.mission; $('c-daily').value = c.budget.dailyUsd; $('c-cycle').value = c.budget.cycleUsd; $('c-reserve').value = c.budget.reserveUsd
-  $('c-target').value = c.northStar.targetDailyUsd; $('c-hours').value = c.autopilot.everyHours; $('c-hiring').value = c.hiring.mode; $('c-hires').value = c.hiring.maxPerDay
+  $('c-target').value = c.northStar.targetDailyUsd; $('c-hours').value = c.autopilot.everyHours; $('c-mode').value = c.autopilot.mode || 'continuous'; $('c-hiring').value = c.hiring.mode; $('c-hires').value = c.hiring.maxPerDay
   if (c.autonomy) { $('c-autonomy').value = c.autonomy.level; $('c-questions').value = c.autonomy.maxQuestionsPerDay }
   $('c-props').value = c.gate.maxProposalsPerCycle; $('c-rules').value = c.rules.join('\n')
 }
@@ -595,7 +596,7 @@ $('charter').addEventListener('input', () => { charterDirty = true })
 $('charter').addEventListener('submit', e => {
   e.preventDefault()
   act(async () => {
-    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, autonomy: { level: $('c-autonomy').value, maxQuestionsPerDay: $('c-questions').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
+    await api('charter', 'PUT', { mission: $('c-mission').value, budget: { dailyUsd: $('c-daily').value, cycleUsd: $('c-cycle').value, reserveUsd: $('c-reserve').value }, northStar: { targetDailyUsd: $('c-target').value }, autopilot: { everyHours: $('c-hours').value, mode: $('c-mode').value }, hiring: { mode: $('c-hiring').value, maxPerDay: $('c-hires').value }, autonomy: { level: $('c-autonomy').value, maxQuestionsPerDay: $('c-questions').value }, gate: { maxProposalsPerCycle: $('c-props').value }, rules: $('c-rules').value.split('\n') })
     charterDirty = false
   }, 'Charter saved')
 })

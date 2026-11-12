@@ -33,7 +33,7 @@ const QUESTION = obj({
   category: { type: 'string', enum: [...P.ownerOnly.map(o => o.key), 'internal'], description: 'which owner-only matter this is; "internal" is anything else, and an internal question is not sent: your recommendation becomes the decision' },
   ifNoAnswer: { type: 'string', description: 'what the company does until the owner answers; work must be able to continue' },
 })
-const DECISION_RULE = `Decisions for the owner: normally none. ${P.ownerOnlyText()} Decide every internal matter yourself and say what you decided in your assessment or brief. When evidence cannot be produced in this environment, record it as an open risk and continue; that is not a question. A question you do send must say what the company does meanwhile (ifNoAnswer).`
+export const DECISION_RULE = `Decisions for the owner: normally none. ${P.ownerOnlyText()} Decide every internal matter yourself and say what you decided in your assessment or brief. When evidence cannot be produced in this environment, record it as an open risk and continue; that is not a question. A question you do send must say what the company does meanwhile (ifNoAnswer).`
 
 const planSchema = deps => obj({
   assessment: S,
@@ -50,7 +50,7 @@ const planSchema = deps => obj({
   decisions: arr(QUESTION, 1),
 }, ['assessment', 'northStar', 'directives', 'hires', 'kills', 'decisions'])
 
-const REPORT = obj({
+export const REPORT = obj({
   summary: S,
   evidence: arr(obj({ claim: S, source: S, strength: { type: 'string', enum: ['measured', 'simulated', 'argued'] } })),
   proposals: arr(obj(P.proposal.schema), 2),
@@ -80,7 +80,7 @@ const REVIEW = obj({
 // ---------------------------------------------------------------- helpers
 const J = v => JSON.stringify(v, null, 1)
 export const charterText = c => `Mission: ${c.mission}\nScope: ${c.scope}\nNorth star: ${P.northStarText(c)}.\nRules:\n${c.rules.map(r => `- ${r}`).join('\n')}`
-const initiativeLine = i => `- ${i.id} [${i.stage}] ${i.title} (${i.department}; confidence ${i.confidence ?? '-'}): ${clip(i.thesis, 300)}${i.note ? `\n  last note: ${clip(i.note, 300)}` : ''}`
+export const initiativeLine = i => `- ${i.id} [${i.stage}] ${i.title} (${i.department}; confidence ${i.confidence ?? '-'}): ${clip(i.thesis, 300)}${i.note ? `\n  last note: ${clip(i.note, 300)}` : ''}`
 const asText = r => typeof r === 'string' ? r : r == null ? '' : (r.text ?? r.answer ?? JSON.stringify(r))
 const readClip = (file, n) => { try { return clip(fs.readFileSync(file, 'utf8'), n) } catch { return '' } }
 
@@ -230,23 +230,7 @@ export async function runCycle(co, api, { cycleId, focus }) {
   const results = []
   for (let i = 0; i < work.length && !api.signal.aborted; i += 2) results.push(...await api.parallel(work.slice(i, i + 2).map(w => () => runDirective(w))))
   const reports = results.filter(r => r?.report)
-  co.update(s => {
-    for (const r of reports) {
-      const i = s.initiatives.find(x => x.id === r.initiativeId)
-      if (!i || i.stage === P.gatedStage || i.awaitingOwner) continue
-      if (P.agentStages.includes(r.report.recommendedStage) && r.report.recommendedStage !== 'killed') i.stage = r.report.recommendedStage
-      i.confidence = Number.isFinite(r.report.confidence) ? round(Math.min(1, Math.max(0, r.report.confidence)), 3) : i.confidence
-      i.confidenceBasis = 'department estimate'
-      i.note = str(r.report.summary, 800)
-      i.evidence = (r.report.evidence ?? []).slice(0, 12).map(e => ({ claim: str(e.claim, 300), source: str(e.source, 200), strength: e.strength }))
-      i.blockers = (r.report.blockers ?? []).slice(0, 6).map(b => str(b, 300))
-      i.history.push({ ts: now(), cycle: cycleId, stage: i.stage, note: i.note })
-      for (const b of (r.report.buildSpecs ?? []).slice(0, 2)) {
-        if (s.builds.some(x => x.title === b.title)) continue
-        s.builds.push({ id: newId('b'), ts: now(), cycle: cycleId, initiative: i.id, department: r.dep.id, title: str(b.title, 160), spec: str(b.spec, 6000), expectedValue: str(b.expectedValue, 600), status: 'requested' })
-      }
-    }
-  })
+  applyReports(co, reports.map(r => ({ department: r.dep.id, initiativeId: r.initiativeId, report: r.report })), cycleId)
   await guard('departments')
 
   // ---- 5. gate
@@ -305,6 +289,29 @@ export async function runCycle(co, api, { cycleId, focus }) {
   })
   summary.killed = co.read().initiatives.filter(i => i.stage === 'killed' && i.history.some(h => h.cycle === cycleId && h.stage === 'killed')).map(i => i.title)
   return { report: name, summary: review?.summary ?? clip(plan.assessment, 400), ...summary, spendUsd: spent }
+}
+
+/** Apply department reports to their initiatives: stage (never the gated one), confidence, evidence, blockers, build requests.
+ * Used by the batch cycle and by department leaders in continuous mode. `tag` is the cycle id or the reporting leader. */
+export function applyReports(co, reports, tag) {
+  const cycleId = tag
+  co.update(s => {
+    for (const r of reports) {
+      const i = s.initiatives.find(x => x.id === r.initiativeId)
+      if (!i || i.stage === P.gatedStage || i.awaitingOwner) continue
+      if (P.agentStages.includes(r.report.recommendedStage) && r.report.recommendedStage !== 'killed') i.stage = r.report.recommendedStage
+      i.confidence = Number.isFinite(r.report.confidence) ? round(Math.min(1, Math.max(0, r.report.confidence)), 3) : i.confidence
+      i.confidenceBasis = 'department estimate'
+      i.note = str(r.report.summary, 800)
+      i.evidence = (r.report.evidence ?? []).slice(0, 12).map(e => ({ claim: str(e.claim, 300), source: str(e.source, 200), strength: e.strength }))
+      i.blockers = (r.report.blockers ?? []).slice(0, 6).map(b => str(b, 300))
+      i.history.push({ ts: now(), cycle: cycleId, stage: i.stage, note: i.note })
+      for (const b of (r.report.buildSpecs ?? []).slice(0, 2)) {
+        if (s.builds.some(x => x.title === b.title)) continue
+        s.builds.push({ id: newId('b'), ts: now(), cycle: cycleId, initiative: i.id, department: r.department, title: str(b.title, 160), spec: str(b.spec, 6000), expectedValue: str(b.expectedValue, 600), status: 'requested' })
+      }
+    }
+  })
 }
 
 // ---------------------------------------------------------------- hiring

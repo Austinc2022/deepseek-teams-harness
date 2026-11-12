@@ -285,7 +285,7 @@ export function makeProfile(spec) {
   ]
   P.ownerOnlyText = () => `Owner-only matters (the only things you may ask the owner about):\n${P.ownerOnly.map(o => `- ${o.key}: ${o.text}`).join('\n')}\nEverything else is "internal": you decide it.`
   /** How much runs at once (the super agent's default settings; the owner can change them on the dashboard). */
-  P.scale = { maxWorkers: 2, maxEvals: 2, maxTicketsPerDay: 12, maxSuperAgents: 8, maxAssignments: 8, ...(spec.scale ?? {}) }
+  P.scale = { maxWorkers: 4, maxEvals: 4, maxTicketsPerDay: 30, maxSuperAgents: 8, maxAssignments: 8, ...(spec.scale ?? {}) }
   P.agentStages = spec.agentStages ?? P.stages.filter(s => s !== P.gatedStage)
   P.hardRules = spec.hardRules ?? genericRules(P.companyName)
   P.superRules = spec.superRules ?? genericSuperRules(P.companyName)
@@ -480,7 +480,7 @@ ${P.superRules}`,
     report: 'buildSpecs: work that needs files built (code, assets, builds, data), each precise enough for a builder who has not read this conversation, with the expected value.',
     confidence: 'your probability that this initiative ends up accepted by the gate and meets the charter\'s bar',
     review: `Judge the results. Update each initiative you worked on (stage and your own probability that it is accepted by the gate; you cannot set the last stage, only the gate does). Write the brief for the owner in Markdown: 1) state of the company, 2) what was learned, with numbers, 3) what the gate accepted or rejected and why, 4) honest odds for the north star, 5) what the next cycle will do.`,
-    dailyReview: 'Daily review. Look at the state of the company, the open tickets and what was learned, and decide the most valuable next step toward the charter. Open at most two tickets, or none when nothing is worth the spend. Tell the owner only if there is a result or a decision.',
+    dailyReview: 'Daily review. Look at the state of the company, the open tickets and what was learned, and decide the next steps toward the charter. Start every independent piece of work that is worth the spend now, in parallel, up to your free worker slots; plan the dependent steps after them in your plan so they start by themselves. Tell the owner only if there is a result or a decision.',
     deptExtra: () => `The company's project folder: ${P.projectDir}. Accepted deliverables are in ${path.join(P.projectDir, P.gateSpec.outDir)}.`,
     ...(spec.prompts ?? {}),
   }

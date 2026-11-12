@@ -24,7 +24,7 @@ export default makeProfile({
   // the top tier leads on the strongest model at the highest effort; the auditor stays on a different model
   // from the builders
   models: { provider: 'claude-code', ceo: 'opus', ceoEffort: 'xhigh', ceoFallback: 'sonnet', lead: 'sonnet', worker: 'sonnet', fast: 'haiku', auditor: 'opus' },
-  scale: { maxWorkers: 3, maxEvals: 2, maxTicketsPerDay: 20, maxSuperAgents: 12, maxAssignments: 10 },
+  scale: { maxWorkers: 6, maxEvals: 5, maxTicketsPerDay: 40, maxSuperAgents: 12, maxAssignments: 10 },
   critics: [
     { agent: 'head-design', lens: 'creative direction and taste: is the core mechanic a delight in the first 60 seconds, is the look and sound distinctive and cohesive, what would make a player show it to a friend' },
     { agent: 'xr-engineer', lens: 'engineering: correctness of the WebXR session and input, comfort options, the frame budget, anything that would crash or stutter' },
@@ -185,7 +185,7 @@ Studio standard for every game folder:
     report: 'buildSpecs: work that a sandboxed builder must do (a new game, a feature, a fix pass, a performance pass), each precise enough for a builder who has not read this conversation: what to build, the studio standard files, the acceptance criteria and the tests that prove it. Give the expected value for the game.',
     confidence: 'your probability that this game becomes a release candidate that meets the charter\'s quality bar',
     review: 'Judge the results. Update each game you worked on (stage and your own probability that it becomes a release candidate; you cannot set Release candidate, only the gate does). Write the brief for the owner in Markdown: 1) the studio today and the game of the day, 2) what was designed, built and learned, 3) what the gate accepted or rejected and why, 4) honest odds for the north star (quality and the $10,000,000 path), 5) what the next cycle will do.',
-    dailyReview: 'Daily review. The north star is one release-candidate VR game today. Look at the studio state, the open tickets and the games in progress, and decide the most valuable next step: a build ticket for today\'s game, a fix pass on a game that failed the gate, or a design for tomorrow. Open at most two tickets. Tell the owner only if there is a result or a decision.',
+    dailyReview: 'Daily review. The north star is one release-candidate VR game today. Look at the studio state, the open tickets and the games in progress, and decide the most valuable next step: a build ticket for today\'s game, a fix pass on a game that failed the gate, or a design for tomorrow. Start every independent ticket now, in parallel, up to your free worker slots, and plan the dependent ones after them. Tell the owner only if there is a result or a decision.',
     deptExtra: () => `Studio folder: ${path.join(ROOT, '..', 'vr-studio')}. Release candidates are in its release-candidates/ folder; builders' ticket folders are under forge/super-agent/work/.`,
   },
 })
