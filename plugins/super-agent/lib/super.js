@@ -26,6 +26,7 @@ import { EngineOps, Changes, NullOps, NullChanges } from './engineops.js'
 import { progress, rightNow } from './views.js'
 import { recordMetrics } from './board.js'
 import { Growth, GAP } from './growth.js'
+import { Perf, perfTools, judgeDef, JUDGE } from './perf.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
 import { Desk } from './desk.js'
@@ -50,6 +51,7 @@ const HOW_YOU_WORK = `# How you work
 - Know-how first: before new or hard work, and whenever something is not working, use request_know_how (or open the ticket with research: true). The best known methods beat a fresh guess.
 - Do not give up on the first "no": find why it failed and start the next distinct approach. Stopping a ticket, killing an initiative or saying it cannot be finished needs three distinct approaches and a rescue challenge (code checks it).
 - Improve the people, not only the work: when an agent, team or super team does weak work, say why with report_gap (the remedy is applied and repeats go to the coach); when you learn a reusable method, propose_skill_update.
+- Performance: every unit is scored out of 100 from its checked work. Score work you receive with rate_work. When a unit you answer for stays low you get a reflection: find the root cause, fix it (restructure_team, update_super_team, staff for new talent, request_know_how or update_agent for skills and instructions), then commit_improvement. Code checks whether the score rose.
 - Finish with a short note of what you decided and why, written so the owner can follow it.`
 const NOTE = obj({ note: { type: 'string', description: 'what you decided for each trigger and why, in a few lines' } })
 const REPORT = obj({
@@ -139,7 +141,9 @@ const TOOLS = ALL_TOOLS.filter(t => (P.hasEngine || t.name !== 'submit_engine_ch
 const pick = names => TOOLS.filter(t => names.includes(t.name))
 const COMMON = ['update_plan', 'plan_items', 'list_org', 'ask_agent', 'ask_team', 'staff', 'request_know_how', 'report_gap', 'propose_skill_update']
 /** What each kind of leader can do. The COO and department heads add their own company tools. */
-function leaderTools(me, departments) {
+const PERF_TOOLS = perfTools()
+function leaderTools(me, departments) { return [...baseTools(me, departments), ...PERF_TOOLS] }
+function baseTools(me, departments) {
   const k = kindOf(me)
   if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'accept_ticket', 'ask_super_team', 'delegate', 'update_agent']), ...toolsFor('coo', departments)]
   if (k === 'dept') return [...pick([...COMMON, 'update_agent']), ...toolsFor('dept', departments)]
@@ -191,6 +195,7 @@ export class SuperAgent {
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
     this.memory = new MemoryKeeper(this)
     this.growth = new Growth(this)
+    this.perf = new Perf(this)
     this.wakes = new Map() // leader id -> when it was last woken for spare capacity or to plan ahead
     this.holdReason = null
     this.holdAt = 0
@@ -243,7 +248,12 @@ export class SuperAgent {
       if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
       await this.memory.tick({ hold })
-      if (!this.growthSeeded) { this.growthSeeded = true; try { this.growth.seed() } catch (e) { this.log(`growth seed: ${e.message}`) } }
+      if (!this.growthSeeded) {
+        this.growthSeeded = true
+        try { this.growth.seed() } catch (e) { this.log(`growth seed: ${e.message}`) }
+        try { this.forge.registry.getAgent(JUDGE) } catch { try { this.forge.registry.saveAgent(judgeDef()) } catch (e) { this.log(`judge: ${e.message}`) } }
+      }
+      if (Date.now() - (this.perfAt ?? 0) > 30 * 60_000) { this.perfAt = Date.now(); try { this.perf.tick() } catch (e) { this.log(`performance: ${e.message}`) } }
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
       this.#dispatch()
@@ -618,7 +628,7 @@ export class SuperAgent {
 
   async #tool(me, name, a, api, actions, ctx) {
     const cur = this.store.read().agents.find(x => x.id === me.id) ?? me // the plan may have changed in another thread
-    const out = (await companyAct(this, cur, name, a, ctx)) ?? await this.#act(cur, name, a, api, ctx)
+    const out = (await companyAct(this, cur, name, a, ctx)) ?? this.perf.act(cur, name, a) ?? await this.#act(cur, name, a, api, ctx)
     if (name === 'update_plan' || name === 'plan_items') return clip(out, 12000)
     if (name !== 'list_org' && name !== 'read_ticket' && name !== 'find_skills' && name !== 'list_repo_skills') actions.push({ tool: name, arg: clip(a.title ?? a.agent ?? a.team ?? a.id ?? a.to ?? a.name ?? a.ticket ?? a.text ?? '', 80) })
     return clip(out, 12000)
@@ -866,7 +876,7 @@ export class SuperAgent {
     this.store.update(s => { const y = s.tickets.find(z => z.id === t.id); if (y) { (y.critiques ??= []).push(summary); y.critiques = y.critiques.slice(-12) } })
     recordCritique(t, summary, got)
     for (const x of got) this.growth.gaps(x.capabilityGaps ?? [], { source: `critique by ${x.critic}`, ticket: t.id, by: x.critic })
-    if (summary.mean != null) this.growth.score(t.worker, summary.mean, { source: 'critique', ticket: t.id, attached: t.lastAttached ?? [] })
+    if (summary.mean != null) this.growth.score(t.worker, summary.mean, { source: 'critique', ticket: t.id, attached: t.lastAttached ?? [], task: t.title, why: got.map(x => `${x.critic}: ${x.verdict}`).join(' ') })
     if (summary.mustFix && t.status === 'open') this.store.update(s => { const y = s.tickets.find(z => z.id === t.id); if (y) (y.reviews ??= []).push({ kind: 'critique', ts: now(), pass: false, text: `${summary.mustFix} must-fix item(s); lowest score ${summary.min}` }) })
     return [
       `Critique of ticket ${t.id} "${t.title}": ${got.length} of ${critics.length} critics answered; lowest score ${summary.min ?? '-'}, mean ${summary.mean ?? '-'}; ${summary.mustFix} must-fix item(s). The gate's bar is ${charter.gate.minConfidence}.`,
@@ -946,6 +956,7 @@ export class SuperAgent {
     const notify = r => this.trigger({ source: kind, kind: 'reply', to: me.id, lane: back, text: `${r.ok ? 'Reply' : 'No reply (it failed)'} from ${kind} ${target} to your message "${clip(message, 200)}":\n\n${clip(r.text, 9000)}` })
     const settled = work.then(text => ({ ok: true, text }), e => ({ ok: false, text: e?.message || String(e ?? '') || `the ${kind} ended without an answer or an error message` })).then(r => {
       this.store.update(s => { const j = s.jobs.find(x => x.id === id); if (j) { j.status = r.ok ? 'done' : 'failed'; j.endedAt = now(); j.result = clip(r.text, 4000) } })
+      if (r.ok && !['know-how', 'skill-smith', 'critique', 'hire'].includes(kind)) { const jj = this.store.read().jobs.find(x => x.id === id); if (jj) try { this.perf.judgeJob(jj) } catch (e) { this.log(`judge: ${e.message}`) } }
       if (mode === 'event') notify(r); else early = r
       return r
     }).finally(() => this.live.jobs.delete(id))
@@ -1199,7 +1210,7 @@ export class SuperAgent {
     })
     if (!y) return
     const rep = y.assignments.filter(a => a.report).at(-1)?.report ?? { summary: '' }
-    if (v) this.growth.score(y.worker, v.pass ? 1 : 0.3, { source: 'verify', ticket: id, attached: y.lastAttached ?? [] })
+    if (v) this.growth.score(y.worker, v.pass ? 1 : 0.3, { source: 'verify', ticket: id, attached: y.lastAttached ?? [], task: y.title, why: v.text })
     if (v?.gaps?.length) this.growth.gaps(v.gaps, { source: 'verifier', ticket: id, by: 'verifier' })
     if (y.status === 'ended') {
       if (y.build) { try { this.co.setBuild(y.build, 'done') } catch {} }

@@ -40,7 +40,7 @@ function readMetrics(sa, max = 3000) {
 }
 
 /** The last runs on disk, one row per agent turn. */
-function turns(sa) {
+export function turns(sa) {
   if (turns.at && Date.now() - turns.at < 15_000) return turns.rows
   const { engine, registry } = sa.forge
   const rows = []
@@ -179,6 +179,7 @@ export function board(sa, { hours = 24 } = {}) {
     tree: orgTree(sa),
     ...leaderStats(sa),
     growth: (() => { try { return sa.growth?.stats() ?? null } catch { return null } })(),
+    perf: (() => { try { return sa.perf ? { tree: sa.perf.tree(), low: sa.perf.settings().low } : null } catch (e) { return { error: e.message } } })(),
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },
     health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, hasEngine: P.hasEngine, engineOk: P.hasEngine ? eng.engineFresh && eng.collectorFresh : true, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },

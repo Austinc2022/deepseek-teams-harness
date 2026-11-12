@@ -217,6 +217,7 @@ export async function companyAct(sa, me, name, a, ctx) {
         }
         if (str(report.summary, 4000).trim().length < 40) throw new Error('the summary is too short')
         applyReports(co, [{ department: d.id, initiativeId: ini.id, report }], me.id)
+        try { sa.perf?.judge({ key: `dep:${d.id}`, gapWho: d.lead, task: ini.directive?.brief ?? ini.title, result: `${report.summary}\nEvidence:\n${(report.evidence ?? []).map(e => `- (${e.strength}) ${e.claim} [${e.source}]`).join('\n')}\nRecommended: ${report.recommendedStage}, confidence ${report.confidence}`, by: me.id }) } catch {}
         const props = (report.proposals ?? []).filter(p => P.proposal.has(p)).slice(0, 2)
         for (const p of props) runGate(sa, me, ini, p)
         sa.trigger({ source: 'department', kind: 'department-report', to: COO_ID, lane: `ini:${ini.id}`, text: `${d.name} reports on "${ini.title}" (${ini.id}): recommended stage ${report.recommendedStage}, confidence ${report.confidence}.\n${clip(report.summary, 3000)}\nEvidence:\n${(report.evidence ?? []).slice(0, 12).map(e => `- (${e.strength}) ${clip(e.claim, 200)} [${clip(e.source, 120)}]`).join('\n') || '-'}\nBlockers: ${(report.blockers ?? []).join('; ') || '-'}\nBuild requests: ${(report.buildSpecs ?? []).map(b => b.title).join('; ') || '-'}\nProposals sent to the gate: ${props.map(p => p.name).join(', ') || 'none'}\nDecide what follows: the next directive, a stage change, a kill, or nothing.` })

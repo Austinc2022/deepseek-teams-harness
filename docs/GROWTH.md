@@ -82,3 +82,36 @@ The dashboard's **Quality and learning** panel: first-try check rate, critique c
 trial, kept and retired, lessons and playbooks, skills written here, capability gaps, coaching changes with before
 and after scores, rescue challenges. Each agent's page shows its scores over time, gaps, trials, changes and lessons.
 State is in `forge/super-agent/growth.json`.
+
+## Performance scores and the reflection layer
+
+`plugins/super-agent/lib/perf.js`. Every unit gets a score out of 100: super agents, the COO, departments, super
+teams, teams and agents. The scores are shown as a tree at the bottom of the company dashboard; click a row for its
+popup (how the score is made, latest work with each task's score, gaps, improvement plans).
+
+| Unit | Scored on (weight) |
+|---|---|
+| Agent | quality of its checked or judged work (60%), runs completed (20%), capability gaps (20%) |
+| Team | its answers' quality (55%), its members (25%), runs completed (5%), gaps (15%) |
+| Super team | its answers' quality (55%), its teams (25%), gaps (20%) |
+| Department | initiative outcomes (30%), judged reports (25%), the units in it (25%), plan health (10%), gaps (10%) |
+| Super agent / COO | tickets delivered (35% / 30%), plan health (20%), the units it leads (30% / 35%), gaps (15%) |
+
+Quality comes from the ticket verifier, critiques, leaders' `rate_work`, and the **work judge**
+(`<prefix>work-judge`, stateless, cheap model, at most 40 a day). The judge scores answers nothing else checks:
+team, super team and agent asks, and department reports, with a score per author when a team's answer is split by
+member. Run success and gaps only adjust a score: a unit without a quality or outcome signal shows "–".
+
+**Reflection.** A unit below 50 (settings.growth.lowScore) for 12 hours (lowHours), with at least 3 measured items,
+goes to the leader who answers for it (the department head for its teams, super team and agents, the COO for
+departments, a super agent for itself; the People head for builders and support). The leader gets the score parts,
+the latest work and the named gaps, and is asked to find the root cause and fix it:
+
+- `restructure_team`: add or remove members (new people come through `staff`)
+- `update_super_team`: its teams, the supervisor's instructions, review rounds, mode
+- `request_know_how`, `update_agent`: skills, instructions, model
+- then `commit_improvement`: diagnosis, remedy, what was done, when to check
+
+At the check time code compares the score. Back above the bar (or up by 10) counts as worked. Otherwise the plan
+fails and goes one level up; a second failure is reported to the owner. A unit is reflected on at most once a day
+and not while a plan is open.

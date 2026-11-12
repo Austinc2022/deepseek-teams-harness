@@ -86,6 +86,7 @@ export class Growth {
     let g
     try { g = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch { g = {} }
     for (const k of ['ledger', 'trials', 'lessons', 'knowhow', 'changes', 'challenges', 'smith', 'scores', 'events']) g[k] ??= []
+    g.perf ??= {}; g.perf.history ??= {}; g.perf.plans ??= []; g.perf.reflected ??= {}; g.perf.judged ??= []
     g.days ??= {}
     return g
   }
@@ -93,6 +94,7 @@ export class Growth {
     const g = this.read()
     const out = fn(g)
     g.ledger = g.ledger.slice(-800); g.lessons = g.lessons.slice(-600); g.knowhow = g.knowhow.slice(-300); g.scores = g.scores.slice(-2000)
+    g.perf.plans = g.perf.plans.slice(-300); g.perf.judged = g.perf.judged.slice(-500)
     g.events = g.events.slice(-300); g.challenges = g.challenges.slice(-200); g.smith = g.smith.slice(-200); g.changes = g.changes.slice(-200)
     const tmp = `${this.file}.${process.pid}.tmp`
     fs.writeFileSync(tmp, JSON.stringify(g, null, 1)); fs.renameSync(tmp, this.file)
@@ -248,11 +250,11 @@ export class Growth {
     })
   }
   /** A quality observation for an agent's output (0..1), credited to the trial skills that run carried. */
-  score(agent, value, { source, ticket, attached = [] } = {}) {
+  score(agent, value, { source, ticket, attached = [], task, why } = {}) {
     if (!Number.isFinite(value)) return
     const decided = []
     this.update(g => {
-      g.scores.push({ ts: now(), agent, value, source, ticket, attached })
+      g.scores.push({ ts: now(), agent, value, source, ticket, attached, ...(task ? { task: str(task, 300) } : {}), ...(why ? { why: str(why, 400) } : {}) })
       for (const t of g.trials.filter(x => x.agent === agent && x.status === 'trial' && attached.includes(x.skill))) {
         t.uses++; t.scores.push(value)
         if (t.uses < 3) continue
@@ -286,8 +288,9 @@ export class Growth {
   }
   agentScoreIn(g, agent) { const v = mean(g.scores.filter(x => x.agent === agent).slice(-10).map(x => x.value)); return v == null ? null : Math.round(100 * v) / 100 }
   #rollback(ch) {
-    try { this.registry.saveAgent(ch.prev) } catch (e) { this.sa.log(`rollback ${ch.agent}: ${e.message}`); return }
-    this.sa.say({ from: 'system', kind: 'org', text: `Change to ${ch.agent} ("${ch.what}") rolled back: quality fell from ${ch.before} to ${ch.after}.` })
+    // team and super team changes have no definition to restore: the coach decides what to do instead
+    if (ch.prev) { try { this.registry.saveAgent(ch.prev) } catch (e) { this.sa.log(`rollback ${ch.agent}: ${e.message}`); return } }
+    this.sa.say({ from: 'system', kind: 'org', text: `Change to ${ch.agent} ("${ch.what}") ${ch.prev ? 'rolled back' : 'did not help'}: quality fell from ${ch.before} to ${ch.after}.` })
     const coach = this.coach()
     if (coach) this.sa.trigger({ source: 'growth', kind: 'coaching', to: coach, text: `Your change to ${ch.agent} ("${ch.what}") made its work worse (score ${ch.before} -> ${ch.after}) and was rolled back. Try a different remedy if the gap is still there.` })
   }

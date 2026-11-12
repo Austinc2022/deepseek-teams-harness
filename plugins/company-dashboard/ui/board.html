@@ -127,6 +127,26 @@ ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .title { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center }
 .title h1 { font-size: 22px }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(880px, calc(100vw - 32px)); max-height: 86vh }
+.ptree, .ptree ul { list-style: none; margin: 0; padding: 0; display: block }
+.ptree li { display: block }
+.ptree details > summary { list-style: none; cursor: pointer }
+.ptree details > summary::-webkit-details-marker { display: none }
+.pline { display: flex; align-items: stretch }
+.ptog { flex: 0 0 22px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-bottom: 1px solid var(--grid) }
+.ptree details > summary .ptog::before { content: "▸" }
+.ptree details[open] > summary .ptog::before { content: "▾" }
+.ptree details > summary .ptog:hover { color: var(--ink) }
+.prow { font: inherit; color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--grid); flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(140px, 1fr) 110px minmax(80px, 220px) 40px 52px auto; gap: 10px; align-items: center; text-align: left; padding: 6px 8px; cursor: pointer }
+.prow:hover { background: var(--soft) }
+.prow .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pbar { display: block; height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden }
+.pbar i { display: block; height: 100%; background: var(--muted) }
+.pbar.good i { background: var(--good, #2e9e6a) } .pbar.mid i { background: var(--s1) } .pbar.bad i { background: var(--bad) }
+.pscore { text-align: right; font-weight: 650 }
+.up { color: var(--good, #2e9e6a) } .down { color: var(--bad) }
+.pbody { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; max-height: 75vh; overflow: auto }
+.pbody > * { flex-shrink: 0 }
+@media (max-width: 640px) { .prow { grid-template-columns: 1fr 70px 40px; } .prow .ptype, .prow .pill, .prow .up, .prow .down { display: none } }
 dialog::backdrop { background: rgba(0, 0, 0, .45) }
 dialog .dh { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel) }
 dialog pre { margin: 0; padding: 14px; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere }
@@ -185,6 +205,7 @@ details.agent .blk { display: flex; flex-direction: column; gap: 6px; margin-top
 </div>
 <aside id="chat" aria-label="Chat"></aside>
 <dialog id="dlg"><div class="dh"><strong id="dlgT"></strong><button class="plain" id="dlgX">Close</button></div><pre id="dlgB"></pre></dialog>
+<dialog id="pdlg" aria-labelledby="pdlgT"><div class="dh"><strong id="pdlgT"></strong><button class="plain" id="pdlgX">Close</button></div><div id="pdlgB" class="pbody"></div></dialog>
 <div id="tip" hidden></div>
 
 <script>
@@ -475,7 +496,53 @@ function overview() {
   <div class="grid2">
     <section class="panel"><div class="head"><h3>Ideas by stage</h3><span class="small muted">only the gate moves an idea to the last stage</span></div><div class="chart" id="cFunnel"></div></section>
     <section class="panel"><div class="head"><h3>Model usage by unit</h3><span class="small muted">share of all recorded usage</span></div><div class="chart" id="cCost"></div></section>
-  </div>`
+  </div>
+
+  ${perfPanel()}`
+}
+
+/** Every unit in a tree with its performance score out of 100; click a row for its latest work. */
+function perfPanel() {
+  const PF = B.perf
+  if (!PF || !PF.tree) return ''
+  const band = v => v == null ? '' : v >= 75 ? 'good' : v >= PF.low ? 'mid' : 'bad'
+  const all = []; const walk = n => { all.push(n); n.children.forEach(walk) }; PF.tree.forEach(walk)
+  const scored = all.filter(n => n.score != null)
+  const row = (n, depth) => {
+    const bar = n.score == null ? '<span class="pbar"><i style="width:0"></i></span>' : `<span class="pbar ${band(n.score)}"><i style="width:${n.score}%"></i></span>`
+    const tr = n.trend == null || Math.abs(n.trend) < 2 ? '' : `<span class="small ${n.trend > 0 ? 'up' : 'down'}">${n.trend > 0 ? '▲' : '▼'}${Math.abs(n.trend)}</span>`
+    const pl = n.plan && n.plan.status === 'open' ? `<span class="pill info" title="improvement plan open">improving: ${esc(n.plan.remedy)}</span>` : n.low ? '<span class="pill bad">low</span>' : ''
+    const line = `<button class="prow" data-perf="${esc(n.ref)}" style="padding-left:${4 + depth * 18}px"><span class="pname">${esc(n.name)}</span><span class="ptype small muted">${esc(n.type)}</span>${bar}<span class="pscore num">${n.score == null ? '<span class="muted" title="not enough measured work yet">–</span>' : n.score}</span>${tr}${pl}</button>`
+    if (!n.children.length) return `<li><div class="pline"><span class="ptog"></span>${line}</div></li>`
+    return `<li><details ${depth < 2 ? 'open' : ''}><summary class="pline"><span class="ptog" title="show or hide what it leads"></span>${line}</summary><ul>${n.children.map(c => row(c, depth + 1)).join('')}</ul></details></li>`
+  }
+  return `<section class="panel" id="perf">
+    <div class="head"><h2>Performance: every unit, out of 100</h2><span class="small muted">${scored.length} of ${all.length} units scored · below ${PF.low} for 12 h starts a reflection · click a row for its latest work</span></div>
+    <p class="small muted">Scores come only from measured work: checks and critiques of tickets, the work judge's scores of answers and reports, runs that completed, tickets delivered, plan health, initiative outcomes, capability gaps, and the units each one leads. "–" means not enough measured work yet.</p>
+    <ul class="ptree">${PF.tree.map(n => row(n, 0)).join('')}</ul>
+  </section>`
+}
+
+/** The popup for one unit: its score, how it is made, its latest work, gaps and improvement plans. */
+async function openPerf(ref) {
+  const box = $('pdlgB')
+  $('pdlgT').textContent = 'Loading…'; box.innerHTML = ''; $('pdlg').showModal()
+  let d
+  try { d = await api(`super/perf?ref=${encodeURIComponent(ref)}`) } catch (e) { $('pdlgT').textContent = 'Could not load'; box.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return }
+  const sc = d.score == null ? '–' : d.score
+  $('pdlgT').textContent = `${d.name} · ${d.type} · ${sc}/100`
+  const hist = (d.history || []).map(h => h.score)
+  const spark = hist.length > 1 ? (() => { const w = 360, h = 40, max = 100; const pts = hist.map((v, i) => `${(i / (hist.length - 1)) * w},${h - (v / max) * h}`).join(' '); return `<svg style="display:block;width:100%;max-width:${w}px" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="score over time"><polyline fill="none" stroke="var(--s1)" stroke-width="2" points="${pts}"/></svg>` })() : '<span class="small muted">no history yet</span>'
+  box.innerHTML = `
+    <div class="facts"><div><span class="small muted">Score</span><span class="v">${sc}</span><span class="small muted">${d.basis} measured item${d.basis === 1 ? '' : 's'}${d.trend != null ? ` · ${d.trend >= 0 ? '+' : ''}${d.trend} in a day` : ''}</span></div>
+      <div><span class="small muted">Answers for it</span><span class="v" style="font-size:15px">${esc(d.responsible || '–')}</span><span class="small muted">gets the reflection when it stays low</span></div>
+      <div><span class="small muted">Over time</span>${spark}</div></div>
+    <h3>How the score is made</h3>
+    <div class="scroll"><table><tr><th>Part</th><th class="r">Weight</th><th class="r">Value</th><th>Based on</th></tr>${d.components.map(c => `<tr><td>${esc(c.label)}</td><td class="r num">${Math.round(c.weight * 100)}%</td><td class="r num">${c.value == null ? '–' : c.value}</td><td class="small muted">${esc(c.detail)}</td></tr>`).join('')}</table></div>
+    <h3>Latest work</h3>
+    ${d.tasks.length ? `<div class="scroll"><table><tr><th>When</th><th>Task</th><th>What happened</th><th class="r">Score</th></tr>${d.tasks.map(t => `<tr><td class="small muted">${esc(when(t.ts))}</td><td>${esc(t.task)}<br><span class="small muted">${esc(t.source || '')}</span></td><td class="small">${esc(t.result || '')}</td><td class="r num">${t.score == null ? '–' : t.score}</td></tr>`).join('')}</table></div>` : '<p class="empty">No recorded work yet.</p>'}
+    ${d.gaps.length ? `<h3>Capability gaps reviews named</h3><ul>${d.gaps.map(g => `<li>${esc(g.category)}: ${esc(g.gap)} <span class="small muted">→ ${esc(g.remedy)} (${esc(g.source)})</span></li>`).join('')}</ul>` : ''}
+    ${d.plans.length ? `<h3>Improvement plans</h3><ul>${d.plans.map(p => `<li><span class="pill ${p.status === 'worked' ? 'good' : p.status === 'failed' ? 'bad' : 'info'}">${esc(p.status)}</span> ${esc(p.remedy)} by ${esc(p.by)}: ${esc(p.diagnosis)} <span class="small muted">did: ${esc(p.actions)} · ${p.before ?? '–'} → ${p.after ?? '…'}</span></li>`).join('')}</ul>` : ''}`
 }
 const rangeButtons = () => `<span class="seg" role="group" aria-label="Time range">${[[6, '6 h'], [24, '24 h'], [72, '3 d'], [168, '7 d']].map(([v, l]) => `<button data-h="${v}" aria-pressed="${hours === v}">${l}</button>`).join('')}</span>`
 const SLx = () => (B.profile && B.profile.stageLabels) || {}, GATED = () => B.profile ? B.profile.gatedStage : 'paper'
@@ -745,6 +812,11 @@ async function load() {
   } catch (err) { $('mission').textContent = 'Cannot load: ' + err.message + '. If the portal was restarted, reload this page.' }
 }
 window.addEventListener('hashchange', () => { chatLoad(true); E = null; lastHTML = ''; window.scrollTo(0, 0); $('view').innerHTML = '<p class="empty">Loading…</p>'; load() })
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-perf]'); if (!t) return
+  ev.preventDefault() // a row inside a summary must not toggle the branch
+  openPerf(t.dataset.perf)
+})
 document.addEventListener('click', async ev => {
   const t = ev.target.closest('[data-go],[data-h],[data-run]'); if (!t) return
   const d = t.dataset
@@ -758,6 +830,7 @@ document.addEventListener('click', async ev => {
 })
 function alertText(m) { $('dlgT').textContent = 'Could not open'; $('dlgB').textContent = m; $('dlg').showModal() }
 $('dlgX').onclick = () => $('dlg').close()
+$('pdlgX').onclick = () => $('pdlg').close()
 const tip = $('tip')
 document.addEventListener('mousemove', e => {
   const t = e.target.closest ? e.target.closest('[data-tip]') : null
