@@ -109,7 +109,7 @@ export function board(sa, { hours = 24 } = {}) {
       u.work = runningTk.length ? runningTk.map(t => t.title).join(' · ') : openTk.length ? `${openTk.length} open ticket(s) waiting` : 'No open ticket.'
       u.detail = `${s.tickets.filter(t => t.outcome === 'completed').length} delivered · ${openTk.length} open`
     } else if (u.id === 'ceo') {
-      u.work = rn.cycle ? `Running a company cycle: ${rn.cycle.phase ?? 'starting'}` : `Between cycles.${rn.nextCycle ? ` Next cycle ${rn.nextCycle.slice(0, 16).replace('T', ' ')} UTC.` : ''}`
+      u.work = rn.cycle ? `Running a company cycle: ${rn.cycle.phase ?? 'starting'}` : rn.continuous ? `Working continuously.${rn.nextCycle ? ` Next review ${rn.nextCycle.slice(0, 16).replace('T', ' ')} UTC.` : ''}` : `Between cycles.${rn.nextCycle ? ` Next cycle ${rn.nextCycle.slice(0, 16).replace('T', ' ')} UTC.` : ''}`
       if (rn.cycle) u.status = 'working'
       u.detail = clip(c.cycles.filter(x => x.summary).at(-1)?.summary ?? '', 200)
     } else if (u.id === 'audit') {
@@ -176,6 +176,7 @@ export function board(sa, { hours = 24 } = {}) {
     at: now(), hours: Math.round((to - from) / 3600_000),
     profile: { id: P.id, label: P.label, hasEngine: P.hasEngine, stageLabels: P.stageLabels, gatedStage: P.gatedStage, metering: sa.co.metering, text: P.text },
     tree: orgTree(sa),
+    ...leaderStats(sa),
     goal: g,
     money: { balanceUsd: bud.balanceUsd ?? null, reserveUsd: bud.reserveUsd, spentTodayUsd: bud.spentTodayUsd, dailyUsd: bud.dailyUsd, burnPerDayUsd: burn, runwayDays },
     health: { loop: !!sa.store.holder(), hold: sa.holdReason, proactive: s.enabled, autopilot: c.charter.autopilot.enabled, hasEngine: P.hasEngine, engineOk: P.hasEngine ? eng.engineFresh && eng.collectorFresh : true, engineKept: eng.autostart, engineNote: eng.note, books: eng.books },
@@ -195,7 +196,7 @@ export function board(sa, { hours = 24 } = {}) {
       gateRuns: g.effort.gateRuns, gatePassed: c.orders.length,
     },
     next: {
-      nextCycle: rn.nextCycle, running: rn.items.map(i => ({ who: i.who, what: i.what, since: i.since })), idle: rn.idle,
+      nextCycle: rn.nextCycle, continuous: rn.continuous, running: rn.items.map(i => ({ who: i.who, what: i.what, since: i.since })), idle: rn.idle,
       queuedEvents: s.triggers.filter(t => t.status === 'pending').length, queuedTickets: openTk.filter(t => t.assignments.at(-1)?.status !== 'running' && !t.attention).length,
       needsYou: c.decisions.filter(d => d.status === 'open').map(d => clip(d.question, 220)).concat(openTk.filter(t => t.attention).map(t => `Ticket "${t.title}": ${clip(t.attention.question, 160)}`)),
       ladderNext: g.next, plan: ceoPlan ? { focus: ceoPlan.focus, updatedAt: ceoPlan.updatedAt, priorities: ceoPlan.priorities, todo: ceoPlan.todo.filter(t => t.status !== 'done').slice(0, 8), blockers: ceoPlan.blockers, waitingOnOwner: ceoPlan.waitingOnOwner } : null,
@@ -266,6 +267,63 @@ function structure(sa) {
   return { org, sets, meta }
 }
 
+/** The dashboard key of a leader: super agents are sa:<id>, the COO is "ceo" (its historic key), departments dep:<id>. */
+export const leaderRef = a => (a.kind === 'coo' ? 'ceo' : a.kind === 'dept' ? `dep:${a.dept}` : `sa:${a.id}`)
+
+/**
+ * How each leader is using its capacity: threads running, plan items by state, worker slots against its fair share,
+ * background asks, and how much of the last 24 hours nothing of its own was running.
+ */
+export function leaderStats(sa) {
+  const s = sa.store.read()
+  const to = Date.now(), from = to - DAY
+  const live = sa.live ?? { tickets: new Map(), evals: new Map(), jobs: new Map() }
+  const openT = s.tickets.filter(t => t.status === 'open')
+  const owners = new Set(openT.filter(t => live.tickets.has(t.id) || t.assignments.at(-1)?.status === 'running' || !t.assignments.length).map(t => t.owner)).size || 1
+  const share = Math.max(1, Math.floor(s.settings.maxWorkers / owners))
+  const ms = x => new Date(x).getTime()
+  const busyShare = spans => {
+    const iv = spans.map(([a, b]) => [Math.max(from, a), Math.min(to, b)]).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])
+    let busy = 0, end = from
+    for (const [a, b] of iv) { if (b <= end) continue; busy += b - Math.max(a, end); end = b }
+    return busy / DAY
+  }
+  const spansOf = id => [
+    ...s.evals.filter(e => e.agent === id).map(e => [ms(e.startedAt), e.endedAt ? ms(e.endedAt) : to]),
+    ...s.tickets.filter(t => t.owner === id).flatMap(t => t.assignments.map(a => [ms(a.startedAt), a.endedAt ? ms(a.endedAt) : a.status === 'running' ? to : ms(a.startedAt)])),
+    ...s.jobs.filter(j => j.from === id).map(j => [ms(j.startedAt), j.endedAt ? ms(j.endedAt) : to]),
+  ]
+  const leaders = s.agents.map(a => {
+    const todo = a.plan?.todo ?? []
+    const done = new Set(todo.filter(t => t.status === 'done').map(t => t.id)), ids = new Set(todo.map(t => t.id))
+    const ready = todo.filter(t => t.status === 'todo' && (t.dependsOn ?? []).every(d => done.has(d) || !ids.has(d))).length
+    const mine = openT.filter(t => t.owner === a.id)
+    const running = mine.filter(t => t.assignments.at(-1)?.status === 'running').length
+    return {
+      id: a.id, ref: leaderRef(a), kind: a.kind ?? 'super', title: a.title, paused: !!a.paused,
+      threads: s.evals.filter(e => e.agent === a.id && e.status === 'running').map(e => e.lane ?? 'main'),
+      pending: s.triggers.filter(t => t.to === a.id && t.status === 'pending').length,
+      plan: { todo: todo.filter(t => t.status === 'todo').length, ready, doing: todo.filter(t => t.status === 'doing').length, blocked: todo.filter(t => t.status === 'blocked').length, done: done.size, updatedAt: a.plan?.updatedAt ?? null, focus: a.plan?.focus ?? null },
+      tickets: { running, queued: mine.length - running, share: a.kind === 'dept' ? 0 : share },
+      jobs: s.jobs.filter(j => j.from === a.id && j.status === 'running').length,
+      busy24: Math.round(100 * busyShare(spansOf(a.id))),
+      lastTurn: s.evals.filter(e => e.agent === a.id).at(-1)?.startedAt ?? null,
+    }
+  })
+  const all = s.agents.flatMap(a => spansOf(a.id))
+  return {
+    leaders,
+    capacity: {
+      workers: { used: s.tickets.filter(t => t.status === 'open' && t.assignments.at(-1)?.status === 'running').length, max: s.settings.maxWorkers },
+      turns: { used: s.evals.filter(e => e.status === 'running').length, max: s.settings.maxEvals },
+      jobs: { used: s.jobs.filter(j => j.status === 'running').length, max: s.settings.maxJobs },
+      threadsPerLeader: s.settings.maxLanes,
+      idle24: Math.round(100 * (1 - busyShare(all))),
+      readyNotStarted: leaders.reduce((n, l) => n + (l.paused ? 0 : l.plan.ready), 0),
+    },
+  }
+}
+
 /** Every node of the organisation with its numbers; agents repeat under each team they belong to. */
 export function orgTree(sa) {
   const s = sa.store.read(), c = sa.co.read()
@@ -276,6 +334,7 @@ export function orgTree(sa) {
   const st = ref => (cache[ref] ??= stat(rows, sets[ref], total))
   const open = s.tickets.filter(t => t.status === 'open')
   const nodes = []
+  const lead = Object.fromEntries(leaderStats(sa).leaders.filter(l => !l.paused).map(l => [l.ref, l]))
   const node = (key, ref, parent, extra = {}) => {
     const m = meta[ref], k = st(ref)
     let status = k.busy ? 'working' : 'idle', work = k.doing.join(' · ') || ''
@@ -295,6 +354,14 @@ export function orgTree(sa) {
       if (act) status = 'working'
       work = act ? 'Running a company cycle' : work || 'Between cycles.'
     } else if (!work) work = k.lastLabel ? `Last: ${k.lastLabel}` : m.type === 'Agent' ? 'Not called yet.' : ''
+    // a unit run by a leader (COO, department head, super agent): its threads and plan say what it is doing
+    const L = lead[ref]
+    if (L) {
+      if (L.threads.length) status = 'working'
+      else if (L.plan.blocked && status !== 'working') status = 'blocked'
+      if (!k.busy && L.plan.focus && !ref.startsWith('sa:')) work = L.plan.focus
+      extra = { ...extra, leader: { threads: L.threads.length, ready: L.plan.ready, doing: L.plan.doing, blocked: L.plan.blocked, busy24: L.busy24 } }
+    }
     nodes.push({ key, ref, parent, type: m.type, name: m.name, sub: m.lead ?? m.model ?? '', status, work: clip(work, 200), turnsToday: k.turnsToday, min24: k.min24, share: k.share, lastActive: k.lastActive, spark: k.spark, ...extra })
   }
   const roots = org.superAgents.filter(a => !a.parent)
@@ -378,6 +445,12 @@ export function entity(sa, ref, { hours = 24 } = {}) {
     out.ticketOutcomes = [['Delivered', tk.filter(t => t.outcome === 'completed').length], ['Open', tk.filter(t => t.status === 'open').length], ['Dropped or stopped', tk.filter(t => t.status === 'ended' && t.outcome !== 'completed').length]].map(([label, n]) => ({ label, n }))
     out.kpi.decisions = s.evals.filter(e => e.agent === id).length
     out.kpi.pending = s.triggers.filter(t => t.to === id && t.status === 'pending').length
+  }
+  // a unit run by a leader (super agent, COO, department head): its plan, threads and capacity
+  const L = s.agents.find(a => leaderRef(a) === ref && !a.paused)
+  if (L) {
+    out.detail = { ...(out.detail ?? {}), plan: L.plan ?? null }
+    out.leader = leaderStats(sa).leaders.find(x => x.id === L.id) ?? null
   }
   return out
 }

@@ -74,9 +74,10 @@ export function rightNow(sa) {
   const last = c.cycles.at(-1)
   const nextCycle = ap.enabled && last ? iso(new Date(last.startedAt).getTime() + ap.everyHours * 3600_000) : null
   const pending = s.triggers.filter(t => t.status === 'pending').length
-  const idle = items.length ? null : sa.holdReason ? `On hold: ${sa.holdReason}.` : pending ? `${pending} event(s) are queued and start within seconds.` : `Nothing is running. ${s.enabled ? 'The super agent waits for the next event' : 'Proactive mode is off, so the super agent waits for your message'}${nextCycle ? `; the next company cycle is due ${nextCycle.slice(0, 16).replace('T', ' ')} UTC` : ''}.`
+  const continuous = (ap.mode ?? 'continuous') === 'continuous' && s.agents.some(a => a.kind === 'coo' && !a.paused)
+  const idle = items.length ? null : sa.holdReason ? `On hold: ${sa.holdReason}.` : pending ? `${pending} event(s) are queued and start within seconds.` : `Nothing is running. ${s.enabled ? 'The super agent waits for the next event' : 'Proactive mode is off, so the super agent waits for your message'}${nextCycle ? `; the next ${continuous ? 'COO review' : 'company cycle'} is due ${nextCycle.slice(0, 16).replace('T', ' ')} UTC` : ''}.`
   return {
-    items, idle, cycle, nextCycle,
+    items, idle, cycle, nextCycle, continuous,
     decisions: s.evals.filter(e => e.status !== 'running' && e.note).slice(-8).reverse().map(e => ({ agent: e.agent, at: e.endedAt, note: e.note, actions: e.actions ?? [], runId: e.runId, status: e.status })),
   }
 }
@@ -109,7 +110,8 @@ export function orgView(sa) {
   const inOrg = new Set([c.ceo, c.auditor, ...departments.flatMap(d => [d.lead.name, ...d.teams.flatMap(t => t.members.map(m => m.name))]), ...s.agents.map(a => a.agent)])
   const others = registry.listAgents().filter(a => !a.invalid && P.isOurs(a.name) && !inOrg.has(a.name)).map(a => ({ name: a.name, description: a.description, model: a.model, provider: a.provider ?? 'claude-code', tags: a.tags ?? [] }))
   return {
-    superAgents: s.agents.map(a => ({ id: a.id, title: a.title, agent: a.agent, parent: a.parent, mission: a.mission, reports: a.reports, busy: evalBusy.has(a.id), focus: a.plan?.focus ?? null, planAt: a.plan?.updatedAt ?? null })),
+    // the COO and department heads also live in s.agents (as leaders); the org shows them in their company places
+    superAgents: s.agents.filter(a => (a.kind ?? 'super') === 'super').map(a => ({ id: a.id, title: a.title, agent: a.agent, parent: a.parent, mission: a.mission, reports: a.reports, busy: evalBusy.has(a.id), focus: a.plan?.focus ?? null, planAt: a.plan?.updatedAt ?? null })),
     company: { ceo: c.ceo ? info(c.ceo) : null, auditor: c.auditor ? info(c.auditor) : null, departments },
     others, busy,
   }
@@ -146,7 +148,7 @@ export function who(sa, type, id) {
     const dep = c.departments.find(d => d.lead === id)
     const sup = s.agents.find(x => x.agent === id)
     const todayIso = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
-    const what = id === c.ceo ? 'The COO: runs the company cycle, plans each cycle, directs the department leads and writes the brief.' : id === c.auditor ? 'The independent auditor: a different model that attacks proposals, skills and engine changes before they are accepted.' : dep ? `Lead of the ${dep.name} department.` : sup ? `The model behind the super agent "${sup.title}".` : (a.tags ?? []).includes('builder') ? 'A worker: builds one ticket at a time in its own sandboxed folder.' : teams.length ? `Member of ${teams.join(', ')}.` : 'An agent of the company.'
+    const what = id === c.ceo ? (c.charter.autopilot.mode ?? 'continuous') === 'continuous' ? 'The COO: works continuously with its own plan and threads, directs the department heads as work is needed, decides build requests and writes a brief on the autopilot timer.' : 'The COO: runs the company cycle, plans each cycle, directs the department leads and writes the brief.' : id === c.auditor ? 'The independent auditor: a different model that attacks proposals, skills and engine changes before they are accepted.' : dep ? `Lead of the ${dep.name} department.` : sup ? `The model behind the super agent "${sup.title}".` : (a.tags ?? []).includes('builder') ? 'A worker: builds one ticket at a time in its own sandboxed folder.' : teams.length ? `Member of ${teams.join(', ')}.` : 'An agent of the company.'
     return {
       ...base, name: a.name, what, description: a.description, role: clip(a.role ?? '', 6000), model: a.model, provider: a.provider ?? 'claude-code', effort: a.effort,
       tools: a.tools ?? [], skills: a.skills ?? [], canWrite: (a.tools ?? []).some(t => ['Edit', 'Write', 'Bash'].includes(t)), tags: a.tags ?? [],
@@ -165,7 +167,7 @@ export function who(sa, type, id) {
   if (type === 'department') {
     const d = c.departments.find(x => x.id === id)
     if (!d) throw new Error('no such department')
-    return { ...base, name: d.name, what: `A department: one lead (${d.lead}) directing ${d.teams.length} team(s) through a super team. Each company cycle the COO gives it one directive and it reports back with evidence.`, description: d.mission, lead: agentInfo(registry, d.lead), teams: d.teams, superTeamId: d.superTeamId, initiatives: c.initiatives.filter(i => i.department === id).slice(-12).reverse().map(i => ({ id: i.id, title: i.title, stage: i.stage, confidence: i.confidence, note: clip(i.note ?? '', 300) })), builds: c.builds.filter(b => b.department === id).slice(-8).reverse().map(b => ({ id: b.id, title: b.title, status: b.status })) }
+    return { ...base, name: d.name, what: `A department: one lead (${d.lead}) directing ${d.teams.length} team(s) through a super team. ${(c.charter.autopilot.mode ?? 'continuous') === 'continuous' ? 'Its head works continuously with its own plan: it takes directives from the COO at any time, runs its teams in the background and reports with evidence.' : `Each company cycle the COO gives it one directive and it reports back with evidence.`}`, description: d.mission, lead: agentInfo(registry, d.lead), teams: d.teams, superTeamId: d.superTeamId, initiatives: c.initiatives.filter(i => i.department === id).slice(-12).reverse().map(i => ({ id: i.id, title: i.title, stage: i.stage, confidence: i.confidence, note: clip(i.note ?? '', 300) })), builds: c.builds.filter(b => b.department === id).slice(-8).reverse().map(b => ({ id: b.id, title: b.title, status: b.status })) }
   }
   if (type === 'super-team') {
     const t = sa.co.supers.get(id)

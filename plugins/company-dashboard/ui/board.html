@@ -243,6 +243,24 @@ function gantt(el, A) {
 }
 
 
+/** Every leader's threads, plan and capacity: is anyone idle while work is ready? */
+function leadersPanel() {
+  if (!B.leaders || !B.leaders.length) return ''
+  const C = B.capacity, L = B.leaders.filter(l => !l.paused)
+  const kindName = { super: 'Super agent', coo: 'COO', dept: 'Department head' }
+  return `<section class="panel">
+    <div class="head"><h2>Leaders: threads, plans and capacity</h2><span class="small muted">worker slots ${C.workers.used} of ${C.workers.max} · leader turns ${C.turns.used} of ${C.turns.max} · background asks ${C.jobs.used} of ${C.jobs.max} · up to ${C.threadsPerLeader} threads per leader</span></div>
+    <div class="facts">
+      <div><span class="small muted">Idle, last 24 h</span><span class="v">${C.idle24}%</span><span class="small muted">of the time no leader, ticket or ask was running</span></div>
+      <div><span class="small muted">Ready, not started</span><span class="v">${C.readyNotStarted}</span><span class="small muted">plan items whose dependencies are done</span></div>
+      <div><span class="small muted">Threads running</span><span class="v">${L.reduce((n, l) => n + l.threads.length, 0)}</span><span class="small muted">across ${L.length} leaders</span></div>
+    </div>
+    <div class="scroll"><table><tr><th>Leader</th><th>Threads now</th><th class="r">Ready</th><th class="r">Doing</th><th class="r">Blocked</th><th class="r">Done</th><th class="r">Tickets (share)</th><th class="r">Asks</th><th class="r">Busy 24 h</th><th>Last turn</th></tr>
+    ${L.map(l => `<tr><td><button class="plain" data-go="${esc(l.ref)}">${esc(l.title)}</button> <span class="small muted">${esc(kindName[l.kind] || l.kind)}</span></td><td class="small">${l.threads.length ? l.threads.map(esc).join(', ') : `<span class="muted">${l.pending ? l.pending + ' waiting' : 'idle'}</span>`}</td><td class="r num">${l.plan.ready}</td><td class="r num">${l.plan.doing}</td><td class="r num">${l.plan.blocked}</td><td class="r num">${l.plan.done}</td><td class="r num">${l.kind === 'dept' ? '–' : `${l.tickets.running}+${l.tickets.queued} (${l.tickets.share})`}</td><td class="r num">${l.jobs}</td><td class="r num">${l.busy24}%</td><td class="small muted">${ago(l.lastTurn)}</td></tr>`).join('')}
+    </table></div>
+  </section>`
+}
+
 /** Two series side by side per day, with a legend. */
 function bars2(el, rows, names, { h = 150 } = {}) {
   if (!rows.length || rows.every(r => !r.a && !r.b)) { el.innerHTML = '<p class="empty">Nothing recorded yet.</p>'; return }
@@ -275,7 +293,8 @@ function nodeCard(n) {
     <span class="nm">${esc(n.name)}</span>
     <span class="wk">${esc(n.work || (n.sub ? n.sub : ''))}</span>
     ${spark(n.spark)}
-    <span class="kp">${n.turnsToday} turns · ${n.min24} min · ${Math.round(n.share * 100)}%${n.people ? ' · ' + n.people + ' agents' : ''}</span></button>`
+    <span class="kp">${n.turnsToday} turns · ${n.min24} min · ${Math.round(n.share * 100)}%${n.people ? ' · ' + n.people + ' agents' : ''}</span>
+    ${n.leader ? `<span class="kp">${n.leader.threads} thread${n.leader.threads === 1 ? '' : 's'} · plan ${n.leader.doing} doing · ${n.leader.ready} ready${n.leader.blocked ? ` · ${n.leader.blocked} blocked` : ''}</span>` : ''}</button>`
 }
 function treeHTML(keys, depth, stopTypes = []) {
   const kids = k => B.tree.filter(n => n.parent === k)
@@ -312,6 +331,8 @@ function overview() {
       <div class="small muted">${h.hold ? esc(h.hold) + '. ' : ''}${h.hasEngine === false ? '' : `Engine ${h.engineOk ? 'and data running' : 'not running'}${h.engineKept ? ' (kept running)' : ''} · `}autopilot ${h.autopilot ? 'on' : 'off'} · proactive ${h.proactive ? 'on' : 'off'}${h.engineNote ? ' · ' + esc(h.engineNote) : ''}</div></div>
   </section>
 
+  ${leadersPanel()}
+
   <section class="panel">
     <div class="head"><h2>Organisation: who is doing what</h2><span class="small muted">${B.tree.filter(x => x.type === 'Agent').map(x => x.ref).filter((x, i, a) => a.indexOf(x) === i).length} agents in ${B.tree.filter(x => x.type === 'Team').length} teams and ${B.tree.filter(x => x.type === 'Department').length} departments</span></div>
     ${treeLegend}
@@ -329,7 +350,7 @@ function overview() {
   </section>
 
   <section class="panel">
-    <div class="head"><h2>What happens next</h2><span class="small muted">${n.nextCycle ? 'next company cycle ' + until(n.nextCycle) + ' (' + when(n.nextCycle) + ')' : 'autopilot is off: no cycle is scheduled'}</span></div>
+    <div class="head"><h2>What happens next</h2><span class="small muted">${n.nextCycle ? (n.continuous ? 'next COO review ' : 'next company cycle ') + until(n.nextCycle) + ' (' + when(n.nextCycle) + ')' : 'autopilot is off: no cycle is scheduled'}</span></div>
     <div class="grid3">
       <div><h3>In motion</h3>${n.running.length ? `<ul>${n.running.map(r => `<li><strong>${esc(r.who)}</strong>: ${esc(r.what)} <span class="small muted">(${ago(r.since)})</span></li>`).join('')}</ul>` : `<p>${esc(n.idle || 'Nothing is running.')}</p>`}
         <p class="small muted" style="margin-top:6px">${n.queuedEvents} event(s) and ${n.queuedTickets} ticket(s) queued.</p>
@@ -418,6 +439,12 @@ function entityView() {
   if (k.people > 1) tiles.push(['People', k.people, 'agents in this unit'])
   if (k.openInitiatives != null) tiles.push(['Open initiatives', k.openInitiatives, `${k.killed} killed`])
   if (k.decisions != null) tiles.push(['Decisions', k.decisions, `${k.pending} event(s) waiting`])
+  const Lx = E.leader
+  if (Lx) {
+    tiles.push(['Threads running', Lx.threads.length, Lx.threads.join(', ') || (Lx.pending ? `${Lx.pending} event(s) waiting` : 'idle')])
+    tiles.push(['Plan', `${Lx.plan.doing} doing`, `${Lx.plan.ready} ready · ${Lx.plan.blocked} blocked · ${Lx.plan.done} done`])
+    tiles.push(['Busy, last 24 h', Lx.busy24 + '%', 'a turn, ticket or ask of its own running'])
+  }
   const p = d.plan
   return `
   <section class="panel">
@@ -447,7 +474,7 @@ function entityView() {
 
   ${e.decisionsDaily ? `<div class="grid2"><section class="panel"><div class="head"><h3>Decisions per day</h3></div><div class="chart" id="eDec"></div></section>
     <section class="panel"><div class="head"><h3>Its tickets</h3></div><div class="chart" id="eTk"></div></section></div>
-    <div class="grid2"><section class="panel"><div class="head"><h3>Plan</h3>${p ? `<span class="small muted">updated ${ago(p.updatedAt)}</span>` : ''}</div>${p ? `<p><strong>Focus.</strong> ${esc(p.focus)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong> <span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol><ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : t.status === 'done' ? 'good' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}</span></li>`).join('')}</ul>` : '<p class="empty">No plan written yet.</p>'}</section>
+    <div class="grid2"><section class="panel"><div class="head"><h3>Plan</h3>${p ? `<span class="small muted">updated ${ago(p.updatedAt)}</span>` : ''}</div>${p ? `<p><strong>Focus.</strong> ${esc(p.focus)}</p><ol>${p.priorities.map(x => `<li><strong>${esc(x.text)}</strong> <span class="small muted">${esc(x.why)}</span></li>`).join('')}</ol><ul>${p.todo.map(t => `<li><span class="pill ${t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'bad' : t.status === 'done' ? 'good' : ''}">${esc(t.status)}</span> ${esc(t.text)} <span class="small muted">${esc(t.owner)}${t.workstream ? ' · ' + esc(t.workstream) : ''}${t.dependsOn && t.dependsOn.length ? ' · after ' + t.dependsOn.map(id => esc((p.todo.find(x => x.id === id) || { text: id }).text.slice(0, 40))).join(', ') : ''}${t.ticket && !t.ref ? ' · opens its ticket when ready' : ''}${t.note ? ' · ' + esc(t.note) : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No plan written yet.</p>'}</section>
     <section class="panel"><div class="head"><h3>Last decisions and why</h3></div><div class="rows">${(d.decisions || []).map(x => `<div class="msg"><div class="by">${when(x.at)}</div>${esc(x.note)}</div>`).join('') || '<p class="empty">None yet.</p>'}</div></section></div>` : ''}
 
   ${e.ref === 'workers' || (d.tickets && !e.decisionsDaily) ? `<section class="panel"><div class="head"><h3>Tickets</h3></div>${(d.tickets || []).length ? table(['Ticket', 'State', 'Turns'], d.tickets.map(t => [t.title, t.outcome || t.status, t.turns])) : '<p class="empty">None.</p>'}</section>` : ''}
