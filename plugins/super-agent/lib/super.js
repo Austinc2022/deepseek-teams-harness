@@ -28,6 +28,7 @@ import { recordMetrics } from './board.js'
 import { Growth, GAP } from './growth.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
+import { Desk } from './desk.js'
 import { MemoryKeeper } from './dream.js'
 import { withMemory } from '../../agent-forge/lib/memctx.js'
 import { purposeSlug } from '../../agent-forge/lib/memory.js'
@@ -120,6 +121,10 @@ const ALL_TOOLS = [
     todo: { type: 'array', description: 'at most 30 concrete items, including the steps after the current ones so they can start the moment they are unblocked', items: PLAN_ITEM },
     blockers: { type: 'array', items: S, description: 'what stops progress now, each with what would remove it' },
     waitingOnOwner: { type: 'array', items: S, description: 'what you need from the owner, or empty' },
+    outcome: { type: 'string', description: 'what the result will be if this plan works, in one or two plain sentences the owner can check later' },
+    expectedBy: { type: 'string', description: 'when you expect that result: a date (YYYY-MM-DD) or "unknown". Say unknown when it cannot be estimated; do not guess' },
+    pctComplete: { type: 'number', description: 'how far along you are toward your goal, 0 to 100, your honest estimate' },
+    pctBasis: { type: 'string', description: 'how you arrived at pctComplete, in one sentence' },
   }, ['focus', 'priorities', 'todo']),
   tool('plan_items', 'Change single items of your plan: add new ones (with dependencies and, for build work, a ticket that opens by itself when they are done), update the status or note of existing ones, remove finished ones. Prefer this to update_plan when only items change: your other threads may be editing the plan at the same time.', {
     add: { type: 'array', items: PLAN_ITEM }, update: { type: 'array', items: { type: 'object', properties: { id: S, status: { type: 'string', enum: ['todo', 'doing', 'blocked', 'done'] }, note: S, text: S, owner: S, dependsOn: A }, required: ['id'] } }, remove: A,
@@ -181,6 +186,7 @@ export class SuperAgent {
     // the engine runner and the patch installer exist only for profiles that have an engine (quant)
     this.ops = P.hasEngine ? new EngineOps(this) : new NullOps()
     this.changes = P.hasEngine ? new Changes(this) : new NullChanges()
+    this.desk = new Desk(this)
     // evals are keyed "<leader>|<lane>": one turn per thread, several threads per leader
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
     this.memory = new MemoryKeeper(this)
@@ -227,6 +233,7 @@ export class SuperAgent {
     try {
       if (!this.recovered) { this.#recover(); this.recovered = true }
       for (const c of this.store.takeCommands()) { try { this.#command(c) } catch (e) { this.log(`command ${c.type}: ${e.message}`) } }
+      try { this.#runSchedules() } catch (e) { this.log(`schedules: ${e.message}`) }
       const s = this.store.read()
       if (!s.agents.length) return
       await this.ops.ensure().catch(e => this.log(`engine: ${e.message}`))
@@ -293,6 +300,9 @@ export class SuperAgent {
     }
     for (const a of s.agents) {
       if (a.paused) continue
+      if (a.plan && a.plan.outcome === undefined) {
+        this.trigger({ key: `plan:v2:${a.id}`, source: 'system', kind: 'extend-your-plan', to: a.id, text: 'The owner now reads three more things on your dashboard page: the result your plan will produce (outcome), when you expect it (expectedBy: a date, or "unknown" when you cannot estimate it honestly), and how far along you are toward your goal (pctComplete, 0 to 100, with pctBasis). Rewrite your plan once with update_plan and fill these in. Keep everything else as it is unless it is out of date.' })
+      }
       if (a.plan && !a.plan.v3) {
         this.store.update(x => { const y = x.agents.find(z => z.id === a.id); if (y?.plan) y.plan.v3 = true })
         this.trigger({ key: `plan:v3:${a.id}`, source: 'system', kind: 'work-in-parallel', to: a.id, text: 'New: you now work in parallel and plan ahead. Several of your turns can run at once (one per thread); asks to agents and critiques run in the background; worker slots are shared fairly between the leaders. Rewrite your plan once with update_plan: list the next steps after the current ones too, give items dependencies (dependsOn), give build work a ready ticket so it opens by itself when its dependencies are done, and group items into workstreams. Then start every independent item that is ready now.' })
@@ -303,9 +313,37 @@ export class SuperAgent {
   }
 
   // ---------------- commands (owner actions, from any process)
+  /** The text of an owner instruction about a unit that is not itself a super agent: the responsible super agent carries it out. */
+  ownerText(ref, name, text) {
+    if (ref.startsWith('sa:')) return text
+    return `The owner asks, about "${name}" (${ref}): ${text}\nCarry it out through your tools (delegate, ask_team, ask_agent, open_ticket, update_agent) and tell the owner what you did.`
+  }
+
+  #runSchedules() {
+    const t = now()
+    const due = this.store.read().schedules.filter(x => x.status === 'active' && x.at <= t)
+    if (!due.length) return
+    const owner = ref => { const s = this.store.read(); return ref.startsWith('sa:') && s.agents.some(a => `sa:${a.id}` === ref) ? ref.slice(3) : s.agents.find(a => !a.parent)?.id ?? 'ceo' }
+    for (const x of due) this.trigger({ key: `sched:${x.id}:${x.at}`, source: 'owner', kind: 'scheduled', to: owner(x.ref), text: `Scheduled by the owner for "${x.name ?? x.ref}" (set ${x.createdAt?.slice(0, 16)}):\n${this.ownerText(x.ref, x.name ?? x.ref, x.text)}` })
+    this.store.update(s => {
+      for (const x of due) {
+        const y = s.schedules.find(z => z.id === x.id)
+        if (!y) continue
+        y.runs = (y.runs ?? 0) + 1; y.lastRunAt = now()
+        if (y.everyMin) { let at = new Date(y.at).getTime(); while (at <= Date.now()) at += y.everyMin * 60_000; y.at = new Date(at).toISOString() } else y.status = 'done'
+      }
+    })
+  }
+
   #command(c) {
     if (c.type === 'dream-now') { this.memory.forceNext = true; return }
-    if (c.type === 'say') {
+    if (c.type === 'schedule-add') {
+      const at = new Date(c.at)
+      if (Number.isNaN(at.getTime()) || !str(c.text, 1500).trim()) return
+      this.store.update(s => { if (s.schedules.filter(x => x.status === 'active').length < 60) s.schedules.push({ id: newId('s'), ref: String(c.ref), name: str(c.name, 120), text: str(c.text, 1500).trim(), at: at.toISOString(), everyMin: c.everyMin ? Number(c.everyMin) : null, status: 'active', createdAt: now(), runs: 0 }) })
+    } else if (c.type === 'schedule-cancel') {
+      this.store.update(s => { const x = s.schedules.find(y => y.id === c.id); if (x) x.status = 'cancelled' })
+    } else if (c.type === 'say') {
       const text = str(c.text, 8000).trim()
       if (!text) return
       const to = this.store.read().agents.some(a => a.id === c.to) ? c.to : 'ceo'

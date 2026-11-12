@@ -307,6 +307,10 @@ export function makeProfile(spec) {
 
   const allowedProvider = P.models.provider === 'claude-code' ? undefined : P.models.provider
   P.modelFields = model => ({ provider: allowedProvider ?? 'claude-code', model })
+  // the auditor is a different model on purpose: when its model is not one of the provider's, it stays on Claude Code
+  P.auditorFields = () => ((P.models.choices ?? []).includes(P.models.auditor) ? P.modelFields(P.models.auditor) : { provider: 'claude-code', model: P.models.auditor })
+  // a profile that names an existing agent as its auditor owns that agent's file: setup never rewrites it
+  P.auditorIsExisting = !!spec.auditorName
 
   /** Read-only analyst: the template every company agent and every analyst hire gets. */
   P.baseAgent = extra => ({
@@ -411,7 +415,7 @@ ${P.superRules}`,
   const has = n => P.agents.some(a => a.name === n)
   // the roles the engine relies on, when the spec does not define them
   if (!has(P.auditorName)) P.agents.push(P.baseAgent({
-    name: P.auditorName, ...P.modelFields(P.models.auditor), memory: { mode: 'none' }, maxTurns: 30,
+    name: P.auditorName, ...P.auditorFields(), memory: { mode: 'none' }, maxTurns: 30,
     description: 'Independent auditor: scores deliverables and hires against the charter; a different model from the builders on purpose.',
     role: `You are the independent auditor of ${P.companyName}. You judge deliverables, skills and proposals you did not make. Be specific: name the file and the defect. Score against the rubric you are given, not against effort. A generous score that later fails in front of customers is the worst outcome for the company.\n\n${P.hardRules}`,
   }))

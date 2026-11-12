@@ -66,3 +66,6 @@ forge/super-agent/
 forge/agents/vr-*.yaml
 forge/teams/vr-*.yaml
 forge/agents/*.yaml.bak
+
+# Company knowledge store (SQLite, runtime data)
+forge/knowledge/

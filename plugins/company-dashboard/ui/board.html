@@ -136,6 +136,43 @@ button.plain { font: inherit; border: 1px solid var(--line); background: var(--p
 .msg .by { font-size: 12px; color: var(--muted); white-space: normal }
 .rows { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow: auto }
 .md-pre { max-height: 240px; overflow: auto; background: var(--soft); border-radius: 6px; padding: 8px; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 }
+
+.pbar { height: 10px; background: var(--soft); border-radius: 999px; overflow: hidden } .pbar i { display: block; height: 100%; background: var(--s3); border-radius: 999px; min-width: 2px }
+.pbar.alt i { background: var(--s4) }
+.prog { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center }
+.prog .big { font: 700 30px/1 var(--mono); font-variant-numeric: tabular-nums }
+.prog .big.na { font-size: 16px; color: var(--muted); font-weight: 600 }
+.prog .sub { grid-column: 1 / -1 }
+.goal { font-size: 15px; line-height: 1.4; max-width: 90ch; white-space: pre-line }
+.checks { list-style: none; padding: 0; display: grid; gap: 3px 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)) }
+.checks li { display: flex; gap: 8px; align-items: baseline } .checks .t { font-family: var(--mono); width: 14px; flex: none; color: var(--muted) } .checks .y .t { color: var(--good) }
+.nx { list-style: none; padding: 0 } .nx li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.kpis { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)) }
+.kpis > div { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; background: var(--bg) }
+.kpis .v { font: 650 20px/1.2 var(--mono); font-variant-numeric: tabular-nums }
+details.agent { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg) } details.agent > summary { color: var(--ink); font-size: 13px; font-weight: 600 }
+details.agent .blk { display: flex; flex-direction: column; gap: 6px; margin-top: 10px }
+.tagc { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; margin: 0 4px 3px 0; color: var(--muted) }
+.note { border-left: 3px solid var(--line); padding: 2px 0 2px 10px } .note summary { color: var(--ink) }
+#chat { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 16px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100vw - 32px) }
+#chat .fab { font: inherit; font-weight: 650; border: 0; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.25) }
+#chat .box { width: min(420px, calc(100vw - 32px)); height: min(580px, 80vh); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.3); display: flex; flex-direction: column; overflow: hidden }
+#chat .ch { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line) }
+#chat .cm { flex: 1; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px }
+#chat .b { max-width: 88%; padding: 7px 10px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--soft) }
+#chat .b.me { align-self: flex-end; background: var(--accent); color: #fff }
+#chat .b.sys { align-self: center; background: none; color: var(--muted); font-size: 12px; text-align: center }
+#chat .who { font-size: 11px; color: var(--muted); margin-bottom: 2px }
+#chat .b.me .who { color: rgba(255,255,255,.8) }
+#chat .used { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px }
+#chat .used span { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--muted); background: var(--panel) }
+#chat form { border-top: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; gap: 6px }
+#chat textarea { font: inherit; resize: none; width: 100%; height: 62px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--ink) }
+#chat .row { display: flex; justify-content: space-between; align-items: center; gap: 8px }
+#chat .chips { display: flex; flex-wrap: wrap; gap: 5px }
+#chat .chips button { font: inherit; font-size: 11px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 2px 8px; cursor: pointer }
+#chat button.send { font: inherit; font-weight: 650; border: 0; background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer } #chat button:disabled { opacity: .5; cursor: default }
+@media (max-width: 560px) { #chat .box { height: 78vh } }
 </style>
 </head>
 <body>
@@ -146,6 +183,7 @@ button.plain { font: inherit; border: 1px solid var(--line); background: var(--p
   </header>
   <div id="view"></div>
 </div>
+<aside id="chat" aria-label="Chat"></aside>
 <dialog id="dlg"><div class="dh"><strong id="dlgT"></strong><button class="plain" id="dlgX">Close</button></div><pre id="dlgB"></pre></dialog>
 <div id="tip" hidden></div>
 
@@ -162,6 +200,13 @@ let B = null, E = null, hours = 24, lastHTML = ''
 
 async function api(path) {
   const r = await fetch('api/' + path, { headers: { 'x-company-request': '1' } })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || ('request failed: ' + r.status))
+  return j
+}
+
+async function post(path, body) {
+  const r = await fetch('api/' + path, { method: 'POST', headers: { 'x-company-request': '1', 'content-type': 'application/json' }, body: JSON.stringify(body || {}) })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(j.error || ('request failed: ' + r.status))
   return j
@@ -497,6 +542,9 @@ function entityView() {
     <div class="facts">${tiles.map(([a, v, c]) => `<div><span class="small muted">${esc(a)}</span><span class="v">${esc(v)}</span><span class="small muted">${esc(c)}</span></div>`).join('')}</div>
   </section>
 
+  ${outlookPanel(e)}
+  ${kpiPanel(e)}
+
   ${hasKids ? `<section class="panel"><div class="head"><h2>Inside ${esc(e.name)}</h2></div>${treeLegend}<div class="treewrap"><div class="tree"><ul>${treeHTML([self.key], 2)}</ul></div></div></section>` : ''}
 
   <div class="grid3">
@@ -529,7 +577,7 @@ function entityView() {
     <section class="panel"><div class="head"><h3>History</h3></div><div class="rows">${(e.timeline || []).map(x => `<div class="msg"><div class="by">${when(x.ts)} · <strong>${esc(x.kind)}</strong></div>${esc(x.text)}</div>`).join('') || '<p class="empty">Nothing recorded for it yet.</p>'}</div></section>
   </div>
 
-  ${d.role ? `<section class="panel"><div class="head"><h3>Its instructions, skills and tools</h3><span class="small muted">${esc(d.provider || '')} · ${esc(d.model || '')} · ${d.canWrite ? 'can write and run code in a sandboxed ticket folder' : 'read-only'}</span></div><p class="small">Skills: ${esc((d.skills || []).join(', ') || 'none')} · Tools: ${esc((d.tools || []).join(', ') || 'none')}${(d.teams || []).length ? ' · Teams: ' + esc(d.teams.join(', ')) : ''}</p><pre class="md-pre">${esc(d.role)}</pre></section>` : ''}`
+  ${madePanel(e)}`
 }
 function entityCharts() {
   const e = E, now = new Date(), hr = i => String(new Date(now.getTime() - (23 - i) * 3600000).getHours()).padStart(2, '0')
@@ -543,6 +591,128 @@ function entityCharts() {
   gantt($('eGantt'), e.activity)
   if (e.funnel) hbars($('eFunnel'), e.funnel.map(f => ({ label: SLx()[f.stage] || f.stage, value: f.n, color: f.stage === 'killed' ? 'var(--muted)' : f.stage === GATED() ? 'var(--s3)' : 'var(--s1)' })))
   if (e.decisionsDaily) { bars($('eDec'), e.decisionsDaily.map(d => ({ label: d.date.slice(5), value: d.n })), { h: 140 }); hbars($('eTk'), e.ticketOutcomes.map(t => ({ label: t.label, value: t.n })), { color: 'var(--s3)' }) }
+}
+
+
+// ---------------- goal, progress, timeline, next steps, outcome, KPIs
+function outlookPanel(e) {
+  const o = e.outlook; if (!o) return ''
+  const p = o.progress, sec = p.secondary
+  const parts = (p.parts || []).length ? ((p.parts[0].done !== undefined)
+    ? `<details><summary>${p.parts.filter(x => x.done).length} of ${p.parts.length} done: show every step</summary><ul class="checks" style="margin-top:8px">${p.parts.map(x => `<li class="${x.done ? 'y' : ''}"><span class="t">${x.done ? '✓' : '○'}</span><span>${esc(x.label)}${x.detail ? `<br><span class="small muted">${esc(x.detail)}</span>` : ''}</span></li>`).join('')}</ul></details>`
+    : `<p class="small">${p.parts.map(x => `<span class="tagc">${esc(x.label)} <strong class="num">${x.n}</strong></span>`).join('')}</p>`) : ''
+  const eta = o.eta
+  return `
+  <section class="panel">
+    <div class="head"><h2>Goal and progress</h2><span class="small muted">every figure says how it was measured</span></div>
+    <p class="goal">${esc(o.goal.text || 'No goal written for this unit.')}</p>
+    <div class="prog">
+      <div class="big num ${p.pct == null ? 'na' : ''}">${p.pct == null ? 'Not measurable' : p.pct + '%'}</div>
+      <div><div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.pct ?? 0}"><i style="width:${Math.max(0, Math.min(100, p.pct ?? 0))}%"></i></div><div class="small" style="margin-top:3px"><strong>${esc(p.label)}</strong></div></div>
+      <div class="sub small muted">${esc(p.basis)}</div>
+    </div>
+    ${sec ? `<div class="prog"><div class="big num" style="font-size:20px">${sec.pct}%</div><div><div class="pbar alt"><i style="width:${Math.max(0, Math.min(100, sec.pct))}%"></i></div><div class="small" style="margin-top:3px"><strong>${esc(sec.label)}</strong></div></div><div class="sub small muted">${esc(sec.basis)}</div></div>` : ''}
+    ${o.note ? `<p class="small muted">${esc(o.note)}</p>` : ''}
+    ${parts}
+    <div class="grid3">
+      <div><h3>Estimated timeline</h3><p>${esc(eta.text)}${eta.date ? `<br><span class="num">${when(eta.date)}</span>` : ''}</p>${eta.basis ? `<p class="small muted">${esc(eta.basis)}</p>` : ''}</div>
+      <div><h3>Expected outcome</h3><p style="white-space:pre-line">${esc(o.outcome.text)}</p>${o.outcome.basis ? `<p class="small muted">${esc(o.outcome.basis)}</p>` : ''}</div>
+      <div><h3>What to do next</h3>${o.next.length ? `<ul class="nx">${o.next.map(x => `<li><span class="pill ${/^(working|doing|next)/.test(x.status) ? 'info' : /blocked|blocker/.test(x.status) ? 'bad' : ''}">${esc(x.status)}</span><span>${esc(x.text)}${x.note ? `<br><span class="small muted">${esc(x.note)}</span>` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">Nothing queued.</p>'}</div>
+    </div>
+    ${o.schedules.length ? `<div><h3>Scheduled by you</h3><ul class="nx">${o.schedules.map(x => `<li><span class="num">${when(x.at)}${x.everyHours ? ' · every ' + x.everyHours + ' h' : ''}</span><span>${esc(x.text)}</span><button class="link" data-cancel="${esc(x.id)}">cancel</button></li>`).join('')}</ul></div>` : ''}
+  </section>`
+}
+function kpiPanel(e) {
+  const o = e.outlook; if (!o || !o.kpis.length) return ''
+  return `<section class="panel"><div class="head"><h2>KPIs</h2><span class="small muted">from recorded runs, last 14 days unless stated</span></div><div class="kpis">${o.kpis.map(k => `<div><span class="small muted">${esc(k.label)}</span><span class="v">${esc(k.value)}</span><span class="small muted">${esc(k.sub || '')}</span></div>`).join('')}</div></section>`
+}
+function madePanel(e) {
+  const m = e.made; if (!m || !m.setup.length) return ''
+  const mem = Object.fromEntries(m.memory.map(x => [x.agent, x]))
+  const one = m.setup.length === 1
+  const blocks = m.setup.map(a => {
+    const x = mem[a.name] || { notes: [], journal: [], noteCount: 0, mode: 'none' }
+    return `<details class="agent" ${one ? 'open' : ''}>
+      <summary>${esc(a.name)} <span class="small muted">· ${esc(a.provider)}/${esc(a.model)} · ${a.skills.length} skills · ${x.mode === 'none' ? 'no memory' : x.noteCount + ' notes'} · ${a.canWrite ? 'can write and run code' : 'read-only'}</span></summary>
+      <div class="blk">
+        ${a.description ? `<p class="small muted">${esc(a.description)}</p>` : ''}
+        <h3>Instructions</h3><pre class="md-pre">${esc(a.role)}</pre>
+        <h3>Skills</h3>${a.skills.length ? `<ul>${a.skills.map(k => `<li><strong>${esc(k.name)}</strong>${k.description ? ` <span class="small muted">${esc(k.description)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="empty">None. Ask it in the chat to install or add skills.</p>'}
+        <h3>Tools</h3><p class="small">Allowed: ${esc(a.tools.join(', ') || 'none')}${a.disallowedTools.length ? `<br>Blocked: ${esc(a.disallowedTools.join(', '))}` : ''}${a.mcp.length ? `<br>Extra tool servers: ${esc(a.mcp.join(', '))}` : ''}</p>
+        <h3>Settings</h3><p class="small muted">Effort ${esc(a.effort || 'default')} · up to ${esc(a.maxTurns ?? '?')} turns per task · permission ${esc(a.permission || 'default')}${a.project ? ' · project ' + esc(a.project) : ''}${a.folders.length ? '<br>Folders: ' + esc(a.folders.join(', ')) : ''}${a.tags.length ? '<br>' + a.tags.map(t => `<span class="tagc">${esc(t)}</span>`).join('') : ''}</p>
+        <h3>Memory <span class="small muted">${x.mode === 'none' ? 'off for this agent' : esc(x.mode) + ' · ' + esc(x.scope || '')}</span></h3>
+        ${x.notes.length ? x.notes.map(n => `<details class="note"><summary>${esc(n.title)} <span class="small muted">${n.updated ? when(n.updated) : ''}</span></summary>${(n.tags || []).map(t => `<span class="tagc">${esc(t)}</span>`).join('')}<pre class="md-pre">${esc(n.body)}</pre></details>`).join('') : `<p class="empty">${x.mode === 'none' ? 'It keeps no notes. Tell it to remember something in the chat and memory is switched on for it.' : 'No notes yet.'}</p>`}
+        ${x.journal.length ? `<details><summary>What it did recently (${x.journalCount} entries)</summary><div class="rows" style="margin-top:6px">${x.journal.map(j => `<div class="msg"><div class="by">${when(j.ts)} · ${esc(j.label || '')} · ${j.ok ? 'done' : 'failed'}</div>${esc(j.outcome)}</div>`).join('')}</div></details>` : ''}
+      </div></details>`
+  }).join('')
+  return `<section class="panel"><div class="head"><h2>${one ? 'Its setup and memory' : 'Setup and memory of its agents'}</h2><span class="small muted">instructions, skills, tools, settings, notes</span></div>${blocks}</section>`
+}
+
+// ---------------- chat: runs beside their work, never queues behind it
+const CH = { ref: null, data: null, open: false, busy: false, drafts: {}, timer: null, err: '' }
+try { CH.open = localStorage.getItem('deskChatOpen') === '1' } catch {}
+const chatRefNow = () => route()
+function chatChips() {
+  return ['What are you working on and how far along are you?', 'What will you do next, and when?', 'Remember: ', 'Schedule: ', 'Which skills do you have? Which would help?'].map(t => `<button type="button" data-chip="${esc(t)}">${esc(t.length > 30 ? t.slice(0, 28) + '…' : t)}</button>`).join('')
+}
+function chatShell() {
+  const d = CH.data, host = $('chat')
+  if (!CH.open) { host.innerHTML = `<button class="fab" id="cOpen">Chat${d ? ' with ' + esc(d.title) : ''}${d && d.busy ? ' …' : ''}</button>`; $('cOpen').onclick = () => { CH.open = true; try { localStorage.setItem('deskChatOpen', '1') } catch {}; chatShell(); chatLoad(true) }; return }
+  host.innerHTML = `<div class="box">
+    <div class="ch"><div><strong id="cT"></strong><div class="small muted" id="cS"></div></div><div><button class="plain" id="cClr" title="Delete this conversation (memory notes stay)">Clear</button> <button class="plain" id="cX" aria-label="Close chat">Close</button></div></div>
+    <div class="cm" id="cM" aria-live="polite"></div>
+    <form id="cF"><div class="chips" id="cC">${chatChips()}</div><textarea id="cIn" placeholder="Ask a question, give a task, schedule, memorise, or change skills. Enter sends, Shift+Enter adds a line." maxlength="6000"></textarea>
+      <div class="row"><span class="small muted">Runs beside their work. It does not interrupt it.</span><span><button type="button" class="plain" id="cStop" hidden>Stop</button> <button class="send" id="cSend">Send</button></span></div></form></div>`
+  $('cX').onclick = () => { CH.open = false; try { localStorage.setItem('deskChatOpen', '0') } catch {}; chatShell() }
+  $('cClr').onclick = async () => { if (!CH.data || !confirm('Delete this conversation?')) return; try { await post('super/chat/clear', { ref: CH.ref }); CH.data.messages = []; chatPaint(true) } catch (e) { alertText(e.message) } }
+  $('cStop').onclick = async () => { try { await post('super/chat/stop', { ref: CH.ref }); chatLoad(true) } catch (e) { alertText(e.message) } }
+  const ta = $('cIn'); ta.value = CH.drafts[CH.ref] || ''
+  ta.oninput = () => { CH.drafts[CH.ref] = ta.value }
+  ta.onkeydown = ev => { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); chatSend() } }
+  $('cF').onsubmit = ev => { ev.preventDefault(); chatSend() }
+  $('cC').onclick = ev => { const b = ev.target.closest('[data-chip]'); if (!b) return; ta.value = b.dataset.chip; ta.oninput(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
+  chatPaint(true)
+}
+function chatPaint(stick) {
+  const d = CH.data; if (!CH.open || !$('cM')) return
+  $('cT').textContent = d ? 'Chat with ' + d.title : 'Chat'
+  $('cS').textContent = d ? `${d.type} · answers as ${d.voice}` : (CH.err || 'Loading…')
+  const m = $('cM'), atEnd = stick || m.scrollHeight - m.scrollTop - m.clientHeight < 40
+  const rows = (d ? d.messages : []).map(x => x.from === 'owner'
+    ? `<div class="b me"><div class="who">You${x.status === 'queued' ? ' · waiting' : ''}</div>${esc(x.text)}</div>`
+    : x.from === 'system' ? `<div class="b sys">${esc(x.text)}</div>`
+    : `<div class="b"><div class="who">${esc(x.agent || 'Agent')} · ${when(x.ts)}</div>${esc(x.text)}${(x.tools || []).length ? `<div class="used">${x.tools.map(t => `<span title="${esc(t.arg || '')}">${esc(t.tool)}</span>`).join('')}</div>` : ''}</div>`)
+  if (d && d.busy) rows.push(`<div class="b sys">${esc(d.voice)} is replying. Its normal work carries on meanwhile.</div>`)
+  if (!rows.length) rows.push('<div class="b sys">Ask how it is doing, how far along it is, or tell it what to do. Say "remember …" to store a note, "schedule …" to plan something, or ask it to install or change skills.</div>')
+  m.innerHTML = rows.join('')
+  if (atEnd) m.scrollTop = m.scrollHeight
+  $('cStop').hidden = !(d && d.busy)
+  $('cSend').disabled = CH.busy
+}
+async function chatSend() {
+  const ta = $('cIn'); if (!ta || CH.busy) return
+  const text = ta.value.trim(); if (!text) return
+  CH.busy = true; $('cSend').disabled = true
+  try {
+    await post('super/chat', { ref: CH.ref, text })
+    ta.value = ''; CH.drafts[CH.ref] = ''
+    await chatLoad(true)
+  } catch (e) { alertText(e.message) }
+  CH.busy = false; if ($('cSend')) $('cSend').disabled = false
+}
+async function chatLoad(stick) {
+  const r = chatRefNow()
+  try {
+    const d = await api('super/chat?ref=' + encodeURIComponent(r))
+    if (chatRefNow() !== r) return
+    const changed = CH.ref !== r
+    CH.data = d; CH.ref = r; CH.err = ''
+    if (changed || !$('cM')) chatShell(); else chatPaint(stick)
+  } catch (e) { CH.err = e.message; CH.data = null; CH.ref = r; if (CH.open) { if (!$('cM')) chatShell(); chatPaint(false) } else chatShell() }
+}
+function chatLoop() {
+  clearTimeout(CH.timer)
+  chatLoad(false).finally(() => { CH.timer = setTimeout(chatLoop, CH.data && (CH.data.busy || CH.data.queued) ? 1500 : 7000) })
 }
 
 // ---------------- routing and loading
@@ -574,13 +744,17 @@ async function load() {
     B = b; E = e; render()
   } catch (err) { $('mission').textContent = 'Cannot load: ' + err.message + '. If the portal was restarted, reload this page.' }
 }
-window.addEventListener('hashchange', () => { E = null; lastHTML = ''; window.scrollTo(0, 0); $('view').innerHTML = '<p class="empty">Loading…</p>'; load() })
+window.addEventListener('hashchange', () => { chatLoad(true); E = null; lastHTML = ''; window.scrollTo(0, 0); $('view').innerHTML = '<p class="empty">Loading…</p>'; load() })
 document.addEventListener('click', async ev => {
   const t = ev.target.closest('[data-go],[data-h],[data-run]'); if (!t) return
   const d = t.dataset
   if (d.go) { location.hash = d.go === 'company' ? '' : encodeURIComponent(d.go); return }
   if (d.h) { hours = Number(d.h); lastHTML = ''; return load() }
   if (d.run) { try { const f = await api(`runs/${d.run}/file?path=${encodeURIComponent(d.file)}`); $('dlgT').textContent = d.file; $('dlgB').textContent = f.text; $('dlg').showModal() } catch (e) { alertText(e.message) } }
+})
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-cancel]'); if (!t) return
+  try { await post('super/schedules/cancel', { id: t.dataset.cancel }); t.textContent = 'cancelling…'; setTimeout(() => { lastHTML = ''; load() }, 1800) } catch (e) { alertText(e.message) }
 })
 function alertText(m) { $('dlgT').textContent = 'Could not open'; $('dlgB').textContent = m; $('dlg').showModal() }
 $('dlgX').onclick = () => $('dlg').close()
@@ -594,7 +768,7 @@ document.addEventListener('mousemove', e => {
   tip.style.top = Math.max(8, Math.min(window.innerHeight - r.height - 8, e.clientY + 14)) + 'px'
 })
 let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150) })
-load(); setInterval(load, 15000)
+load(); setInterval(load, 15000); chatShell(); chatLoop()
 </script>
 </body>
 </html>

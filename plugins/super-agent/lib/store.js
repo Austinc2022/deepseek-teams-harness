@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS = {
   ...P.scale,             // the active profile's scale (maxWorkers, maxTicketsPerDay, maxSuperAgents, ...)
 }
 
-const LISTS = ['agents', 'triggers', 'tickets', 'jobs', 'evals', 'feed']
+const LISTS = ['agents', 'triggers', 'tickets', 'jobs', 'evals', 'feed', 'schedules']
 
 export class Store {
   constructor(home) {
@@ -74,6 +74,7 @@ export class Store {
     s.feed = s.feed.slice(-400)
     s.evals = s.evals.slice(-200)
     s.jobs = s.jobs.slice(-200)
+    s.schedules = s.schedules.filter(x => x.status === 'active').concat(s.schedules.filter(x => x.status !== 'active').slice(-40))
     if (s.changes) s.changes = s.changes.slice(-60)
     s.updatedAt = now()
     s.settingsVersion = 3

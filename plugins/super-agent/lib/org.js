@@ -18,7 +18,7 @@ export const WORKER_RULES = P.workerRules
 const HARD_RULES = P.hardRules
 const AUDITOR = P.auditorName
 const MODELS = P.models.choices
-const PROTECTED = new Set([AUDITOR, WORKER, P.verifierName])
+export const PROTECTED = new Set([AUDITOR, WORKER, P.verifierName])
 
 export const superDef = ({ name, description, mission }) => P.superDef({ name, description, mission })
 export const workerDef = (extra = {}) => P.workerDef(extra)

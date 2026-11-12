@@ -8,6 +8,7 @@ import path from 'node:path'
 import { now, clip } from './store.js'
 import { progress, rightNow, orgView, who, timeline } from './views.js'
 import { profile as P } from '../../company/lib/profile.js'
+import { outlook, setupAndMemory, agentNames } from './outlook.js'
 
 const DAY = 86400_000
 const localDay = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -244,7 +245,7 @@ function stat(rows, set, totalCost) {
 }
 
 /** Who belongs to what. ref is the entity key used by the dashboard: company, sa:<id>, ceo, audit, dep:<id>, team:<name>, agent:<name>, workers. */
-function structure(sa) {
+export function structure(sa) {
   const org = orgView(sa)
   const sets = { company: new Set() }
   const meta = { company: { type: 'Company', name: 'The whole company', parent: null } }
@@ -422,6 +423,8 @@ export function entity(sa, ref, { hours = 24 } = {}) {
     status: k.busy ? 'working' : 'idle', doing: k.doing, kpi: { turnsToday: k.turnsToday, toolsToday: k.toolsToday, min24: k.min24, share: k.share, lastActive: k.lastActive, successRate: k.successRate, turns: k.turns, people: set.size },
     hourly: k.spark, days: k.days, members, activity, recent,
   }
+  out.outlook = outlook(sa, ref, { meta, set, k, rows })
+  out.made = setupAndMemory(sa, agentNames(sa, ref, meta, set))
   // what the desk already knows about this kind of thing
   const [type, id] = ref === 'company' ? ['company', 'company'] : ref.startsWith('sa:') ? ['super-agent', ref.slice(3)] : ref.startsWith('dep:') ? ['department', ref.slice(4)] : ref.startsWith('team:') ? ['team', ref.slice(5)] : ref.startsWith('agent:') ? ['agent', ref.slice(6)] : ref === 'ceo' ? ['agent', c.ceo] : ref === 'audit' ? ['agent', c.auditor] : [null, null]
   if (type) { try { const w = who(sa, type, id); out.what = w.what; out.description ||= w.description ?? ''; out.detail = { role: w.role, skills: w.skills, tools: w.tools, model: w.model, provider: w.provider, canWrite: w.canWrite, reportsTo: w.reportsTo, teams: w.teams, plan: w.plan, decisions: w.decisions, tickets: w.tickets, initiatives: w.initiatives, builds: w.builds, cycles: w.cycles, asks: w.asks }; out.timeline = (w.timeline ?? []).slice(0, 25) } catch (e) { out.what = '' } }

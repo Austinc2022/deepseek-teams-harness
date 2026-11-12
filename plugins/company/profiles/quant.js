@@ -201,7 +201,7 @@ const P = makeProfile({
   projectDir: QUANT,
   folders: [QUANT_REPORTS],
   superProject: { name: 'Crypto company', color: '#c2410c' },
-  models: { provider: 'deepseek', ceo: 'deepseek-v4-pro', lead: 'deepseek-v4-pro', worker: 'deepseek-v4-pro', fast: 'deepseek-flash', auditor: 'opus', choices: ['deepseek-v4-pro', 'deepseek-flash'], ceoEffort: 'high' },
+  models: { provider: 'claude-code', ceo: 'claude-opus-5-5', lead: 'claude-opus-5-5', worker: 'claude-opus-5-5', fast: 'claude-opus-5-5', auditor: 'claude-opus-5-5', choices: ['claude-opus-5-5'], ceoEffort: 'high' },
   auditorName: 'quant-red-team',
   stages: ['idea', 'research', 'model', 'rehearsal', 'gate', 'paper', 'live-request', 'killed'],
   agentStages: ['idea', 'research', 'model', 'rehearsal', 'gate', 'killed'],
@@ -332,7 +332,7 @@ How you work:
     review: 'Judge the results. Update each initiative you worked on (stage and your own probability that it ends up profitable in paper trading; you cannot set "paper", only the gate does). Write the brief for the owner in Markdown: 1) state of the company and the engine, 2) what was learned, with numbers and sample sizes, 3) what the gate executed or rejected and why, 4) honest odds for the north star, 5) what the next cycle will do. Add a question for the owner only if something needs the owner.',
     deptExtra: facts => `Validator state: ${facts.validator?.trialsSoFar} trials so far, so the next proposal needs P(better) >= ${facts.validator?.requiredConfidenceNext}. Engine folder: ${QUANT}. Research reports: see the folders in your instructions.`,
   },
-  migrate,
+  // migrate (old DeepSeek move) is off: since 2026-11-12 every quant agent runs on the Claude subscription, Opus 5.5
   resolveOrder,
   hasEngine: true,
   milestones: [

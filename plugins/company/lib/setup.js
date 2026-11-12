@@ -35,6 +35,7 @@ export function seed(co, { force = false, refreshAgents = false } = {}) {
   for (const a of P.agents) {
     // refreshAgents rewrites the profile's own agents (new role text, model, skills) and leaves teams, hires and state alone
     if (exists(a.name) && !force && !refreshAgents) continue
+    if (exists(a.name) && a.name === P.auditorName && P.auditorIsExisting) continue
     registry.saveAgent({ ...a, skills: (a.skills ?? []).filter(skillOk) })
     done.agents.push(a.name)
   }

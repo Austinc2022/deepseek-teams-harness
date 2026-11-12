@@ -18,6 +18,11 @@ export async function handleSuper(sa, method, p, body, query) {
   if (method === 'POST' && p === '/api/super/engine') return sa.store.command({ type: 'engine', action: (await body()).on === true ? 'start' : 'stop' })
   if (method === 'GET' && p === '/api/super/board') return board(sa, { hours: query.get('hours') || 24 })
   if (method === 'GET' && p === '/api/super/entity') return entity(sa, query.get('ref') ?? 'company', { hours: query.get('hours') || 24 })
+  if (method === 'GET' && p === '/api/super/chat') return sa.desk.read(query.get('ref') ?? 'company')
+  if (method === 'POST' && p === '/api/super/chat') { const b = await body(); return sa.desk.post(String(b.ref ?? 'company'), b.text) }
+  if (method === 'POST' && p === '/api/super/chat/stop') return sa.desk.stop(String((await body()).ref ?? ''))
+  if (method === 'POST' && p === '/api/super/chat/clear') return sa.desk.clear(String((await body()).ref ?? ''))
+  if (method === 'POST' && p === '/api/super/schedules/cancel') return sa.store.command({ type: 'schedule-cancel', id: String((await body()).id ?? '') })
   if (method === 'GET' && p === '/api/super/org') return orgView(sa)
   if (method === 'GET' && p === '/api/super/people') return people(sa)
   if (method === 'GET' && p === '/api/super/who') return who(sa, query.get('type') ?? '', query.get('id') ?? '')
