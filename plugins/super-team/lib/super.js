@@ -40,6 +40,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { runNamed, renderTemplate } from '../../agent-forge/lib/engine.js'
+import { withTarget } from '../../agent-forge/lib/targets.js'
 
 export const SUPER_MODES = ['auto', 'sequential', 'parallel', 'mention', 'handoff', 'workflow']
 export const TEAM_MODES = ['sequential', 'parallel', 'mention', 'handoff', 'workflow']
@@ -288,6 +289,8 @@ export class SuperTeams {
     if (b.workflow !== undefined) { if (b.workflow) this.registry.orchestrationFile(str(b.workflow, 80)); s.workflow = b.workflow ? str(b.workflow, 80) : undefined }
     if (b.workflowArgs !== undefined) s.workflowArgs = this.#args(b.workflowArgs)
     if (b.instructions !== undefined) s.instructions = str(b.instructions, 8000).trim() || undefined
+    // execution target for the sandboxed builders of its teams (docs/EXECUTION-TARGETS.md); a team's own target wins
+    if (b.target !== undefined) { const t = str(b.target, 48).trim(); if (t && !/^[a-z][a-z0-9-]{0,47}$/.test(t)) throw new Error('target must be the name of an execution target'); s.target = t || undefined }
     return s
   }
 
@@ -349,10 +352,10 @@ export class SuperTeams {
     const patch = fn => this.#patchMsg(id, reply.id, fn)
     const t0 = Date.now()
     const { id: runId, done } = this.engine.startCustom(`super: ${s.title}`.slice(0, 80),
-      (api, state) => runSuper({
+      (api, state) => withTarget(snapshot.target, () => runSuper({
         registry: this.registry, api, state, cfg: snapshot, text, history, patch, cwd: cwd ?? api.run.cwd,
         chats: this.chats, ensureChat: team => this.#ensureChat(id, team, cwd), superId: id,
-      }),
+      })),
       { message: text, mode: s.mode, teams: s.teams.map(t => t.team).join(', ') }, { cwd, meta: { superTeam: id } })
     this.live.set(id, runId)
     patch(m => { m.runId = runId })

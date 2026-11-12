@@ -43,6 +43,7 @@ export function apply(ctx) {
     if (p === '/' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(here, 'ui/index.html'), 'utf8'), 'text/html; charset=utf-8')
     if (p === '/board.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(here, 'ui/board.html'), 'utf8'), 'text/html; charset=utf-8')
     if (p === '/knowledge.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(here, 'ui/knowledge.html'), 'utf8'), 'text/html; charset=utf-8')
+    if ((p === '/advisory.html' || p === '/connections.html') && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(here, 'ui', p.slice(1)), 'utf8'), 'text/html; charset=utf-8')
     if (p.startsWith('/api/')) {
       if (req.headers['x-company-request'] !== '1' || !sameOrigin(req)) return send(res, 403, { error: 'forbidden' })
       try {

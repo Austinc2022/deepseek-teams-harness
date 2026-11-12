@@ -298,6 +298,19 @@ export function makeProfile(spec) {
   P.ceoName = P.name('ceo')
   P.auditorName = spec.auditorName ?? P.name('auditor')
   P.recruiterName = P.name('hr-recruiter')
+  /**
+   * The independent advisory team (plugins/super-agent/lib/advisory.js): reviews the whole company and advises the CEO.
+   * It reports to the owner (and the group headquarters), not to the CEO: nobody in the company can change it.
+   */
+  P.advisoryLeadName = P.name('advisory-lead')
+  P.advisoryTeamName = P.name('advisory')
+  P.advisors = (spec.advisors ?? [
+    { key: 'organisation', name: 'advisor-organisation', title: 'Organisation and setup', lens: 'the organisation and its setup: structure, reporting lines, staffing, roles that overlap or are missing, skills, tools, models and memory of the agents, and whether the organisation fits the goal' },
+    { key: 'performance', name: 'advisor-performance', title: 'Performance and KPIs', lens: 'performance and KPIs: unit scores and their trends, delivery and failure rates, reliability, cost per result, throughput, gate results, and whether the numbers move toward the goal' },
+    { key: 'strategy', name: 'advisor-strategy', title: 'Goals and strategy', lens: 'goals and strategy: the goal ladder, the plans of every leader, the direction, how realistic the timelines are, what to stop, start and continue' },
+    { key: 'governance', name: 'advisor-governance', title: 'Governance and risk', lens: 'governance and risk: the hard rules and the charter, budget discipline, owner-only matters, safety limits, and whether decisions and earlier advice are followed through' },
+  ]).map(a => ({ ...a, name: P.name(a.name) }))
+  P.advisoryNames = new Set([P.advisoryLeadName, ...P.advisors.map(a => a.name)])
   P.reviewerName = P.name('hr-reviewer')
   P.peopleLeadName = P.name('head-people')
   P.verifierName = P.name('qa-verifier')

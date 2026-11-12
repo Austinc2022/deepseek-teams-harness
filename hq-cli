@@ -1,0 +1,8 @@
+#!/bin/bash
+# Group headquarters CLI (standalone; does not need the harness running).
+#   ./hq-cli serve | status | invite "<for>" | listen on|off [--host H] [--port N] | name "<name>"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$PATH"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
+exec node "$ROOT/plugins/group-hq/bin/hq.js" "$@"

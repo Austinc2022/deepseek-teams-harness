@@ -1,0 +1,5 @@
+# Group headquarters: the HQ page under /hq on DSH's own web server (DSH login required), the public listener that
+# companies connect to (its own port, off until switched on), the group CEO and the review team.
+- insert:
+    - id: group-hq
+      name: '@local/group-hq'

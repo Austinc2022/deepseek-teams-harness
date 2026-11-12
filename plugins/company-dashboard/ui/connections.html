@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connections</title>
+<style>
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec;
+  --accent: #8a5a12; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding: 18px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0 } h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 } h3 { font-size: 14px; margin: 12px 0 6px }
+p { margin: 0 } .muted { color: var(--muted) } .small { font-size: 12px } code { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 0 4px; border-radius: 4px; overflow-wrap: anywhere }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 } button.bad { color: var(--bad) } button.good { color: var(--good) }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100% }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted) } label.inline { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 14px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end }
+.choice { display: flex; flex-direction: column; gap: 6px }
+.choice label { flex-direction: row; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer }
+.choice label.on { border-color: var(--accent) } .choice label span { display: flex; flex-direction: column } .choice small { color: var(--muted); font-size: 12px }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap }
+.ok { color: var(--good); border-color: var(--good) } .warn { color: var(--warn); border-color: var(--warn) } .fail { color: var(--bad); border-color: var(--bad) }
+.list { display: flex; flex-direction: column; gap: 8px } .item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
+.item .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px }
+.scroll { overflow-x: auto } table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top } th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650 }
+.note { background: var(--soft); border-radius: 8px; padding: 8px 10px; font-size: 13px }
+.err { color: var(--bad) }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Connections</h1><p class="muted small">Where this company reports (a group headquarters, on this computer or another one) and where its builders run (execution targets).</p></header>
+  <p id="error" class="err" hidden></p>
+  <div id="group"></div>
+  <div id="targets"></div>
+</div>
+<script>
+let g = null, t = null, testOut = {}, editing = null
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const ago = x => { if (!x) return 'never'; const m = Math.round((Date.now() - new Date(x)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago` }
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/super/' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+async function act(fn) { try { document.getElementById('error').hidden = true; await fn(); await load() } catch (e) { const el = document.getElementById('error'); el.textContent = e.message; el.hidden = false; el.scrollIntoView({ block: 'nearest' }) } }
+async function load() { try { [g, t] = await Promise.all([api('group'), api('targets')]); render() } catch (e) { document.getElementById('error').textContent = 'Could not load: ' + e.message; document.getElementById('error').hidden = false } }
+const AUTH = {
+  observe: ['Observe', 'The headquarters sees what you share below. Its directives are shown to you but nobody acts on them; its policies are not applied.'],
+  advise: ['Advise (recommended)', 'Directives reach your CEO as advice: it accepts or declines each one with a reason. Group policies are guidance.'],
+  direct: ['Direct', 'Directives reach your CEO as instructions it must carry out, or report blocked with the reason (you are told). The group\'s daily spend cap is enforced and its rules bind the leaders.'],
+}
+const authChoice = cur => `<div class="choice">${Object.entries(AUTH).map(([k, [n, why]]) => `<label class="${cur === k ? 'on' : ''}"><input type="radio" name="auth" value="${k}" ${cur === k ? 'checked' : ''} onchange="document.querySelectorAll('.choice label').forEach(l=>l.classList.toggle('on', l.querySelector('input').checked))"><span><b>${n}</b><small>${why}</small></span></label>`).join('')}</div>
+  <p class="muted small" style="margin-top:6px">Whatever you choose, real money, publishing, credentials and this company's charter stay your decisions.</p>`
+const shareBoxes = share => `<div class="row">${Object.entries(g.shareKeys).map(([k, n]) => `<label class="inline"><input type="checkbox" class="share" value="${k}" ${share[k] ? 'checked' : ''}> ${esc(n)}</label>`).join('')}</div><p class="muted small" style="margin-top:4px">The company's name, mission and whether its loop is running are always sent. Keys, credentials and files never are.</p>`
+const picked = () => document.querySelector('input[name=auth]:checked')?.value
+const shared = () => Object.fromEntries([...document.querySelectorAll('.share')].map(x => [x.value, x.checked]))
+
+function renderGroup() {
+  const el = document.getElementById('group')
+  if (!g.joined) {
+    el.innerHTML = `<div class="panel"><h2>Group headquarters</h2>
+      <p>This company is not part of a group. To join one, get an invite code and its address from the headquarters' owner (Headquarters page, Settings and invites).</p>
+      ${g.left ? `<p class="muted small" style="margin-top:4px">Left ${esc(g.left.hq?.name || g.left.hq?.url)} ${ago(g.left.at)}.</p>` : ''}
+      <div class="row" style="margin-top:10px"><label>Headquarters address<input id="j-url" style="width:330px" placeholder="https://hq.example.com:3095"></label><label>Invite code<input id="j-code" style="width:260px" placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX"></label><label>This company's name in the group<input id="j-name" value="${esc(g.name)}" style="width:220px"></label></div>
+      <h3>How much may the headquarters do?</h3>${authChoice('advise')}
+      <h3>What this company shares</h3>${shareBoxes(g.share)}
+      <p style="margin-top:10px"><button class="primary" onclick="act(()=>api('group/join','POST',{url:document.getElementById('j-url').value,code:document.getElementById('j-code').value,name:document.getElementById('j-name').value,authority:picked(),share:shared()}))">Join</button></p></div>`
+    return
+  }
+  const dcls = s => (['done', 'accepted'].includes(s) ? 'ok' : ['blocked', 'declined'].includes(s) ? 'fail' : s === 'new' ? 'warn' : '')
+  el.innerHTML = `<div class="panel"><h2>Group headquarters</h2>
+    <p><b>${esc(g.hq.name || g.hq.url)}</b> <span class="pill ${g.lastError ? 'fail' : 'ok'}">${g.lastError ? 'sync failing' : 'connected'}</span>${g.suspended ? ' <span class="pill warn">suspended by the headquarters</span>' : ''} <span class="muted small">${esc(g.hq.url)} · joined ${esc(g.joinedAt?.slice(0, 10))} · last sync ${ago(g.lastOkAt)}</span></p>
+    ${g.hq.mission ? `<p class="muted small" style="margin-top:4px">${esc(g.hq.mission)}</p>` : ''}
+    ${g.lastError ? `<p class="err small" style="margin-top:4px">Last sync: ${esc(g.lastError)}</p>` : ''}
+    ${g.insecure ? `<p class="note err" style="margin-top:6px">This address uses plain http outside a private network, so the company's key travels in clear. Ask the headquarters' owner for an https address, or connect over a VPN such as Tailscale.</p>` : ''}
+    <div class="grid" style="margin-top:10px"><div><h3>Authority (you decide)</h3>${authChoice(g.authority)}</div>
+      <div><h3>What this company shares</h3>${shareBoxes(g.share)}<div class="row" style="margin-top:8px"><label>Sync every (minutes)<input id="g-every" type="number" min="1" max="120" value="${esc(g.everyMinutes)}" style="width:90px"></label></div>
+      <h3>Group policies</h3>${g.policies && (g.policies.rules?.length || g.policies.maxDailyUsd != null) ? `<p class="small">Daily spend cap: ${g.policies.maxDailyUsd != null ? '$' + esc(g.policies.maxDailyUsd) : 'none'} ${g.spendCap != null ? '<span class="pill warn">enforced</span>' : g.authority === 'direct' ? '' : '<span class="pill">not enforced (' + esc(g.authority) + ')</span>'}</p>${(g.policies.rules ?? []).map(r => `<p class="small">• ${esc(r)}</p>`).join('')}${g.policies.note ? `<p class="small muted">${esc(g.policies.note)}</p>` : ''}` : '<p class="muted small">None.</p>'}</div></div>
+    <div class="row" style="margin-top:10px"><button class="primary" onclick="act(()=>api('group/settings','PUT',{authority:picked(),share:shared(),everyMinutes:Number(document.getElementById('g-every').value)}))">Save</button><button onclick="act(()=>api('group/sync','POST',{}))">Sync now</button><button class="bad" id="leave" onclick="leave()">Leave the group</button></div></div>
+  <div class="panel"><h2>From the headquarters</h2>${g.directives.length ? `<div class="list">${g.directives.map(x => `<div class="item"><div class="meta"><span class="pill">${esc(x.kind)}</span><span class="pill ${dcls(x.status)}">${esc(x.status)}</span><span class="muted small">from ${esc(x.from)} · ${ago(x.receivedAt)}</span></div>${esc(x.text)}${x.note ? `<div class="small" style="margin-top:4px"><b>${esc(x.by || 'answer')}:</b> ${esc(x.note)}</div>` : ''}
+    ${['new', 'accepted'].includes(x.status) ? `<div class="row" style="margin-top:6px"><input id="n-${x.id}" placeholder="Your note (optional)" style="width:300px"><button class="good" onclick="act(()=>api('group/directives/${x.id}','POST',{status:'done',note:document.getElementById('n-${x.id}').value}))">Mark done</button>${g.authority === 'direct' ? '' : `<button onclick="act(()=>api('group/directives/${x.id}','POST',{status:'declined',note:document.getElementById('n-${x.id}').value}))">Decline</button>`}<button onclick="act(()=>api('group/directives/${x.id}','POST',{status:'blocked',note:document.getElementById('n-${x.id}').value}))">Blocked</button></div>` : ''}</div>`).join('')}</div>` : '<p class="muted">Nothing yet. The CEO answers directives itself; you can also answer here.</p>'}</div>
+  <div class="panel"><h2>Link log</h2>${g.log.map(x => `<p class="small"><span class="muted">${esc(x.ts.slice(0, 16).replace('T', ' '))}</span> ${esc(x.text)}</p>`).join('') || '<p class="muted small">Empty.</p>'}</div>`
+}
+function leave() { const b = document.getElementById('leave'); if (b.dataset.sure) return act(() => api('group/leave', 'POST', {})); b.dataset.sure = '1'; b.textContent = 'Click again to leave' }
+
+// ---------------------------------------------------------------- execution targets
+const KINDS = { ssh: 'A machine or VM over ssh', docker: 'A Docker container (here, or on an ssh host)' }
+function targetForm(x = {}) {
+  const k = x.kind ?? 'ssh'
+  const f = (id, label, val, ph = '', w = 200) => `<label>${label}<input id="tf-${id}" value="${esc(val ?? '')}" placeholder="${esc(ph)}" style="width:${w}px"></label>`
+  return `<div class="item"><h3>${x.name ? 'Edit ' + esc(x.name) : 'New target'}</h3>
+    <div class="row">${f('name', 'Name', x.name, 'gpu-box', 160)}<label>Kind<select id="tf-kind" onchange="editing={...editing,kind:this.value};renderTargets()">${Object.entries(KINDS).map(([kk, n]) => `<option value="${kk}" ${k === kk ? 'selected' : ''}>${n}</option>`).join('')}</select></label>${f('description', 'Description', x.description, 'What it is good for', 300)}</div>
+    <div class="row" style="margin-top:8px">${k === 'ssh' ? f('host', 'ssh host', x.host, 'devbox or user@10.0.0.5') + f('port', 'Port', x.port, '22', 80) : f('ssh', 'Run on ssh host (empty: this machine)', x.ssh, 'optional') + f('image', 'Image', x.image, 'agent-forge-claude:latest', 220)}${f('identityFile', 'ssh key file', x.identityFile, '~/.ssh/id_ed25519 (optional)', 220)}</div>
+    <div class="row" style="margin-top:8px">${f('remoteRoot', 'Remote work folder', x.remoteRoot, '~/agent-forge-work', 200)}${f('claudePath', 'claude CLI there', x.claudePath, 'claude', 140)}
+      <label>Files<select id="tf-sync"><option value="auto" ${(x.sync ?? 'auto') === 'auto' ? 'selected' : ''}>copy up and back (rsync)</option><option value="shared" ${x.sync === 'shared' ? 'selected' : ''}>same path on both sides</option><option value="none" ${x.sync === 'none' ? 'selected' : ''}>none</option></select></label>
+      <label>When down<select id="tf-fallback"><option value="sandbox" ${(x.fallback ?? 'sandbox') === 'sandbox' ? 'selected' : ''}>run in the local sandbox</option><option value="none" ${x.fallback === 'none' ? 'selected' : ''}>fail the run</option></select></label>
+      ${k === 'docker' ? `<label>Network<select id="tf-network"><option value="open" ${(x.network ?? 'open') === 'open' ? 'selected' : ''}>open</option><option value="none" ${x.network === 'none' ? 'selected' : ''}>none</option></select></label>` : ''}
+      <label class="inline"><input type="checkbox" id="tf-allow" ${x.allowAgents !== false ? 'checked' : ''}> Super agents may choose it</label></div>
+    <p style="margin-top:8px"><button class="primary" onclick="saveTarget()">Save</button> <button onclick="editing=null;renderTargets()">Cancel</button></p></div>`
+}
+function edit(name) { editing = { ...t.targets.find(x => x.name === name) }; renderTargets() }
+function saveTarget() {
+  const val = id => document.getElementById('tf-' + id)?.value ?? undefined
+  const name = val('name').trim()
+  const body = { kind: val('kind'), description: val('description'), host: val('host'), port: val('port'), ssh: val('ssh'), image: val('image'), identityFile: val('identityFile'), remoteRoot: val('remoteRoot'), claudePath: val('claudePath'), sync: val('sync'), fallback: val('fallback'), network: val('network'), allowAgents: document.getElementById('tf-allow').checked }
+  act(async () => { await api('targets/' + encodeURIComponent(name), 'PUT', body); editing = null })
+}
+async function test(name) { testOut[name] = { running: true }; renderTargets(); try { testOut[name] = await api(`targets/${name}/test`, 'POST', {}) } catch (e) { testOut[name] = { ok: false, steps: [{ step: 'error', ok: false, detail: e.message }] } } renderTargets() }
+function del(name) { const b = event.target; if (b.dataset.sure) return act(() => api('targets/' + name, 'DELETE')); b.dataset.sure = '1'; b.textContent = 'Click again to delete' }
+function sel(scope, id, cur) { return `<select onchange="act(()=>api('targets-assign','PUT',{scope:'${scope}',id:'${esc(id)}',target:this.value}))"><option value="">${scope === 'company' ? 'sandbox (this machine)' : 'inherit'}</option>${t.targets.filter(x => !x.invalid && x.name !== 'sandbox').map(x => `<option value="${esc(x.name)}" ${cur === x.name ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` }
+function renderTargets() {
+  const el = document.getElementById('targets')
+  const rows = t.targets.map(x => { const to = testOut[x.name]; return `<div class="item"><div class="meta"><b>${esc(x.name)}</b><span class="pill">${esc(x.kind ?? '?')}</span>${x.invalid ? `<span class="pill fail">invalid: ${esc(x.invalid)}</span>` : ''}${x.health ? `<span class="pill ${x.health.ok ? 'ok' : 'fail'}">${x.health.ok ? 'reachable' : 'unreachable'}</span>` : ''}${x.allowAgents === false ? '<span class="pill">owner settings only</span>' : ''}
+    ${x.builtIn ? '' : `<button class="small" onclick="test('${esc(x.name)}')">Test</button><button class="small" onclick="edit('${esc(x.name)}')">Edit</button><button class="small bad" onclick="del('${esc(x.name)}')">Delete</button>`}</div>
+    <span class="small">${esc(x.description || '')}${x.host ? ` · ${esc(x.host)}` : ''}${x.ssh ? ` · on ${esc(x.ssh)}` : ''}${x.image ? ` · ${esc(x.image)}` : ''}</span>
+    ${to ? (to.running ? '<p class="muted small">Testing…</p>' : `<div class="small" style="margin-top:4px">${to.steps.map(s => `<div><span class="pill ${s.ok ? 'ok' : 'fail'}">${s.ok ? 'ok' : 'no'}</span> ${esc(s.step)}: ${esc(s.detail)}</div>`).join('')}</div>`) : ''}</div>` }).join('')
+  el.innerHTML = `<div class="panel"><h2>Execution targets</h2>
+    <p>Where the company's builders run: this machine's OS sandbox by default, or a VM, another computer or a Docker container you set up. Leaders and analysts always run here, because they work on this company's files. A builder's ticket folder is copied to the target before each turn and back after it; keys, <code>.env</code> files and tokens are never copied.</p>
+    <p class="note" style="margin-top:8px">${t.loginToken ? 'A subscription token (CLAUDE_CODE_OAUTH_TOKEN) is set: remote sessions use it, sent in a private file that is deleted when the session starts.' : 'Remote targets need a Claude login there. Either log in on that machine once, or run <code>claude setup-token</code> here and put <code>CLAUDE_CODE_OAUTH_TOKEN=…</code> in <code>.dsh-home/.env</code>; it is then sent to each remote session.'}</p>
+    <div class="list" style="margin-top:10px">${rows}</div>
+    <p style="margin-top:10px">${editing ? '' : '<button class="primary" onclick="editing={kind:\'ssh\'};renderTargets()">Add a target</button>'}</p>${editing ? targetForm(editing) : ''}</div>
+  <div class="panel"><h2>Who runs where</h2><p class="muted small">The most specific setting wins: a ticket's own target, then an agent's, then its team's, then its super team's, then the company default. A target that is down falls back to the local sandbox unless it says otherwise.</p>
+    <div class="row" style="margin-top:8px"><label>Company default for builders${sel('company', 'company', t.workerTarget)}</label></div>
+    <div class="grid" style="margin-top:10px">
+      <div><h3>Super teams</h3><div class="scroll"><table><tbody>${t.superTeams.map(x => `<tr><td>${esc(x.title)}</td><td>${sel('superTeam', x.id, x.target)}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</tbody></table></div></div>
+      <div><h3>Teams</h3><div class="scroll"><table><tbody>${t.teams.map(x => `<tr><td>${esc(x.name)}</td><td>${sel('team', x.name, x.target)}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</tbody></table></div></div>
+      <div><h3>Builder agents</h3><div class="scroll"><table><tbody>${t.builders.map(x => `<tr><td>${esc(x.name)}</td><td>${sel('agent', x.name, x.target)}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</tbody></table></div></div>
+    </div>
+    ${t.usage.length ? `<h3>In use</h3>${t.usage.map(u => `<p class="small">${esc(u.scope)} <b>${esc(u.title ?? u.id)}</b> → ${esc(u.target)}</p>`).join('')}` : ''}</div>`
+}
+function render() { renderGroup(); renderTargets() }
+load(); setInterval(() => { const a = document.activeElement; if (!editing && (!a || !['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName))) load() }, 15000)
+</script>
+</body>
+</html>

@@ -31,8 +31,11 @@ import { Health } from './health.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
 import { Desk } from './desk.js'
+import { Advisory, ADVICE_TOOL } from './advisory.js'
+import { GroupLink, HQ_TOOL } from './group-link.js'
 import { MemoryKeeper } from './dream.js'
 import { withMemory } from '../../agent-forge/lib/memctx.js'
+import { withTarget, Targets } from '../../agent-forge/lib/targets.js'
 import { purposeSlug } from '../../agent-forge/lib/memory.js'
 import { purposeOf, recordTicketReport, recordCritique } from '../../company/lib/knowledge-hooks.js'
 import { decide as staffDecide, apply as staffApply, teamCandidates, teamInstance } from '../../company/lib/staff.js'
@@ -91,7 +94,7 @@ const ALL_TOOLS = [
     options: A, recommendation: S, ifNoAnswer: { type: 'string', description: 'for a question: what you do until the owner answers; work must be able to continue' },
     attempts: GIVEUP.attempts, exempt: GIVEUP.exempt, challenge: GIVEUP.challenge,
   }, ['text', 'purpose']),
-  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' }, workstream: { type: 'string', description: 'optional: the workstream of a larger programme this ticket belongs to, e.g. "world", "combat", "audio", "integration"' }, dependsOn: { type: 'array', items: S, description: 'optional ticket ids that must be delivered first; this ticket starts when they are, and its worker can read their folders. Use it for integration and for anything built on another ticket' }, talent: { type: 'string', enum: ['standard', 'principal'], description: 'principal: the strongest model, for the hardest or most important tickets' }, planItem: { type: 'string', description: 'optional id of the plan item this ticket carries out; the item is marked done when the ticket is delivered' }, research: { type: 'boolean', description: 'true for new or hard work: the Skill Scout finds the best methods and skills before the first turn' } }, ['title', 'brief', 'doneWhen']),
+  tool('open_ticket', 'Start work that needs building: a worker gets its own folder with a sandboxed shell (code, assets, builds, data, tests) and reports back to you. Write a brief a newcomer could act on.', { title: S, brief: S, doneWhen: { type: 'string', description: 'what must be true for the ticket to be delivered' }, worker: { type: 'string', description: 'optional builder agent; default is the standard worker' }, build: { type: 'string', description: 'optional id of the company build request this ticket answers' }, workstream: { type: 'string', description: 'optional: the workstream of a larger programme this ticket belongs to, e.g. "world", "combat", "audio", "integration"' }, dependsOn: { type: 'array', items: S, description: 'optional ticket ids that must be delivered first; this ticket starts when they are, and its worker can read their folders. Use it for integration and for anything built on another ticket' }, talent: { type: 'string', enum: ['standard', 'principal'], description: 'principal: the strongest model, for the hardest or most important tickets' }, planItem: { type: 'string', description: 'optional id of the plan item this ticket carries out; the item is marked done when the ticket is delivered' }, research: { type: 'boolean', description: 'true for new or hard work: the Skill Scout finds the best methods and skills before the first turn' }, target: { type: 'string', description: 'optional execution target for the worker (a machine, VM or container the owner set up; list_org shows them). Default: the company default. Use a remote target for heavy builds, long tests or data jobs' } }, ['title', 'brief', 'doneWhen']),
   tool('critique', 'Send a ticket\'s folder to the critique panel. Every critic reads the work through its own lens at the same time and returns a score, what must be fixed and what would lift it. It runs in the background; the verdicts reach you as an event. Use it before the gate, and again after a fix pass, until nothing must be fixed. Then send the fixes to the ticket with message_ticket.', { ticket: S, focus: { type: 'string', description: 'optional: what you most want judged' } }, ['ticket']),
   tool('message_ticket', 'Send more context or a correction to a ticket. Its worker reads it on the next turn; an ended ticket resumes.', { ticket: S, text: S }),
   tool('read_ticket', 'Read a ticket: its reports, its notes and its file list.', { ticket: S }),
@@ -135,6 +138,8 @@ const ALL_TOOLS = [
   tool('report_milestone', 'Tell the owner a milestone of the goal ladder is reached or lost. Only with evidence the owner can check (a file, a ticket, a number).', { key: { type: 'string', enum: P.milestones.map(m => m.key), description: P.milestones.map(m => `${m.key}: ${m.title}.`).join(' ') }, done: { type: 'boolean' }, evidence: S }),
   tool('submit_engine_change', 'Ask for a finished patch from one of your tickets to be installed into the engine. Code checks it, the independent auditor reads it, then the owner is asked; on Install it is tested on a copy, applied with a backup and rolled back if the engine tests fail. The patch must be a unified diff that applies from inside the engine folder and may only touch quantcore/, config/ and tests/. Submit only what you have reviewed yourself.', { ticket: S, patch: { type: 'string', description: 'file name of the patch inside the ticket folder' }, title: S, summary: { type: 'string', description: 'what it changes and why, in plain words' } }),
   tool('run_company_cycle', 'Run one full company cycle (led by the COO) of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
+  ADVICE_TOOL,
+  HQ_TOOL,
 ]
 /** A company without an engine has no engine change to submit. */
 // creation goes through staff (one path, with reasons); the direct tools stay for the code behind it
@@ -146,7 +151,7 @@ const PERF_TOOLS = perfTools()
 function leaderTools(me, departments) { return [...baseTools(me, departments), ...PERF_TOOLS] }
 function baseTools(me, departments) {
   const k = kindOf(me)
-  if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'accept_ticket', 'ask_super_team', 'delegate', 'update_agent']), ...toolsFor('coo', departments)]
+  if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'accept_ticket', 'ask_super_team', 'delegate', 'update_agent', 'respond_advice', 'respond_hq']), ...toolsFor('coo', departments)]
   if (k === 'dept') return [...pick([...COMMON, 'update_agent']), ...toolsFor('dept', departments)]
   return TOOLS
 }
@@ -198,6 +203,8 @@ export class SuperAgent {
     this.growth = new Growth(this)
     this.perf = new Perf(this)
     this.health = new Health(this)
+    this.advisory = new Advisory(this)
+    this.group = new GroupLink(this)
     this.wakes = new Map() // leader id -> when it was last woken for spare capacity or to plan ahead
     this.holdReason = null
     this.holdAt = 0
@@ -207,6 +214,9 @@ export class SuperAgent {
   }
 
   setup(opts) { return seedSuper(this, opts) }
+
+  /** The company's default execution target for sandboxed builders (charter.execution.workerTarget), or null. */
+  workerTarget() { return this.co.read().charter.execution?.workerTarget || null }
 
   // ---------------- feed and triggers
   say({ from, text, kind = 'message', ticket, question }) {
@@ -258,6 +268,9 @@ export class SuperAgent {
       // health checks in the background (a live model call each hour): they must never hold up the loop
       if (!this.healthBusy && Date.now() - (this.healthAt ?? 0) > 15 * 60_000) { this.healthAt = Date.now(); this.healthBusy = true; this.health.tick().catch(e => this.log(`health: ${e.message}`)).finally(() => { this.healthBusy = false }) }
       if (Date.now() - (this.perfAt ?? 0) > 30 * 60_000) { this.perfAt = Date.now(); try { this.perf.tick() } catch (e) { this.log(`performance: ${e.message}`) } }
+      // the advisory team and the headquarters link do not stop when the company's budget is spent
+      if (!this.advisoryBusy && Date.now() - (this.advisoryAt ?? 0) > 5 * 60_000) { this.advisoryAt = Date.now(); this.advisoryBusy = true; this.advisory.tick().catch(e => this.log(`advisory: ${e.message}`)).finally(() => { this.advisoryBusy = false }) }
+      this.group.tick().catch(e => this.log(`group link: ${e.message}`))
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
       this.#dispatch()
@@ -351,6 +364,9 @@ export class SuperAgent {
 
   #command(c) {
     if (c.type === 'dream-now') { this.memory.forceNext = true; return }
+    if (c.type === 'advisory-run') { this.advisory.run({ trigger: 'the owner asked', focus: c.focus ? str(c.focus, 600) : undefined }).catch(e => this.say({ from: 'advisory', kind: 'system', text: `Could not start the review: ${e.message}` })); return }
+    if (c.type === 'group-sync') { this.group.syncAt = 0; return }
+    if (c.type === 'advice-owner') { this.advisory.ownerDecide(String(c.id), { decision: c.decision, note: c.note }); return }
     if (c.type === 'schedule-add') {
       const at = new Date(c.at)
       if (Number.isNaN(at.getTime()) || !str(c.text, 1500).trim()) return
@@ -721,6 +737,8 @@ export class SuperAgent {
         return `Delegated to ${child.id}. Its answer will reach you as an event.`
       }
       case 'list_org': return org.list(me)
+      case 'respond_advice': return this.advisory.respond(me, a)
+      case 'respond_hq': return this.group.respond(me, a)
       case 'create_agent_direct': return org.createAgent(me, a)
       case 'staff': return this.#staff(me, a, ctx)
       case 'update_agent': {
@@ -939,9 +957,9 @@ export class SuperAgent {
         if (!chatId) this.store.update(s => { s.teamChats[chatKey] = fresh })
         chatId = fresh
       }
-      work = chats.postAndWait(chatId, message, { timeoutMs: 40 * 60_000 }).then(r => r.replies.map(x => `## ${x.from}${x.ok ? '' : ' (failed)'}\n${x.text}`).join('\n\n') || '(no replies)')
+      work = withTarget(this.workerTarget(), () => chats.postAndWait(chatId, message, { timeoutMs: 40 * 60_000 })).then(r => r.replies.map(x => `## ${x.from}${x.ok ? '' : ' (failed)'}\n${x.text}`).join('\n\n') || '(no replies)')
     } else {
-      const { runId } = supers.post(target, message)
+      const { runId } = withTarget(this.workerTarget(), () => supers.post(target, message))
       work = (async () => {
         const t0 = Date.now()
         for (;;) {
@@ -1003,6 +1021,12 @@ export class SuperAgent {
     const talent = a.talent === 'principal' ? 'principal' : undefined
     const lane = workLane(ctx.lane, workstream)
     const planItem = a.planItem && me.plan?.todo?.some(t => t.id === String(a.planItem)) ? String(a.planItem) : undefined
+    let target
+    if (a.target) {
+      const choices = new Targets(this.forge.registry.home).choices()
+      if (!choices.includes(String(a.target))) throw new Error(`target ${a.target} is not available to you; choose one of ${choices.join(', ')}`)
+      target = String(a.target)
+    }
     let worker = WORKER
     if (a.worker) {
       const def = this.forge.registry.getAgent(String(a.worker))
@@ -1019,7 +1043,7 @@ export class SuperAgent {
     fs.writeFileSync(path.join(dir, 'TICKET.md'), `# ${title}\n\nTicket ${id}, opened ${now()} by super agent ${me.id}.\n\n## Brief\n${brief}\n\n## Done when\n${str(a.doneWhen, 3000)}\n`)
     if (!fs.existsSync(path.join(dir, 'NOTES.md'))) fs.writeFileSync(path.join(dir, 'NOTES.md'), '# Notes\n\n(nothing yet)\n')
     this.store.update(st => {
-      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}), ...(workstream ? { workstream } : {}), ...(dependsOn.length ? { dependsOn } : {}), ...(talent ? { talent } : {}), lane, ...(planItem ? { planItem } : {}) })
+      st.tickets.push({ id, short, title, brief, doneWhen: str(a.doneWhen, 3000), owner: me.id, worker, dir, status: 'open', createdAt: now(), inputs: [], assignments: [], attention: null, ...(build ? { build } : {}), ...(workstream ? { workstream } : {}), ...(dependsOn.length ? { dependsOn } : {}), ...(talent ? { talent } : {}), lane, ...(planItem ? { planItem } : {}), ...(target ? { target } : {}) })
       this.store.day(st).tickets++
       if (planItem) { const x = st.agents.find(y => y.id === me.id); const it = x?.plan?.todo?.find(y => y.id === planItem); if (it) { it.status = 'doing'; it.ref = id; it.updatedAt = now() } }
     })
@@ -1135,7 +1159,7 @@ export class SuperAgent {
     const minutes = s.settings.assignmentMinutes
     const { id: runId, done } = engine.startCustom(`ticket: ${t.short}`, async api => {
       const strong = t.talent === 'principal' || stuck
-      const res = await api.agent(t.worker, prompt, { schema: REPORT, label: `worker:${t.short}`, full: true, cwd: t.dir, signal: AbortSignal.timeout(minutes * 60_000), ...(strong ? { model: P.models.ceo, effort: stuck ? 'max' : P.models.ceoEffort ?? 'xhigh' } : {}), ...(attach ? { overrides: { skills: attach.skills } } : {}) })
+      const res = await api.agent(t.worker, prompt, { schema: REPORT, label: `worker:${t.short}`, full: true, cwd: t.dir, target: t.target ?? this.workerTarget(), signal: AbortSignal.timeout(minutes * 60_000), ...(strong ? { model: P.models.ceo, effort: stuck ? 'max' : P.models.ceoEffort ?? 'xhigh' } : {}), ...(attach ? { overrides: { skills: attach.skills } } : {}) })
       return { ok: !!res?.ok, report: res?.structured ?? null, error: res?.error ?? null, turns: res?.turns }
     }, { ticket: t.id, title: t.title }, { cwd: t.dir, meta: { superTicket: t.id } })
     this.live.tickets.set(t.id, { runId })

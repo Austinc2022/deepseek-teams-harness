@@ -164,6 +164,7 @@ export class Engine {
           ...(opts.purpose ? { purpose: opts.purpose } : {}),
           ...(opts.fresh ? { fresh: true } : {}),
           ...(opts.extraMcp ? { extraMcp: opts.extraMcp } : {}),
+          ...(opts.target ? { target: opts.target } : {}),
           onEvent: e => { if (e.type === 'tool') { entry.tools++; entry.lastTool = e.brief; if (entry.tools % 3 === 1) persist() } opts.onEvent?.(e) },
         })
         entry.status = res.ok ? 'completed' : 'failed'

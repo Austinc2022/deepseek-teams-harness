@@ -18,6 +18,7 @@ import path from 'node:path'
 import { ROOT, now, today, newId, round, str } from './paths.js'
 import { profile as P, PROFILE_ID } from './profile.js'
 import { providerBalance } from '../../agent-forge/lib/providers.js'
+import { Targets } from '../../agent-forge/lib/targets.js'
 import { runCycle, enroll } from './cycle.js'
 import { seed } from './setup.js'
 
@@ -142,8 +143,20 @@ export class Company {
       if (m.balanceUsd - m.reserveUsd < 0.5) return `the ${P.models.provider} balance ($${m.balanceUsd}) is at the reserve ($${m.reserveUsd}); top up or lower the reserve`
     }
     if (m.remainingTodayUsd <= 0) return `today's budget ($${m.dailyUsd}) is spent`
+    const cap = this.groupCap()
+    if (cap != null && m.spentTodayUsd >= cap) return `the group headquarters caps this company's spend at $${cap} a day (authority: direct)`
     if (fs.existsSync(path.join(this.dir, 'PAUSED'))) return 'paused (delete forge/company/PAUSED to resume)'
     return null
+  }
+
+  /** The group headquarters' daily spend cap when it binds this company (authority direct; plugins/super-agent/lib/group-link.js). */
+  groupCap() {
+    try {
+      const g = JSON.parse(fs.readFileSync(path.join(this.dir, 'group.json'), 'utf8'))
+      if (g.authority !== 'direct' || !g.hq?.url) return null
+      const n = Number(g.policies?.maxDailyUsd)
+      return g.policies?.maxDailyUsd != null && Number.isFinite(n) && n >= 0 ? n : null
+    } catch { return null }
   }
 
   ledger(entry) {
@@ -290,6 +303,11 @@ export class Company {
         c.autonomy.maxQuestionsPerDay = num(patch.autonomy.maxQuestionsPerDay, 0, 20, c.autonomy.maxQuestionsPerDay)
       }
       if (patch.execution?.ownerApproval !== undefined) c.execution.ownerApproval = patch.execution.ownerApproval !== false
+      if (patch.execution?.workerTarget !== undefined) {
+        const t = str(patch.execution.workerTarget, 48).trim()
+        if (t && t !== 'sandbox') new Targets(this.forge.registry.home).get(t) // throws for an unknown target
+        c.execution.workerTarget = t && t !== 'sandbox' ? t : null
+      }
       if (patch.gate) {
         c.gate.maxProposalsPerCycle = num(patch.gate.maxProposalsPerCycle, 0, 5, c.gate.maxProposalsPerCycle)
         c.gate.minConfidence = num(patch.gate.minConfidence, 0.5, 0.9999, c.gate.minConfidence)

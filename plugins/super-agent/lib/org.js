@@ -10,6 +10,7 @@ import { profile as P } from '../../company/lib/profile.js'
 import { now, str, clip, slug } from './store.js'
 import { titleProblem, agentNameProblem } from '../../company/lib/naming.js'
 import { listInstances } from '../../agent-forge/lib/memory.js'
+import { Targets } from '../../agent-forge/lib/targets.js'
 
 export const ROOT_AGENT = P.rootSuperName
 export const WORKER = P.workerName
@@ -18,7 +19,9 @@ export const WORKER_RULES = P.workerRules
 const HARD_RULES = P.hardRules
 const AUDITOR = P.auditorName
 const MODELS = P.models.choices
-export const PROTECTED = new Set([AUDITOR, WORKER, P.verifierName])
+// the advisory team is independent of the management chain: no super agent changes it, its members or its team
+export const PROTECTED = new Set([AUDITOR, WORKER, P.verifierName, ...P.advisoryNames])
+export const PROTECTED_TEAMS = new Set([P.advisoryTeamName])
 
 export const superDef = ({ name, description, mission }) => P.superDef({ name, description, mission })
 export const workerDef = (extra = {}) => P.workerDef(extra)
@@ -80,6 +83,13 @@ export class Org {
       '', '# Builder agents (open_ticket worker)',
       ...agents.filter(a => (a.tags ?? []).includes('builder')).map(a => `- ${a.name} (${a.model}): ${clip(a.description, 160)}`),
       '', `# Skills installed: ${skills.join(', ')}`,
+      '', '# Execution targets (open_ticket target; where a worker runs)',
+      ...(() => {
+        const tg = new Targets(registry.home)
+        const def = this.co.read().charter.execution?.workerTarget
+        const rows = tg.list().filter(t => !t.invalid && t.allowAgents && t.kind !== 'host').map(t => { const c = tg.check(t); return `- ${t.name} (${t.kind}${c.ok ? '' : ', unreachable now'}): ${clip(t.description, 140)}` })
+        return [`- sandbox: this machine, in the OS sandbox${!def || def === 'sandbox' ? ' (company default)' : ''}`, ...rows.map(r => (def && r.startsWith(`- ${def} `) ? `${r} (company default)` : r))]
+      })(),
     ].join('\n')
   }
 
@@ -147,6 +157,7 @@ export class Org {
     const { registry } = this
     if (!teamExists(registry, team)) throw new Error(`no team ${team}`)
     if (!this.canReach(me, 'teams', team)) throw new Error(`${team} is not one of your teams`)
+    if (PROTECTED_TEAMS.has(team) || P.advisoryNames.has(agent)) throw new Error('the advisory team is independent: it cannot be changed from inside the company')
     const t = registry.getTeam(team)
     if (!t.members.includes(agent)) registry.saveTeam({ ...t, members: [...t.members, agent] })
     return `Added ${agent} to ${team}.`
@@ -155,7 +166,8 @@ export class Org {
   createTeam(me, a) {
     const { registry } = this
     const name = qname(a.name)
-    const members = [...new Set((a.members ?? []).map(String))].filter(m => P.isOurs(m) && exists(registry, m))
+    const members = [...new Set((a.members ?? []).map(String))].filter(m => P.isOurs(m) && exists(registry, m) && !P.advisoryNames.has(m))
+    if (PROTECTED_TEAMS.has(name)) throw new Error('the advisory team is independent: it cannot be changed from inside the company')
     if (!members.length) throw new Error(`a team needs at least one existing ${P.prefix} agent as a member`)
     const had = teamExists(registry, name)
     if (had && !this.canReach(me, 'teams', name)) throw new Error(`team ${name} exists and is not yours`)

@@ -13,7 +13,7 @@
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
-  "files": ["index.js", "lib/*.js", "ui/index.html", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "files": ["index.js", "lib/*.js", "ui/*.html", "cordis.patch.yml", "locale/*.json", "icon.svg"],
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {

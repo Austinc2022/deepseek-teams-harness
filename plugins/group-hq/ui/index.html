@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Headquarters</title>
+<style>
+:root {
+  --bg: #f3f4f7; --panel: #ffffff; --ink: #161b26; --muted: #5d6476; --line: #d7dbe5; --soft: #eaedf3;
+  --accent: #2f5bb7; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10131a; --panel: #171c26; --ink: #e5e9f2; --muted: #96a0b5; --line: #2a3142; --soft: #1f2531;
+  --accent: #7ea6f2; --accent-ink: #0c1424; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10131a; --panel: #171c26; --ink: #e5e9f2; --muted: #96a0b5; --line: #2a3142; --soft: #1f2531;
+  --accent: #7ea6f2; --accent-ink: #0c1424; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding: 18px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0 }
+h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 }
+h3 { font-size: 15px; margin: 12px 0 6px }
+p { margin: 0 }
+.muted { color: var(--muted) } .small { font-size: 12px } .num, code { font-family: var(--mono); font-variant-numeric: tabular-nums }
+code { font-size: 12px; background: var(--soft); padding: 0 4px; border-radius: 4px; overflow-wrap: anywhere }
+header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 6px }
+nav.tabs button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
+button.bad { color: var(--bad) } button.good { color: var(--good) }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100% }
+textarea { width: 100%; min-height: 70px; resize: vertical }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted) }
+label.inline { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 14px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end }
+.stats { display: flex; flex-wrap: wrap; gap: 8px }
+.stat { background: var(--soft); border-radius: 8px; padding: 6px 10px; min-width: 104px }
+.stat b { display: block; font-family: var(--mono); font-size: 18px }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap }
+.ok { color: var(--good); border-color: var(--good) } .warn { color: var(--warn); border-color: var(--warn) } .fail { color: var(--bad); border-color: var(--bad) }
+.scroll { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650 }
+tr.click { cursor: pointer } tr.click:hover td { background: var(--soft) }
+.list { display: flex; flex-direction: column; gap: 8px }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
+.item .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; padding-right: 4px }
+.msg { border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere }
+.msg.owner { background: var(--soft); align-self: flex-end; max-width: 85% }
+.msg.chief { border: 1px solid var(--line) } .msg.system, .msg.review { color: var(--muted); font-size: 13px; border: 1px dashed var(--line) }
+.code { background: var(--soft); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 15px; letter-spacing: .05em; overflow-wrap: anywhere }
+.err { color: var(--bad) }
+pre.report { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--sans); background: var(--soft); border-radius: 8px; padding: 10px; max-height: 60vh; overflow-y: auto }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div><h1 id="title">Headquarters</h1><p class="muted small" id="sub">Loading…</p></div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+  <p id="error" class="err" hidden></p>
+  <main id="view"></main>
+</div>
+<script>
+const TABS = [['portfolio', 'Portfolio'], ['directives', 'Directives'], ['chief', 'Group CEO'], ['review', 'Review'], ['settings', 'Settings and invites']]
+let tab = (location.hash.slice(1) || 'portfolio').split(':')[0]
+let detail = location.hash.includes(':') ? location.hash.split(':')[1] : null
+let data = null, company = null, shownCode = null
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago` }
+const money = v => (v == null ? '–' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}`)
+const v = x => (x == null ? '–' : esc(x))
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/' + path, { method, headers: { 'x-hq-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+async function act(fn) { try { document.getElementById('error').hidden = true; await fn(); await load() } catch (e) { const el = document.getElementById('error'); el.textContent = e.message; el.hidden = false } }
+function go(t, d = null) { tab = t; detail = d; company = null; location.hash = d ? `${t}:${d}` : t; render(); if (d) loadCompany() }
+
+async function load() {
+  try { data = await api('overview'); if (detail) company = await api('companies/' + detail); render() }
+  catch (e) { document.getElementById('sub').textContent = 'Could not load: ' + e.message }
+}
+async function loadCompany() { try { company = await api('companies/' + detail); render() } catch (e) { company = { error: e.message }; render() } }
+
+function render() {
+  if (!data) return
+  const s = data.settings, l = data.listener ?? {}
+  document.getElementById('title').textContent = s.name
+  document.getElementById('sub').innerHTML = `${data.portfolio.companies} compan${data.portfolio.companies === 1 ? 'y' : 'ies'}, ${data.portfolio.online} online · listener ${l.running ? `<span class="pill ok">on ${esc(l.tls ? 'https' : 'http')}://${esc(l.host)}:${esc(l.port)}</span>` : `<span class="pill ${l.error ? 'fail' : ''}">${esc(l.error ? 'error: ' + l.error : 'off')}</span>`} · HQ spend today ${money(data.spentTodayUsd)} of ${money(s.budget.maxUsdPerDay)}`
+  document.getElementById('tabs').innerHTML = TABS.map(([k, n]) => `<button class="${tab === k ? 'on' : ''}" onclick="go('${k}')">${n}</button>`).join('')
+  const el = document.getElementById('view')
+  el.innerHTML = tab === 'portfolio' ? (detail ? companyView() : portfolioView()) : tab === 'directives' ? directivesView() : tab === 'chief' ? chiefView() : tab === 'review' ? reviewView() : settingsView()
+  const chat = document.getElementById('chat'); if (chat) chat.scrollTop = chat.scrollHeight
+}
+
+// ---------------------------------------------------------------- portfolio
+function portfolioView() {
+  const p = data.portfolio
+  const rows = data.companies.map(c => { const k = c.summary?.kpis ?? {}; const h = c.summary?.health?.status
+    return `<tr class="click" onclick="go('portfolio','${c.id}')"><td><b>${esc(c.name)}</b><div class="muted small">${esc(c.profile || '')}${c.summary?.northStar ? ' · ' + esc(c.summary.northStar) : ''}</div></td>
+    <td><span class="pill ${c.status !== 'active' ? 'warn' : c.online ? 'ok' : 'warn'}">${c.status !== 'active' ? esc(c.status) : c.online ? 'online' : 'offline'}</span><div class="muted small">${ago(c.lastSeenAt)}</div></td>
+    <td><span class="pill">${esc(c.authority)}</span></td><td class="num">${v(k.companyScore)}</td><td class="num">${c.summary?.progress?.percent != null ? c.summary.progress.percent + '%' : '–'}</td>
+    <td class="num">${v(k.delivered7d)}${k.deliveryRate7d != null ? ` <span class="muted">(${k.deliveryRate7d}%)</span>` : ''}</td><td class="num">${money(c.summary?.budget?.spentTodayUsd)} / ${money(c.summary?.budget?.dailyUsd)}</td><td class="num">${money(k.spend7dUsd)}</td>
+    <td>${h ? `<span class="pill ${h === 'ok' ? 'ok' : h === 'warn' ? 'warn' : 'fail'}">${esc(h)}</span>` : '–'}</td><td class="num">${v(c.summary?.advisory?.latest?.overall)}${c.summary?.advisory?.stats?.escalated ? ` <span class="pill fail">${c.summary.advisory.stats.escalated} escalated</span>` : ''}</td>
+    <td class="num">${c.directives.open}${c.directives.blocked ? ` <span class="pill fail">${c.directives.blocked} blocked</span>` : ''}</td></tr>` }).join('')
+  return `<div class="panel"><div class="stats">
+    <div class="stat"><b>${p.companies}</b><span class="muted small">companies</span></div><div class="stat"><b>${p.online}</b><span class="muted small">online</span></div>
+    <div class="stat"><b>${money(p.spentTodayUsd)}</b><span class="muted small">spent today of ${money(p.dailyBudgetUsd)}</span></div><div class="stat"><b>${money(p.spend7dUsd)}</b><span class="muted small">spend, 7 days</span></div>
+    <div class="stat"><b>${p.delivered7d}</b><span class="muted small">delivered, 7 days</span></div><div class="stat"><b>${v(p.avgScore)}</b><span class="muted small">avg company score</span></div>
+    <div class="stat"><b>${v(p.avgGoal)}${p.avgGoal != null ? '%' : ''}</b><span class="muted small">avg goal progress</span></div><div class="stat"><b>${v(p.avgAdvisory)}</b><span class="muted small">avg advisory grade</span></div>
+    <div class="stat"><b>${p.healthFails}</b><span class="muted small">failing health</span></div><div class="stat"><b>${p.openDirectives}</b><span class="muted small">open directives</span></div></div></div>
+  <div class="panel"><h2>Companies</h2>${data.companies.length ? `<div class="scroll"><table><thead><tr><th>Company</th><th>Link</th><th>Authority</th><th>Score</th><th>Goal</th><th>Delivered 7d</th><th>Today</th><th>Spend 7d</th><th>Health</th><th>Advisory</th><th>Directives</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<p class="muted">No company has joined yet. Create an invite under <a href="#settings" onclick="go('settings')">Settings and invites</a>, switch the listener on, and give the company's owner the address and the code. They join from their Company page, under Connections.</p>`}</div>`
+}
+
+function companyView() {
+  const c = company
+  if (!c) return '<div class="panel muted">Loading…</div>'
+  if (c.error) return `<div class="panel err">${esc(c.error)}</div>`
+  const sn = c.snapshot ?? {}, k = sn.kpis ?? {}
+  const kp = Object.entries(k).filter(([x]) => x !== 'at').map(([x, y]) => `<div class="stat"><b>${v(y)}</b><span class="muted small">${esc(x)}</span></div>`).join('')
+  return `<p><button onclick="go('portfolio')">← All companies</button></p>
+  <div class="panel"><h2>${esc(c.name)}</h2><p>${esc(sn.company?.mission ?? c.mission ?? '')}</p>
+    <p class="muted small" style="margin-top:6px">${esc(c.profile || '')} · joined ${esc(c.joinedAt?.slice(0, 10))} · last seen ${ago(c.lastSeenAt)} · authority given to HQ: <b>${esc(c.authority)}</b> (the company's owner sets it) · shares: ${esc(Object.entries(c.share ?? {}).filter(([, x]) => x).map(([x]) => x).join(', ') || 'status only')}</p>
+    ${sn.status ? `<p class="small" style="margin-top:6px">Loop ${sn.status.loop ? 'running' : '<span class="err">not running</span>'} · ${sn.status.hold ? 'on hold: ' + esc(sn.status.hold) : 'no hold'} · autopilot ${sn.status.autopilot ? 'on' : 'off'}${sn.status.paused ? ' · <span class="err">paused</span>' : ''}</p>` : '<p class="muted">No snapshot yet.</p>'}
+    <div class="row" style="margin-top:10px">${c.status === 'active' ? `<button onclick="act(()=>api('companies/${c.id}','PUT',{status:'suspended'}))">Suspend</button>` : c.status === 'suspended' ? `<button onclick="act(()=>api('companies/${c.id}','PUT',{status:'active'}))">Reactivate</button>` : ''}
+    <button class="bad" onclick="removeCompany('${c.id}')">Remove from group</button></div></div>
+  ${kp ? `<div class="panel"><h2>KPIs</h2><div class="stats">${kp}</div></div>` : ''}
+  <div class="grid">
+    <div class="panel"><h2>Send to ${esc(c.name)}</h2>${sendForm(c.id)}</div>
+    <div class="panel"><h2>Policies for this company</h2><p class="muted small">Added to the group policies; the lower spend cap wins. They bind only if the company gave authority to direct (now: ${esc(c.authority)}).</p>
+      <div class="row" style="margin-top:8px"><label>Daily spend cap (USD)<input id="cp-cap" type="number" min="0" step="1" value="${c.ownPolicies?.maxDailyUsd ?? ''}" style="width:120px"></label></div>
+      <label style="margin-top:8px">Rules, one per line<textarea id="cp-rules">${esc((c.ownPolicies?.rules ?? []).join('\n'))}</textarea></label>
+      <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('companies/${c.id}','PUT',{policies:{maxDailyUsd:document.getElementById('cp-cap').value,rules:document.getElementById('cp-rules').value.split('\\n')}}))">Save</button> <span class="muted small">Effective now: cap ${money(c.policies.maxDailyUsd)}, ${c.policies.rules.length} rule(s)</span></p></div>
+  </div>
+  ${sn.advisory ? `<div class="panel"><h2>Its advisory team</h2>${sn.advisory.latest ? `<p><b>${v(sn.advisory.latest.overall)}/100</b> <span class="muted small">${esc(sn.advisory.latest.at?.slice(0, 10))}</span></p><p style="margin-top:4px">${esc(sn.advisory.latest.summary)}</p>` : '<p class="muted">No review yet.</p>'}
+    <p class="muted small" style="margin-top:6px">${Object.entries(sn.advisory.stats ?? {}).map(([x, y]) => `${esc(x)} ${v(y)}`).join(' · ')}</p>
+    <div class="list" style="margin-top:8px">${(sn.advisory.recs ?? []).slice(0, 12).map(r => `<div class="item"><div class="meta"><span class="pill ${r.severity === 'high' ? 'fail' : r.severity === 'medium' ? 'warn' : ''}">${esc(r.severity)}</span><span class="pill">${esc(r.status)}</span>${r.escalated ? '<span class="pill fail">escalated</span>' : ''}${r.followUp ? `<span class="pill">${esc(r.followUp)}</span>` : ''}</div>${esc(r.title)}${r.response ? `<div class="muted small">CEO: ${esc(r.response.decision)}: ${esc(r.response.reason)}</div>` : ''}</div>`).join('')}</div></div>` : ''}
+  ${sn.plans ? `<div class="panel"><h2>Plans of its leaders</h2><div class="list">${sn.plans.map(p => `<div class="item"><b>${esc(p.title)}</b> <span class="muted small">${p.pctComplete != null ? p.pctComplete + '% · ' : ''}${esc(p.expectedBy ?? '')} · updated ${ago(p.updatedAt)}</span><div>${esc(p.focus || '(no plan)')}</div>${p.blockers?.length ? `<div class="small err">Blockers: ${esc(p.blockers.join(' | '))}</div>` : ''}</div>`).join('')}</div></div>` : ''}
+  <div class="panel"><h2>Directives to ${esc(c.name)}</h2>${directiveList(c.directives)}</div>
+  ${sn.initiatives ? `<div class="panel"><h2>Initiatives</h2><div class="scroll"><table><thead><tr><th>Initiative</th><th>Stage</th><th>Confidence</th><th>Department</th></tr></thead><tbody>${sn.initiatives.slice().reverse().slice(0, 30).map(i => `<tr><td>${esc(i.title)}</td><td>${esc(i.stage)}</td><td class="num">${v(i.confidence)}</td><td>${esc(i.department)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+  ${sn.health ? `<div class="panel"><h2>Health</h2><p><span class="pill ${sn.health.status === 'ok' ? 'ok' : sn.health.status === 'warn' ? 'warn' : 'fail'}">${esc(sn.health.status)}</span> ${esc((sn.health.failing ?? []).join(' · '))}</p></div>` : ''}
+  ${sn.feed ? `<div class="panel"><h2>Its feed</h2><div class="list">${sn.feed.map(m => `<div class="item small"><span class="muted">${esc(m.ts?.slice(0, 16))} ${esc(m.from)}</span> ${esc(m.text)}</div>`).join('')}</div></div>` : ''}`
+}
+function removeCompany(id) { if (document.getElementById('rm-' + id)) return act(() => api('companies/' + id, 'DELETE').then(() => go('portfolio'))); const b = event.target; b.textContent = 'Click again to remove'; b.id = 'rm-' + id }
+
+// ---------------------------------------------------------------- directives
+function sendForm(id) {
+  return `<div class="row"><label>Kind<select id="d-kind-${id}"><option value="directive">Directive (an instruction)</option><option value="advice">Advice</option><option value="question">Question</option></select></label></div>
+  <label style="margin-top:8px">Text<textarea id="d-text-${id}" placeholder="What the company should do, and how you will know it is done"></textarea></label>
+  <p class="muted small">Observe: it is shown, not acted on. Advise: their CEO decides. Direct: their CEO must carry it out or report it blocked. Their owner keeps real money, publishing and credentials.</p>
+  <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('directives','POST',{company:'${id}',kind:document.getElementById('d-kind-${id}').value,text:document.getElementById('d-text-${id}').value}))">Send</button></p>`
+}
+function directiveList(ds) {
+  if (!ds?.length) return '<p class="muted">None yet.</p>'
+  const cls = s => (['done', 'accepted'].includes(s) ? 'ok' : ['blocked', 'declined'].includes(s) ? 'fail' : ['pending', 'delivered'].includes(s) ? 'warn' : '')
+  return `<div class="list">${ds.map(d => `<div class="item"><div class="meta"><span class="pill">${esc(d.kind)}</span><span class="pill ${cls(d.status)}">${esc(d.status)}</span>${d.companyName ? `<b>${esc(d.companyName)}</b>` : ''}<span class="muted small">from ${esc(d.from)} · ${ago(d.ts)}</span>${d.status === 'pending' ? `<button class="small" onclick="act(()=>api('directives/${d.id}/cancel','POST',{}))">Cancel</button>` : ''}</div>${esc(d.text)}${d.response ? `<div class="small" style="margin-top:4px"><b>${esc(d.response.by || 'company')}:</b> ${esc(d.response.note)}</div>` : ''}</div>`).join('')}</div>`
+}
+function directivesView() { return `<div class="panel"><h2>Send to every active company</h2>${sendForm('all')}</div><div class="panel"><h2>All directives</h2>${directiveList(data.directives)}</div>` }
+
+// ---------------------------------------------------------------- group CEO
+function chiefView() {
+  const c = data.people.chief
+  return `<div class="panel"><h2>Group CEO</h2><p class="muted small">It reads what the companies share and acts only through its tools: directives, advice and questions, group and company policies, and answers to the review team. It also handles events by itself (a finished review, a blocked directive, a new company) when it is switched on in Settings.</p>
+  <div class="chat" id="chat" style="margin-top:10px">${c.messages.map(m => `<div class="msg ${esc(m.from)}">${m.event ? `<div class="muted small">On ${esc(m.event)}</div>` : ''}${esc(m.text)}${m.tools?.length ? `<div class="muted small" style="margin-top:4px">${m.tools.map(t => esc(t.tool + (t.arg ? ' ' + t.arg : ''))).join(' · ')}</div>` : ''}</div>`).join('') || '<p class="muted">No messages yet.</p>'}</div>
+  <label style="margin-top:10px">Message<textarea id="chief-text" placeholder="Ask about the companies, or tell the group CEO what to do"></textarea></label>
+  <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('chief','POST',{text:document.getElementById('chief-text').value}))">${c.busy ? 'Queue (it is working)' : 'Send'}</button></p></div>
+  <div class="panel"><h2>Events</h2>${c.events.length ? `<div class="list">${c.events.map(e => `<div class="item small"><div class="meta"><span class="pill">${esc(e.kind)}</span><span class="pill">${esc(e.status)}</span><span class="muted">${ago(e.ts)}</span></div>${esc(e.text.slice(0, 300))}</div>`).join('')}</div>` : '<p class="muted">None.</p>'}</div>`
+}
+
+// ---------------------------------------------------------------- review
+function reviewView() {
+  const r = data.people.review, L = r.latest
+  const names = Object.fromEntries(data.companies.map(c => [c.id, c.name]))
+  return `<div class="panel"><h2>Independent review team</h2><p class="muted small">${esc(data.people.team.advisors.map(a => a.title).join(' · '))}, merged by the review lead. It reports to you, not to the group CEO, and reviews every ${esc(data.settings.review.everyDays)} days${data.settings.review.enabled ? '' : ' (scheduled reviews are off)'}.</p>
+    <div class="row" style="margin-top:8px"><label>Focus (optional)<input id="rv-focus" style="width:360px" placeholder="What the review should look at most"></label><button class="primary" ${r.busy || r.blocked ? 'disabled' : ''} onclick="act(()=>api('review','POST',{focus:document.getElementById('rv-focus').value}))">${r.busy ? 'Reviewing…' : 'Run a review now'}</button>${r.blocked && !r.busy ? `<span class="muted small">${esc(r.blocked)}</span>` : ''}</div></div>
+  ${L ? `<div class="panel"><h2>Latest review · ${esc(L.endedAt?.slice(0, 10))} · ${L.overall}/100</h2><p>${esc(L.summary)}</p>
+    ${L.companies?.length ? `<h3>Companies</h3><div class="list">${L.companies.map(c => `<div class="item"><b>${esc(names[c.id] ?? c.id)}</b> <span class="num">${Math.round(c.grade)}/100</span> · ${esc(c.note)}</div>`).join('')}</div>` : ''}
+    ${L.metaReview?.length ? `<h3>Each company's advisory team</h3><div class="list">${L.metaReview.map(c => `<div class="item"><b>${esc(names[c.id] ?? c.id)}</b> <span class="num">${Math.round(c.grade)}/100</span> · ${esc(c.note)}</div>`).join('')}</div>` : ''}
+    ${L.ownerNote ? `<h3>For you</h3><p>${esc(L.ownerNote)}</p>` : ''}
+    <p style="margin-top:8px"><button onclick="showReport('${L.id}')">Full report</button></p><pre class="report" id="report" hidden></pre></div>` : ''}
+  <div class="panel"><h2>Recommendations</h2>${r.recs.length ? `<div class="list">${r.recs.map(x => `<div class="item"><div class="meta"><span class="pill ${x.severity === 'high' ? 'fail' : x.severity === 'medium' ? 'warn' : ''}">${esc(x.severity)}</span><span class="pill">${esc(x.kind)}</span><span class="pill">${esc(x.scope === 'group' ? 'group' : names[x.scope] ?? x.scope)}</span><span class="pill">${esc(x.status)}</span></div><b>${esc(x.title)}</b><div>${esc(x.detail)}</div>${x.directiveText ? `<div class="small muted" style="margin-top:4px">Proposed text: ${esc(x.directiveText)}</div>` : ''}${x.response ? `<div class="small" style="margin-top:4px"><b>Group CEO, ${esc(x.response.decision)}:</b> ${esc(x.response.reason)}</div>` : ''}
+    ${['owner-accepted', 'dismissed', 'done'].includes(x.status) ? '' : `<div class="row" style="margin-top:6px"><button class="good" onclick="act(()=>api('review/recs/${x.id}','POST',{decision:'accept',send:${x.directiveText ? 'true' : 'false'}}))">${x.directiveText ? 'Accept and send' : 'Accept'}</button><button onclick="act(()=>api('review/recs/${x.id}','POST',{decision:'dismiss'}))">Dismiss</button></div>`}</div>`).join('')}</div>` : '<p class="muted">None yet.</p>'}</div>`
+}
+async function showReport(id) { const el = document.getElementById('report'); el.hidden = false; el.textContent = 'Loading…'; try { el.textContent = (await api('review/reports/' + id)).text || '(no report)' } catch (e) { el.textContent = e.message } }
+
+// ---------------------------------------------------------------- settings
+function settingsView() {
+  const s = data.settings, l = data.listener ?? {}
+  return `<div class="grid">
+  <div class="panel"><h2>Invite a company</h2><p class="muted small">An invite code works once and expires. Give the company's owner the address below and the code; they join from their Company page (Connections).</p>
+    <div class="row" style="margin-top:8px"><label>Who it is for<input id="inv-label" placeholder="e.g. Crypto company"></label><label>Valid for (days)<input id="inv-days" type="number" min="1" max="90" value="7" style="width:90px"></label><button class="primary" onclick="newInvite()">Create invite</button></div>
+    ${shownCode ? `<div style="margin-top:10px"><p class="small">Code for <b>${esc(shownCode.label)}</b> (shown once; copy it now):</p><div class="code">${esc(shownCode.code)}</div><p class="small muted" style="margin-top:6px">Address for the company: <code>${esc(addr())}</code></p></div>` : ''}
+    <div class="list" style="margin-top:10px">${data.invites.slice(0, 15).map(i => `<div class="item small"><div class="meta"><span class="pill ${i.status === 'open' ? 'ok' : ''}">${esc(i.status)}</span><b>${esc(i.label)}</b><span class="muted">expires ${esc(i.expiresAt.slice(0, 10))}</span>${i.status === 'open' ? `<button class="small" onclick="act(()=>api('invites/${i.id}','DELETE'))">Revoke</button>` : ''}</div></div>`).join('')}</div></div>
+  <div class="panel"><h2>Listener (where companies connect)</h2><p class="muted small">Its own port, separate from this page. Use https (certificate and key files) or a private network such as a LAN, a VPN or Tailscale: over plain http on the internet the keys travel in clear.</p>
+    <div class="row" style="margin-top:8px"><label class="inline"><input type="checkbox" id="ls-on" ${s.listen.enabled ? 'checked' : ''}> Accept connections</label><label>Address<input id="ls-host" value="${esc(s.listen.host)}" style="width:150px"></label><label>Port<input id="ls-port" type="number" value="${esc(s.listen.port)}" style="width:100px"></label></div>
+    <div class="row" style="margin-top:8px"><label>TLS certificate file<input id="ls-cert" value="${esc(s.listen.tls.cert)}" style="width:280px" placeholder="/path/fullchain.pem (optional)"></label><label>TLS key file<input id="ls-key" value="${esc(s.listen.tls.key)}" style="width:280px" placeholder="/path/privkey.pem (optional)"></label></div>
+    <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('settings','PUT',{listen:{enabled:document.getElementById('ls-on').checked,host:document.getElementById('ls-host').value,port:Number(document.getElementById('ls-port').value),tls:{cert:document.getElementById('ls-cert').value,key:document.getElementById('ls-key').value}}}))">Save</button> <span class="small ${l.error ? 'err' : 'muted'}">${l.running ? `Listening on ${esc(l.host)}:${esc(l.port)}${l.tls ? ' (https)' : ' (http)'}` : esc(l.error ?? 'Not listening')}</span></p></div>
+  <div class="panel"><h2>Headquarters</h2><label>Name<input id="hq-name" value="${esc(s.name)}"></label><label style="margin-top:8px">Mission of the group<textarea id="hq-mission">${esc(s.mission)}</textarea></label>
+    <div class="row" style="margin-top:8px"><label>Model for HQ agents<input id="hq-model" value="${esc(s.models.model)}" style="width:180px"></label><label>HQ budget a day (USD)<input id="hq-budget" type="number" min="0" value="${esc(s.budget.maxUsdPerDay)}" style="width:110px"></label><label>Review every (days)<input id="hq-every" type="number" min="1" value="${esc(s.review.everyDays)}" style="width:90px"></label></div>
+    <div class="row" style="margin-top:8px"><label class="inline"><input type="checkbox" id="hq-review" ${s.review.enabled ? 'checked' : ''}> Scheduled reviews</label><label class="inline"><input type="checkbox" id="hq-chief" ${s.chief.enabled ? 'checked' : ''}> Group CEO handles events by itself</label><label class="inline"><input type="checkbox" id="hq-direct" ${s.chief.mayDirect ? 'checked' : ''}> Group CEO may send directives</label></div>
+    <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('settings','PUT',{name:document.getElementById('hq-name').value,mission:document.getElementById('hq-mission').value,models:{model:document.getElementById('hq-model').value},budget:{maxUsdPerDay:Number(document.getElementById('hq-budget').value)},review:{enabled:document.getElementById('hq-review').checked,everyDays:Number(document.getElementById('hq-every').value)},chief:{enabled:document.getElementById('hq-chief').checked,mayDirect:document.getElementById('hq-direct').checked}}))">Save</button></p></div>
+  <div class="panel"><h2>Group policies</h2><p class="muted small">Sent to every company. They bind companies that gave the headquarters authority to direct (the spend cap is then enforced in their code) and are guidance for companies that chose advise.</p>
+    <div class="row" style="margin-top:8px"><label>Daily spend cap per company (USD)<input id="gp-cap" type="number" min="0" value="${s.policies.maxDailyUsd ?? ''}" style="width:130px"></label></div>
+    <label style="margin-top:8px">Rules, one per line<textarea id="gp-rules">${esc((s.policies.rules ?? []).join('\n'))}</textarea></label><label style="margin-top:8px">Note<input id="gp-note" value="${esc(s.policies.note ?? '')}"></label>
+    <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('settings','PUT',{policies:{maxDailyUsd:document.getElementById('gp-cap').value,rules:document.getElementById('gp-rules').value.split('\\n'),note:document.getElementById('gp-note').value}}))">Save</button></p></div>
+  </div>
+  <div class="panel"><h2>Log</h2><div class="list">${data.log.slice(0, 40).map(x => `<div class="small"><span class="muted">${esc(x.ts.slice(0, 16))}</span> ${esc(x.text)}</div>`).join('')}</div></div>`
+}
+function addr() { const s = data.settings.listen; const host = ['0.0.0.0', '::'].includes(s.host) ? '<this computer\'s address>' : s.host; return `${s.tls.cert && s.tls.key ? 'https' : 'http'}://${host}:${s.port}` }
+async function newInvite() { await act(async () => { shownCode = await api('invites', 'POST', { label: document.getElementById('inv-label').value, days: Number(document.getElementById('inv-days').value) }) }) }
+
+window.addEventListener('hashchange', () => { const [t, d] = location.hash.slice(1).split(':'); if (t !== tab || (d ?? null) !== detail) { tab = t || 'portfolio'; detail = d ?? null; company = null; render(); if (detail) loadCompany() } })
+load(); setInterval(() => { const a = document.activeElement; if (!a || !['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) load() }, 10000)
+</script>
+</body>
+</html>

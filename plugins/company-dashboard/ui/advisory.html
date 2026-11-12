@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advisory</title>
+<style>
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec;
+  --accent: #8a5a12; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding: 18px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0 } h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 } h3 { font-size: 14px; margin: 10px 0 4px }
+p { margin: 0 } .muted { color: var(--muted) } .small { font-size: 12px } .num { font-family: var(--mono); font-variant-numeric: tabular-nums }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 } button.good { color: var(--good) }
+button:disabled { opacity: .55; cursor: default }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+input, textarea { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100% }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted) } label.inline { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 14px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end }
+.stats { display: flex; flex-wrap: wrap; gap: 8px } .stat { background: var(--soft); border-radius: 8px; padding: 6px 10px; min-width: 100px } .stat b { display: block; font-family: var(--mono); font-size: 18px }
+.big { font: 600 34px/1 var(--mono) }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap }
+.ok { color: var(--good); border-color: var(--good) } .warn { color: var(--warn); border-color: var(--warn) } .fail { color: var(--bad); border-color: var(--bad) }
+.list { display: flex; flex-direction: column; gap: 8px } .item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
+.item .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px }
+.scroll { overflow-x: auto } table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top } th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650 }
+.bar { display: inline-block; width: 90px; height: 7px; background: var(--soft); border-radius: 4px; overflow: hidden; vertical-align: middle } .bar i { display: block; height: 100%; background: var(--accent) }
+pre.report { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--sans); background: var(--soft); border-radius: 8px; padding: 10px; max-height: 60vh; overflow-y: auto }
+.err { color: var(--bad) }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Advisory team</h1><p class="muted small" id="sub">Loading…</p></header>
+  <p id="error" class="err" hidden></p>
+  <div id="view"></div>
+</div>
+<script>
+let d = null
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const v = x => (x == null ? '–' : esc(x))
+const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago` }
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/super/advisory' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+async function act(fn) { try { document.getElementById('error').hidden = true; await fn(); setTimeout(load, 1200) } catch (e) { const el = document.getElementById('error'); el.textContent = e.message; el.hidden = false } }
+async function load() { try { d = await api(''); render() } catch (e) { document.getElementById('sub').textContent = 'Could not load: ' + e.message } }
+const sevCls = s => (s === 'high' ? 'fail' : s === 'medium' ? 'warn' : '')
+const stCls = s => (['done', 'accepted', 'owner-accepted'].includes(s) ? 'ok' : s === 'rejected' ? 'fail' : s === 'open' ? 'warn' : '')
+
+function render() {
+  const L = d.latest, st = d.stats, s = d.settings
+  document.getElementById('sub').innerHTML = `Independent of management: it reports to you (and to the group headquarters, when this company has joined one); the CEO cannot change it. Reviews every ${esc(s.everyDays)} days${s.enabled ? '' : ' <span class="pill warn">scheduled reviews off</span>'}; spent today $${esc(d.spentTodayUsd)} of $${esc(s.maxUsdPerDay)}.`
+  const kpiRows = Object.entries(d.kpiDefs).map(([k, def]) => `<tr><td>${esc(def.label)}</td><td class="num">${v(d.kpis[k])}</td><td class="num muted">${L?.kpis ? v(L.kpis[k]) : '–'}</td><td class="muted small">${def.better === 'up' ? 'higher is better' : def.better === 'down' ? 'lower is better' : ''}</td></tr>`).join('')
+  document.getElementById('view').innerHTML = `
+  <div class="grid">
+    <div class="panel"><h2>Latest review</h2>${L ? `<div class="row"><span class="big">${v(L.overall)}</span><span class="muted">/100 · ${esc(L.endedAt?.slice(0, 16).replace('T', ' '))} · ${esc(L.trigger)}</span></div><p style="margin-top:8px">${esc(L.summary)}</p>
+      ${L.scorecard?.length ? `<h3>Scorecard</h3><div class="list">${L.scorecard.map(x => `<div><span class="bar"><i style="width:${Math.max(0, Math.min(100, x.grade))}%"></i></span> <span class="num">${Math.round(x.grade)}</span> <b>${esc(x.area)}</b> <span class="muted small">${esc(x.note)}</span></div>`).join('')}</div>` : ''}
+      ${L.ownerNote ? `<h3>For you</h3><p>${esc(L.ownerNote)}</p>` : ''}
+      <p style="margin-top:8px"><button onclick="report('${L.id}')">Full report</button></p><pre class="report" id="report" hidden></pre>` : '<p class="muted">No review yet. The first one runs about 20 minutes after the team starts, or now:</p>'}
+      <div class="row" style="margin-top:10px"><label>Focus (optional)<input id="focus" style="width:320px" placeholder="What the review should look at most"></label><button class="primary" ${d.busy || d.blocked ? 'disabled' : ''} onclick="act(()=>api('/run','POST',{focus:document.getElementById('focus').value}))">${d.busy ? 'Reviewing…' : 'Run a review now'}</button></div>
+      ${d.blocked && !d.busy ? `<p class="muted small">${esc(d.blocked)}</p>` : ''}</div>
+    <div class="panel"><h2>How the CEO answers</h2><div class="stats">
+      <div class="stat"><b>${st.open}</b><span class="muted small">waiting for an answer</span></div><div class="stat"><b>${st.accepted}</b><span class="muted small">accepted</span></div>
+      <div class="stat"><b>${st.done}</b><span class="muted small">carried out</span></div><div class="stat"><b>${st.rejected}</b><span class="muted small">rejected</span></div>
+      <div class="stat"><b>${v(st.acceptRate)}${st.acceptRate != null ? '%' : ''}</b><span class="muted small">accept rate</span></div><div class="stat"><b>${st.helped}</b><span class="muted small">measured as helped</span></div>
+      <div class="stat"><b class="${st.escalated ? 'err' : ''}">${st.escalated}</b><span class="muted small">escalated to you</span></div></div>
+      <h3>The team</h3><div class="list">${d.team.advisors.map(a => `<div class="small"><b>${esc(a.title)}</b> <span class="muted">(${esc(a.name)})</span>: ${esc(a.lens)}</div>`).join('')}<div class="small"><b>Advisory lead</b> <span class="muted">(${esc(d.team.lead)})</span>: merges the findings into one review.</div></div></div>
+  </div>
+  <div class="panel"><h2>Recommendations</h2>${d.recs.length ? `<div class="list">${d.recs.slice(0, 60).map(r => `<div class="item"><div class="meta"><span class="pill ${sevCls(r.severity)}">${esc(r.severity)}</span><span class="pill ${stCls(r.status)}">${esc(r.status)}</span>${r.area ? `<span class="pill">${esc(r.area)}</span>` : ''}${r.escalatedAt ? '<span class="pill fail">escalated</span>' : ''}<span class="muted small">${ago(r.ts)}</span></div>
+    <b>${esc(r.title)}</b><div>${esc(r.detail)}</div>${r.expectedEffect ? `<div class="small muted" style="margin-top:3px">Expected effect: ${esc(r.expectedEffect)}</div>` : ''}
+    ${r.kpi ? `<div class="small" style="margin-top:3px">KPI: ${esc(r.kpiLabel)}: ${v(r.kpiAtIssue)} when advised${r.kpiAtAccept != null ? `, ${v(r.kpiAtAccept)} when accepted` : ''}, <b>${v(r.kpiNow)}</b> now</div>` : ''}
+    ${r.response ? `<div class="small" style="margin-top:4px"><b>CEO, ${esc(r.response.decision)}:</b> ${esc(r.response.reason)}${r.response.until ? ` (until ${esc(r.response.until)})` : ''}</div>` : ''}
+    ${(r.followUps ?? []).map(f => `<div class="small" style="margin-top:2px"><span class="pill ${f.verdict === 'helped' ? 'ok' : f.verdict === 'worse' ? 'fail' : ''}">${esc(f.verdict)}</span> ${esc(f.note)}</div>`).join('')}
+    ${r.owner ? `<div class="small" style="margin-top:4px"><b>You:</b> ${esc(r.owner.decision)}${r.owner.note ? ': ' + esc(r.owner.note) : ''}</div>` : ''}
+    ${['open', 'rejected', 'deferred'].includes(r.status) ? `<div class="row" style="margin-top:6px"><button class="good" onclick="act(()=>api('/recs/${r.id}','POST',{decision:'accept'}))">Accept for the CEO</button><button onclick="act(()=>api('/recs/${r.id}','POST',{decision:'dismiss'}))">Dismiss</button></div>` : ''}</div>`).join('')}</div>` : '<p class="muted">None yet.</p>'}</div>
+  <div class="grid">
+    <div class="panel"><h2>KPIs</h2><div class="scroll"><table><thead><tr><th>KPI</th><th>Now</th><th>Last review</th><th></th></tr></thead><tbody>${kpiRows}</tbody></table></div></div>
+    <div class="panel"><h2>Settings</h2>
+      <div class="row"><label class="inline"><input type="checkbox" id="s-on" ${s.enabled ? 'checked' : ''}> Scheduled reviews</label><label class="inline"><input type="checkbox" id="s-ev" ${s.eventReviews ? 'checked' : ''}> Extra review after big events</label></div>
+      <div class="row" style="margin-top:8px"><label>Every (days)<input id="s-days" type="number" min="1" value="${esc(s.everyDays)}" style="width:90px"></label><label>Own budget a day (USD)<input id="s-usd" type="number" min="0" value="${esc(s.maxUsdPerDay)}" style="width:110px"></label>
+      <label>CEO must answer within (h)<input id="s-ans" type="number" min="4" value="${esc(s.answerHours)}" style="width:100px"></label><label>Then escalate to you after (h)<input id="s-esc" type="number" min="8" value="${esc(s.escalateHours)}" style="width:100px"></label></div>
+      <p class="muted small" style="margin-top:6px">The advisory budget is separate from the company's: the CEO cannot stop the reviews by spending the company budget.</p>
+      <p style="margin-top:8px"><button class="primary" onclick="act(()=>api('/settings','PUT',{enabled:document.getElementById('s-on').checked,eventReviews:document.getElementById('s-ev').checked,everyDays:Number(document.getElementById('s-days').value),maxUsdPerDay:Number(document.getElementById('s-usd').value),answerHours:Number(document.getElementById('s-ans').value),escalateHours:Number(document.getElementById('s-esc').value)}))">Save</button></p></div>
+  </div>
+  <div class="panel"><h2>Reviews</h2>${d.reviews.length ? `<div class="list">${d.reviews.map(r => `<div class="item small"><div class="meta"><span class="pill ${r.status === 'completed' ? 'ok' : r.status === 'failed' ? 'fail' : 'warn'}">${esc(r.status)}</span><span>${esc(r.startedAt?.slice(0, 16).replace('T', ' '))}</span><span class="muted">${esc(r.trigger)}</span>${r.overall != null ? `<b>${r.overall}/100</b>` : ''}${r.costUsd ? `<span class="muted">$${Math.round(r.costUsd * 100) / 100}</span>` : ''}${r.status === 'completed' ? `<button class="small" onclick="report('${r.id}')">Report</button>` : ''}</div>${r.error ? `<span class="err">${esc(r.error)}</span>` : ''}</div>`).join('')}</div>` : '<p class="muted">None yet.</p>'}</div>`
+}
+async function report(id) { const el = document.getElementById('report'); if (!el) return; el.hidden = false; el.textContent = 'Loading…'; el.scrollIntoView({ block: 'nearest' }); try { el.textContent = (await api('/reports/' + id)).text || '(no report)' } catch (e) { el.textContent = e.message } }
+load(); setInterval(() => { const a = document.activeElement; if (!a || !['INPUT', 'TEXTAREA'].includes(a.tagName)) load() }, 15000)
+</script>
+</body>
+</html>

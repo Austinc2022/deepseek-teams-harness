@@ -30,6 +30,7 @@ import { McpLibrary } from './mcp.js'
 import { runCli, CLI_BACKENDS } from './cli-backends.js'
 import { deepMerge, normalizeAgent } from './registry.js'
 import { providerEnv } from './providers.js'
+import { resolveExecution, prepareRemote } from './targets.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits', auto: 'auto', plan: 'plan', deny: 'dontAsk' }
@@ -306,7 +307,19 @@ async function runClaudeCode(p, mem, cwd, write) {
     }
   }
 
-  const ex = def.execution
+  // execution target: the agent's own, else (for sandboxed builders) the one its caller set (docs/EXECUTION-TARGETS.md)
+  let teamTarget = null
+  if (p.team) { try { teamTarget = registry.getTeam(p.team).execution?.target ?? null } catch {} }
+  const resolved = resolveExecution(registry.home, def, p.target, teamTarget)
+  if (resolved.note) { write(`> execution: ${resolved.note}\n\n`); p.onEvent?.({ type: 'target', brief: resolved.note }) }
+  let remote = null
+  if (resolved.execution.mode === 'target') {
+    remote = prepareRemote(resolved.target, { cwd, extraDirs })
+    options.spawnClaudeCodeProcess = remote.spawner
+    write(`> execution: target ${resolved.target.name} (${resolved.target.kind}${remote.remote ? `, folder ${remote.remoteDir}` : ''})\n\n`)
+    p.onEvent?.({ type: 'target', brief: `running on ${resolved.target.name}` })
+  }
+  const ex = resolved.execution
   if (ex.mode === 'sandbox') {
     options.sandbox = {
       enabled: true,
@@ -326,6 +339,7 @@ async function runClaudeCode(p, mem, cwd, write) {
   let text = ''
   let result
   let sessionId
+  try {
   for await (const m of query({ prompt: p.prompt, options })) {
     if (m.type === 'system' && m.subtype === 'init') {
       sessionId = m.session_id
@@ -342,6 +356,10 @@ async function runClaudeCode(p, mem, cwd, write) {
     } else if (m.type === 'result') {
       result = m
     }
+  }
+  } finally {
+    // results come back from a remote target even when the session failed or was stopped
+    if (remote) { try { remote.finish() } catch (e) { write(`> execution: could not copy the results back: ${e.message}\n\n`) } }
   }
   mem.saveSession(sessionId)
   if (!result) return { ok: false, error: 'Claude Code ended without a result', sessionId }

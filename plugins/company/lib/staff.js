@@ -44,6 +44,8 @@ export function candidates(registry, need, { limit = 6 } = {}) {
   return registry.listAgents().filter(a => !a.invalid && P.isOurs(a.name) && !leads.has(a.name)).map(a => { try { return registry.getAgent(a.name) } catch { return null } }).filter(Boolean)
     .filter(d => !(d.tags ?? []).includes('super-agent') || (d.tags ?? []).includes('builder'))
     .filter(d => agentKind(d) !== 'judge' && agentKind(d) !== 'dreamer')
+    // the advisory team works for the owner, not for the company's work
+    .filter(d => !P.advisoryNames?.has(d.name))
     .filter(d => (need.kind === 'builder') === (agentKind(d) === 'builder'))
     .map(d => {
       const fit = score(q, `${d.name.replace(/-/g, ' ')} ${d.description} ${d.description} ${String(d.role ?? '').slice(0, 2000)}`)

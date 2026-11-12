@@ -14,6 +14,7 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. |
 | `plugins/company-dashboard` | Two pages. **Company** (the desk, where you act): decisions waiting for you, goal progress, what is happening now, each super agent's plan, tickets, the initiative pipeline, engine controls, the organisation, a timeline and the charter. **Dashboard** (read-only): every business unit and what it is working on, an activity chart, what happens next, trends and daily operating numbers. |
 | `plugins/super-agent` | An always-on **super agent** (after DeepSeek's dsh-superagent prototype): it reacts to events, opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO. |
+| `plugins/group-hq` | A **group headquarters** (not loaded in the web profile by default): companies on this or other computers join it from their own **Connections** page with an invite code; it shows everything each company shares, sends directives and policies within the authority each company's owner gives it (observe, advise, direct), and has a group CEO and an independent review team. See [docs/GROUP.md](docs/GROUP.md). |
 
 ### What it looks like
 
@@ -361,6 +362,14 @@ The loop writes one line of history to `forge/super-agent/metrics.jsonl` every t
 when you first run it. Every chart has a "Numbers" table under it.
 
 State is in `forge/company/` (excluded from git): `company.json`, `ledger.jsonl`, `reports/`, and `backup/` with the original agent files from before the move to DeepSeek.
+
+## Group headquarters, advisory teams and execution targets
+
+- **Advisory team** (every company, automatic): four independent advisors and a lead review the company's setup, performance, goals and KPIs, and send the CEO ranked recommendations. The CEO must accept, reject or defer each one (`respond_advice`); unanswered or rejected high-severity advice goes to you. Each review measures whether earlier advice helped. The CEO cannot change the team, and it has its own budget. **Advisory** page.
+- **Group headquarters** (`plugins/group-hq`, usually on another computer): a company joins from **Connections → Group headquarters** with the HQ's address and an invite code. You choose how much the HQ may do (observe, advise, direct) and what the company shares, and you can change both at any time. The HQ has a portfolio view, directives, group policies (a spend cap that is enforced under direct), a group CEO and its own review team. `./hq-cli` runs it without the web UI.
+- **Execution targets**: builders can run on a VM or another computer over ssh, or in Docker, instead of this machine's sandbox. You set the target per ticket, agent, team, super team, or as the company default. The ticket folder is copied there and back; keys and `.env` files are never copied. Set them up under **Connections → Execution targets**.
+
+Details: [docs/GROUP.md](docs/GROUP.md) and [docs/EXECUTION-TARGETS.md](docs/EXECUTION-TARGETS.md).
 
 ## CLI workbench: many Claude Code terminals on one page
 

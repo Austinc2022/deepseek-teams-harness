@@ -80,6 +80,8 @@ export function normalizeAgent(def) {
   if (!BACKENDS.includes(d.backend)) throw new Error(`agent ${d.name}: backend must be one of ${BACKENDS.join(', ')}`)
   if (!PERMISSIONS.includes(d.permission)) throw new Error(`agent ${d.name}: permission must be one of ${PERMISSIONS.join(', ')}`)
   if (!EXEC_MODES.includes(d.execution.mode)) throw new Error(`agent ${d.name}: execution.mode must be one of ${EXEC_MODES.join(', ')}`)
+  if (d.execution.target !== undefined && d.execution.target !== null && !/^[a-z][a-z0-9-]{0,47}$/.test(String(d.execution.target))) throw new Error(`agent ${d.name}: execution.target must be the name of an execution target`)
+  if (d.execution.target == null) delete d.execution.target
   if (!MEMORY_MODES.includes(d.memory.mode)) throw new Error(`agent ${d.name}: memory.mode must be one of ${MEMORY_MODES.join(', ')}`)
   if (!MEMORY_SCOPES.includes(d.memory.scope)) throw new Error(`agent ${d.name}: memory.scope must be one of ${MEMORY_SCOPES.join(', ')}`)
   if (d.effort !== undefined && !EFFORTS.includes(d.effort)) throw new Error(`agent ${d.name}: effort must be one of ${EFFORTS.join(', ')}`)

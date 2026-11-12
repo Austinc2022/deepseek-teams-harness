@@ -321,6 +321,7 @@ export class Perf {
       const team = String(a.team ?? '')
       let t; try { t = registry.getTeam(team) } catch { throw new Error(`no team ${team}`) }
       if (!this.sa.org.canReach(me, 'teams', team)) throw new Error(`${team} is not one of your teams`)
+      if (team === P.advisoryTeamName || [...(a.add ?? []), ...(a.remove ?? [])].some(n => P.advisoryNames.has(String(n)))) throw new Error('the advisory team is independent: it cannot be changed from inside the company')
       const add = (a.add ?? []).map(String).filter(n => { try { registry.getAgent(n); return P.isOurs(n) } catch { return false } })
       const remove = new Set((a.remove ?? []).map(String))
       const members = [...new Set([...t.members.filter(m => !remove.has(m)), ...add])]
