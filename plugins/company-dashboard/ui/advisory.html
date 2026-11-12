@@ -108,5 +108,6 @@ function render() {
 async function report(id) { const el = document.getElementById('report'); if (!el) return; el.hidden = false; el.textContent = 'Loading…'; el.scrollIntoView({ block: 'nearest' }); try { el.textContent = (await api('/reports/' + id)).text || '(no report)' } catch (e) { el.textContent = e.message } }
 load(); setInterval(() => { const a = document.activeElement; if (!a || !['INPUT', 'TEXTAREA'].includes(a.tagName)) load() }, 15000)
 </script>
+<script src="switcher.js"></script>
 </body>
 </html>

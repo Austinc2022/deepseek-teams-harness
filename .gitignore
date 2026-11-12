@@ -69,3 +69,6 @@ forge/agents/*.yaml.bak
 
 # Company knowledge store (SQLite, runtime data)
 forge/knowledge/
+
+# Other companies on this machine (docs/COMPANIES.md): their whole forge home, runs, memory and state
+/companies/

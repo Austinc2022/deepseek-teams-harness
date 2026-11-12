@@ -3,6 +3,13 @@
 #   ./super-cli setup | status | say "text" | answer <ticket> "text" | stop|retry <ticket> | on|off | run
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/.local/node/bin:$PATH"
+# --company <id>: work on another company of this machine (companies/<id>/; "main" is forge/). See docs/COMPANIES.md.
+if [ "$1" = "--company" ]; then
+  case "$2" in ''|*[!a-z0-9-]*) echo "usage: $(basename "$0") --company <id> ..." >&2; exit 2 ;; esac
+  if [ "$2" = "main" ]; then export AGENT_FORGE_HOME="$ROOT/forge"; else export AGENT_FORGE_HOME="$ROOT/companies/$2"; fi
+  [ -d "$AGENT_FORGE_HOME" ] || { echo "no company \"$2\" (looked in $AGENT_FORGE_HOME)" >&2; exit 2; }
+  shift 2
+fi
 export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
 export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
 exec node "$ROOT/plugins/super-agent/bin/super.js" "$@"

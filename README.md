@@ -11,7 +11,7 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/project-board` | A **Projects** page: projects with categorized tasks; each task runs its own orchestration of agents and workflows. |
 | `plugins/cli-workbench` | A **CLI workbench** page in the web UI: many interactive Claude Code, Codex and OpenCode terminals side by side, each in its own git worktree. |
 | `plugins/super-team` | A **Super team** page: one supervisor agent orchestrates many agent teams, in parallel or in sequence depending on the task, with every Agent chat mode at both levels. |
-| `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. |
+| `plugins/company` | A **CEO agent** that owns one written goal and a daily budget, directs department leads (each a super team of agent teams), hires through an HR team, and executes only through a deterministic gate. Run **many companies** on one computer: each has its own forge home, CEO, agents, teams, super agents, memory and budget, and runs in its own process ([docs/COMPANIES.md](docs/COMPANIES.md)). |
 | `plugins/company-dashboard` | Two pages. **Company** (the desk, where you act): decisions waiting for you, goal progress, what is happening now, each super agent's plan, tickets, the initiative pipeline, engine controls, the organisation, a timeline and the charter. **Dashboard** (read-only): every business unit and what it is working on, an activity chart, what happens next, trends and daily operating numbers. |
 | `plugins/super-agent` | An always-on **super agent** (after DeepSeek's dsh-superagent prototype): it reacts to events, opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO. |
 | `plugins/group-hq` | A **group headquarters** (not loaded in the web profile by default): companies on this or other computers join it from their own **Connections** page with an invite code; it shows everything each company shares, sends directives and policies within the authority each company's owner gives it (observe, advise, direct), and has a group CEO and an independent review team. See [docs/GROUP.md](docs/GROUP.md). |
@@ -362,6 +362,10 @@ The loop writes one line of history to `forge/super-agent/metrics.jsonl` every t
 when you first run it. Every chart has a "Numbers" table under it.
 
 State is in `forge/company/` (excluded from git): `company.json`, `ledger.jsonl`, `reports/`, and `backup/` with the original agent files from before the move to DeepSeek.
+
+## Many companies
+
+The **Companies** page lists every company on this computer and creates new ones (name, profile, models, mission, budget). The main company stays in `forge/` and runs inside `./dsh web`. Every other company gets `companies/<id>/`, a complete forge of its own, and runs as its own process that keeps going when `./dsh web` restarts. Every company page has a switcher at the top. No agent can read another company's folder. The CLIs take `--company <id>`. See [docs/COMPANIES.md](docs/COMPANIES.md).
 
 ## Group headquarters, advisory teams and execution targets
 

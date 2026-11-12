@@ -194,6 +194,7 @@ function migrate(co, done) {
 
 const P = makeProfile({
   id: 'quant',
+  singleton: true, // it drives the one quant engine in quant/: only one company per machine may use this profile
   label: 'Crypto company',
   companyName: 'the crypto company',
   prefix: 'quant-',

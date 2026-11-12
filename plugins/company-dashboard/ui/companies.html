@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companies</title>
+<style>
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec;
+  --accent: #8a5a12; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0 } h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 } h3 { font-size: 16px; margin: 0 }
+p { margin: 0 } .muted { color: var(--muted) } .small { font-size: 12px } .num { font-family: var(--mono); font-variant-numeric: tabular-nums }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
+button.danger { color: var(--bad) } button:disabled { opacity: .55; cursor: default }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+input, textarea, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100% }
+textarea { width: 100%; min-height: 64px; resize: vertical }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted) } label.inline { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 14px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end }
+.stats { display: flex; flex-wrap: wrap; gap: 8px } .stat { background: var(--soft); border-radius: 8px; padding: 6px 10px; min-width: 96px } .stat b { display: block; font-family: var(--mono); font-size: 17px; font-variant-numeric: tabular-nums }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap }
+.ok { color: var(--good); border-color: var(--good) } .warn { color: var(--warn); border-color: var(--warn) } .fail { color: var(--bad); border-color: var(--bad) }
+.card { display: flex; flex-direction: column; gap: 10px }
+.card .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between }
+.card .mission { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.card .acts { display: flex; flex-wrap: wrap; gap: 6px }
+pre.log { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 var(--mono); background: var(--soft); border-radius: 8px; padding: 8px; max-height: 40vh; overflow-y: auto; margin: 0 }
+.err { color: var(--bad); overflow-wrap: anywhere }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px 14px }
+.form .wide { grid-column: 1 / -1 }
+.confirm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Companies</h1>
+    <p class="muted small">Every company on this computer is separate. Each one has its own CEO, agents, teams, super teams and super agents, plus its own memory, knowledge, budget, advisory team and headquarters link. No agent can read another company's folder. The main company runs inside ./dsh web. The others run as their own processes and keep running when ./dsh web restarts.</p>
+  </header>
+  <p id="error" class="err" role="alert" hidden></p>
+  <div class="stats" id="totals"></div>
+  <div class="grid" id="list"><p class="muted">Loading…</p></div>
+
+  <section class="panel" aria-labelledby="newh">
+    <h2 id="newh">New company</h2>
+    <form id="create" class="form">
+      <label>Name <input name="name" required minlength="2" maxlength="60" placeholder="Northwind Labs" autocomplete="off"></label>
+      <label>Id (folder and address) <input name="id" pattern="[a-z][a-z0-9-]{1,30}" maxlength="31" placeholder="from the name" autocomplete="off"></label>
+      <label>Profile <select name="profile" id="profile"></select></label>
+      <label>Models <select name="models"><option value="opus">Claude Opus 5.5 for every agent (like the main company)</option><option value="profile">The profile's own mix (Opus, Sonnet, Haiku)</option></select></label>
+      <label>Daily budget (USD) <input name="dailyUsd" type="number" min="0" step="1" value="20"></label>
+      <label class="wide">Mission <textarea name="mission" maxlength="2000" placeholder="What this company exists to achieve. The CEO plans from it; you can change it later on the company's desk."></textarea></label>
+      <label class="inline"><input type="checkbox" name="autopilot"> Autopilot (the CEO runs cycles on its own)</label>
+      <label class="inline"><input type="checkbox" name="start" checked> Start it now</label>
+      <div class="wide row"><button class="primary" type="submit" id="createBtn">Create company</button><span class="muted small" id="createNote">Setting up takes a few seconds and uses no models. Once it starts, its CEO begins planning straight away, on your Claude subscription and within the daily budget.</span></div>
+    </form>
+  </section>
+</div>
+<script>
+let data = null
+const summaries = {}
+const open = { log: new Set(), confirm: null, rename: null }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const money = n => (n == null ? '–' : '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }))
+const ago = t => { if (!t) return ''; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago` }
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/companies' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+const showError = e => { const el = document.getElementById('error'); el.textContent = e ? e.message ?? String(e) : ''; el.hidden = !e }
+async function act(btn, fn) {
+  showError(null)
+  if (btn) btn.disabled = true
+  try { await fn() } catch (e) { showError(e) } finally { if (btn) btn.disabled = false; load() }
+}
+const goTo = id => { try { localStorage.setItem('company.current', id) } catch {} location.href = id === 'main' ? './' : `c/${id}/` }
+
+async function load() {
+  try { data = await api('') } catch (e) { document.getElementById('list').innerHTML = `<p class="err">Could not load the companies: ${esc(e.message)}</p>`; return }
+  render()
+  await Promise.all(data.companies.filter(c => c.status === 'running').map(async c => {
+    try { summaries[c.id] = await api(`/${c.id}/summary`) } catch (e) { summaries[c.id] = { error: e.message } }
+  }))
+  render()
+}
+
+function card(c) {
+  const s = summaries[c.id] ?? {}
+  const st = c.status === 'running' ? 'ok' : c.status === 'error' ? 'fail' : 'warn'
+  const spend = s.budget ? `${money(s.budget.spentTodayUsd)} <span class="muted small">of ${money(s.budget.dailyUsd)}</span>` : '–'
+  const acts = []
+  acts.push(`<button class="primary" data-go="${esc(c.id)}">Open</button>`)
+  if (!c.main) {
+    if (c.status === 'running') acts.push(`<button data-act="restart" data-id="${esc(c.id)}">Restart</button>`, `<button data-confirm="stop:${esc(c.id)}">Stop</button>`)
+    else acts.push(`<button data-act="start" data-id="${esc(c.id)}">Start</button>`)
+    acts.push(`<button data-log="${esc(c.id)}" aria-expanded="${open.log.has(c.id)}">${open.log.has(c.id) ? 'Hide log' : 'Log'}</button>`, `<button data-rename="${esc(c.id)}">Rename</button>`, `<button class="danger" data-confirm="archive:${esc(c.id)}">Archive</button>`)
+  }
+  let confirm = ''
+  if (open.confirm?.id === c.id) {
+    const what = open.confirm.act === 'stop'
+      ? 'Stop this company? Its CEO, super agents and running work stop until you start it again.'
+      : 'Archive this company? It stops, and its folder moves to companies/.archive/. Nothing is deleted.'
+    confirm = `<div class="confirm" role="group" aria-label="Confirm"><span>${what}</span><button class="danger" data-act="${open.confirm.act}" data-id="${esc(c.id)}">${open.confirm.act === 'stop' ? 'Stop it' : 'Archive it'}</button><button data-cancel>Cancel</button></div>`
+  }
+  const rename = open.rename === c.id ? `<form class="row" data-renameform="${esc(c.id)}"><label>New name <input name="name" value="${esc(c.name)}" minlength="2" maxlength="60" required></label><button class="primary" type="submit">Save</button><button type="button" data-cancel>Cancel</button></form>` : ''
+  return `<article class="panel card" aria-label="${esc(c.name)}">
+    <div class="head"><h3>${esc(c.name)}</h3><span><span class="pill ${st}">${esc(c.status)}</span>${c.main ? ' <span class="pill">main</span>' : ''}</span></div>
+    <p class="small muted">${esc(c.id)} · ${esc(c.profile)} profile · ${esc(c.home)}${c.port ? ` · port ${esc(c.port)}` : ''}${c.startedAt ? ` · up since ${esc(ago(c.startedAt))}` : ''}</p>
+    ${s.mission ? `<p class="mission">${esc(s.mission)}</p>` : ''}
+    ${c.error ? `<p class="err small">${esc(c.error)}</p>` : ''}
+    ${s.error ? `<p class="err small">${esc(s.error)}</p>` : ''}
+    <div class="stats">
+      <div class="stat"><span class="small muted">Spent today</span><b>${spend}</b></div>
+      <div class="stat"><span class="small muted">Needs you</span><b>${s.needsYou ?? '–'}</b></div>
+      <div class="stat"><span class="small muted">Open tickets</span><b>${s.tickets ?? '–'}</b></div>
+      <div class="stat"><span class="small muted">Decisions</span><b>${s.openDecisions ?? '–'}</b></div>
+      <div class="stat"><span class="small muted">Super agents</span><b>${s.superAgents ?? '–'}</b></div>
+    </div>
+    ${s.autopilot ? `<p class="small muted">Autopilot ${s.autopilot.enabled ? `on, every ${esc(s.autopilot.everyHours)} h` : 'off'} · proactive super agent ${s.proactive ? 'on' : 'off'}${s.hold ? ` · on hold: ${esc(s.hold)}` : ''}${s.lastCycle ? ` · last cycle ${esc(s.lastCycle.status)} ${esc(ago(s.lastCycle.startedAt))}` : ''}</p>` : ''}
+    <div class="acts">${acts.join('')}</div>
+    ${confirm}${rename}
+    ${open.log.has(c.id) ? `<pre class="log" data-logbox="${esc(c.id)}">Loading…</pre>` : ''}
+  </article>`
+}
+
+function render() {
+  const cs = data.companies
+  const running = cs.filter(c => c.status === 'running').length
+  const spent = cs.reduce((n, c) => n + (summaries[c.id]?.budget?.spentTodayUsd ?? 0), 0)
+  const budget = cs.reduce((n, c) => n + (summaries[c.id]?.budget?.dailyUsd ?? 0), 0)
+  const needs = cs.reduce((n, c) => n + (summaries[c.id]?.needsYou ?? 0), 0)
+  document.getElementById('totals').innerHTML = `<div class="stat"><span class="small muted">Companies</span><b>${cs.length}</b></div><div class="stat"><span class="small muted">Running</span><b>${running}</b></div><div class="stat"><span class="small muted">Spent today, all</span><b>${money(spent)}</b></div><div class="stat"><span class="small muted">Daily budgets, all</span><b>${money(budget)}</b></div><div class="stat"><span class="small muted">Needs you, all</span><b>${needs}</b></div>`
+  document.getElementById('list').innerHTML = cs.map(card).join('')
+  for (const id of open.log) {
+    const box = document.querySelector(`[data-logbox="${CSS.escape(id)}"]`)
+    if (box) api(`/${id}/log`).then(r => { box.textContent = r.log || '(empty)'; box.scrollTop = box.scrollHeight }).catch(e => { box.textContent = e.message })
+  }
+  const sel = document.getElementById('profile')
+  const keep = sel.value
+  sel.innerHTML = data.profiles.map(p => `<option value="${esc(p.id)}"${p.available ? '' : ' disabled'}>${esc(p.id)}: ${esc(p.label)}${p.available ? '' : ' (in use; one company only)'}</option>`).join('')
+  sel.value = keep && data.profiles.some(p => p.id === keep && p.available) ? keep : (data.profiles.find(p => p.id === 'generic' && p.available)?.id ?? data.profiles.find(p => p.available)?.id ?? '')
+}
+
+document.getElementById('list').addEventListener('click', e => {
+  const b = e.target.closest('button')
+  if (!b) return
+  if (b.dataset.go) return goTo(b.dataset.go)
+  if (b.dataset.log) { open.log.has(b.dataset.log) ? open.log.delete(b.dataset.log) : open.log.add(b.dataset.log); return render() }
+  if (b.dataset.confirm) { const [act, id] = b.dataset.confirm.split(':'); open.confirm = { act, id }; return render() }
+  if (b.dataset.rename) { open.rename = b.dataset.rename; return render() }
+  if ('cancel' in b.dataset) { open.confirm = null; open.rename = null; return render() }
+  if (b.dataset.act) {
+    const { act: a, id } = b.dataset
+    open.confirm = null
+    b.textContent = a === 'start' ? 'Starting…' : a === 'restart' ? 'Restarting…' : a === 'stop' ? 'Stopping…' : 'Archiving…'
+    act(b, () => api(`/${id}/${a}`, 'POST'))
+  }
+})
+document.getElementById('list').addEventListener('submit', e => {
+  const f = e.target.closest('form[data-renameform]')
+  if (!f) return
+  e.preventDefault()
+  const id = f.dataset.renameform
+  act(f.querySelector('button[type=submit]'), async () => { const r = await api(`/${id}`, 'PUT', { name: f.elements.namedItem('name').value }); open.rename = null; showError(null); document.getElementById('createNote').textContent = r.note ?? '' })
+})
+document.getElementById('create').addEventListener('submit', e => {
+  e.preventDefault()
+  const f = e.target, btn = document.getElementById('createBtn')
+  const el = n => f.elements.namedItem(n) // f.name and f.id are the form's own properties
+  const body = { name: el('name').value.trim(), id: el('id').value.trim() || undefined, profile: el('profile').value, models: el('models').value, dailyUsd: el('dailyUsd').value, mission: el('mission').value.trim() || undefined, autopilot: el('autopilot').checked, start: el('start').checked }
+  btn.textContent = 'Creating…'
+  act(btn, async () => {
+    try { const c = await api('', 'POST', body); f.reset(); document.getElementById('createNote').textContent = `Created ${c.name}. Open it to set its charter, departments and goals.` }
+    finally { btn.textContent = 'Create company' }
+  })
+})
+load()
+setInterval(() => { if (!document.hidden && !open.confirm && !open.rename) load() }, 20_000)
+</script>
+</body>
+</html>

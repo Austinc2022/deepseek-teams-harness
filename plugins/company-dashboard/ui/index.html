@@ -645,5 +645,6 @@ load(); loadEngine(); loadLedger(); loadOrg(); loadTimeline()
 setInterval(loadOrg, 12000); setInterval(() => { if (!$('tlBefore').value && !$('dlg').open) loadTimeline() }, 20000)
 setInterval(load, 4000); setInterval(loadEngine, 60000); setInterval(loadLedger, 30000)
 </script>
+<script src="switcher.js"></script>
 </body>
 </html>

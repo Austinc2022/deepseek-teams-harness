@@ -257,8 +257,13 @@ export function reviewGate(P) {
  * its company different. Agents in spec.agents are given the analyst template (read-only) unless kind: 'builder'.
  */
 export function makeProfile(spec) {
+  // per-company overrides from <forge>/company/profile.json (lib/profile.js); a profile that sets singleton: true
+  // keeps its own projectDir, because that folder is shared machinery (the quant engine)
+  const early = globalThis[Symbol.for('company.profile.overrides')] ?? {}
+  spec = { ...spec, ...early, models: { ...(spec.models ?? {}), ...(early.models ?? {}) }, ...(spec.singleton && spec.projectDir ? { projectDir: spec.projectDir } : {}) }
   const P = {
     id: spec.id,
+    singleton: spec.singleton === true,
     label: spec.label ?? spec.companyName ?? 'Company',
     companyName: spec.companyName ?? 'the company',
     prefix: spec.prefix ?? 'co-',

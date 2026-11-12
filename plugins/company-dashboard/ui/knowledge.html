@@ -233,5 +233,6 @@ $('runGo').onclick = async () => {
 load().catch(e => toast(e.message))
 setInterval(() => { if (!$('dlg').open) load().catch(() => {}) }, 60_000)
 </script>
+<script src="switcher.js"></script>
 </body>
 </html>

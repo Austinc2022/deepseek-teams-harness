@@ -9,6 +9,9 @@
  *   company autopilot on|off [hours]
  *   company serve [--port 3093]    the dashboard on its own port (no harness needed)
  *   company profile [id]           show the active profile and the available ones, or select one (restart to apply)
+ *   company charter '<json>'       change the charter (mission, scope, budget, autopilot), as the dashboard does
+ *
+ * Another company on this machine: ./company-cli --company <id> ... (docs/COMPANIES.md).
  */
 import http from 'node:http'
 import fs from 'node:fs'
@@ -62,6 +65,7 @@ async function serve() {
       if (url.pathname === '/' && req.method === 'GET') return send(res, 200, fs.readFileSync(page, 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname === '/board.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'board.html'), 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname === '/knowledge.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'knowledge.html'), 'utf8'), 'text/html; charset=utf-8')
+      if (url.pathname === '/switcher.js' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'switcher.js'), 'utf8'), 'text/javascript; charset=utf-8')
       if ((url.pathname === '/advisory.html' || url.pathname === '/connections.html') && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), url.pathname.slice(1)), 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname.startsWith('/api/')) {
         if (req.headers['x-company-request'] !== '1') return send(res, 403, { error: 'forbidden' })
@@ -107,6 +111,7 @@ async function main() {
     return
   }
   if (cmd === 'serve') return serve()
+  if (cmd === 'charter') { console.log(JSON.stringify(co.updateCharter(JSON.parse(rest.join(' ') || '{}')), null, 2)); return }
   if (cmd === 'profile') {
     if (!rest[0]) { console.log(`active: ${PROFILE_ID}\navailable: ${listProfiles().join(', ')}`); return }
     if (!listProfiles().includes(rest[0])) throw new Error(`no profile ${rest[0]} (available: ${listProfiles().join(', ')})`)
@@ -114,7 +119,7 @@ async function main() {
     console.log(`selected ${rest[0]}. Restart ./dsh web (or the CLI), then run ./company-cli setup and ./super-cli setup.`)
     return
   }
-  console.error('usage: company-cli profile [id]|setup|status|cycle ["focus"]|decide <id> <choice>|autopilot on|off [hours]|serve [--port N]')
+  console.error('usage: company-cli [--company <id>] profile [id]|charter <json>|setup|status|cycle ["focus"]|decide <id> <choice>|autopilot on|off [hours]|serve [--port N]')
   process.exit(2)
 }
 main().then(() => process.exit(0), e => { console.error(`error: ${e.message}`); process.exit(1) })

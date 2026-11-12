@@ -151,5 +151,6 @@ function renderTargets() {
 function render() { renderGroup(); renderTargets() }
 load(); setInterval(() => { const a = document.activeElement; if (!editing && (!a || !['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName))) load() }, 15000)
 </script>
+<script src="switcher.js"></script>
 </body>
 </html>

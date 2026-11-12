@@ -1,6 +1,7 @@
 /**
- * Company dashboard: browser half. Adds a "Company" sidebar page that embeds the
- * dashboard served by the host half under /company/ on the same origin.
+ * Company dashboard: browser half. Adds the company sidebar pages, which embed the pages served by the host half
+ * under /company/ on the same origin. They show the company chosen in the switcher on those pages (localStorage
+ * "company.current"; /company/c/<id>/ for a company other than the main one), and a Companies page lists them all.
  */
 window.__ModuleLoader__.load({
   id: '@local/company-dashboard',
@@ -17,23 +18,33 @@ window.__ModuleLoader__.load({
     const BOARD = { en: 'Dashboard', zh: '仪表盘', ja: 'ダッシュボード', es: 'Panel', fr: 'Tableau de bord', de: 'Dashboard', ru: 'Панель', pt: 'Painel' }
     const ADVISORY = { en: 'Advisory', zh: '顾问团队', ja: 'アドバイザリー', es: 'Asesoría', fr: 'Conseil', de: 'Beratung', ru: 'Консультанты', pt: 'Consultoria' }
     const CONNECT = { en: 'Connections', zh: '连接', ja: '接続', es: 'Conexiones', fr: 'Connexions', de: 'Verbindungen', ru: 'Подключения', pt: 'Conexões' }
-    for (const [lang, v] of Object.entries(LABEL)) dictionaries[lang] = { company: v, board: BOARD[lang], advisory: ADVISORY[lang], connect: CONNECT[lang] }
+    const COMPANIES = { en: 'Companies', zh: '公司列表', ja: '会社一覧', es: 'Empresas', fr: 'Sociétés', de: 'Firmen', ru: 'Компании', pt: 'Empresas' }
+    for (const [lang, v] of Object.entries(LABEL)) dictionaries[lang] = { company: v, board: BOARD[lang], advisory: ADVISORY[lang], connect: CONNECT[lang], companies: COMPANIES[lang] }
+
+    const KEY = 'company.current'
+    const current = () => { try { const v = localStorage.getItem(KEY); return v && /^[a-z][a-z0-9-]{1,30}$/.test(v) ? v : 'main' } catch { return 'main' } }
+    const pageUrl = (id, file) => new URL('company/' + (id === 'main' ? '' : `c/${id}/`) + file, document.baseURI).href
+    // the switcher inside a page writes the choice; the storage event tells the other sidebar pages
+    function useCompany() {
+      const [id, setId] = React.useState(current)
+      React.useEffect(() => {
+        const f = ev => { if (!ev.key || ev.key === KEY) setId(current()) }
+        window.addEventListener('storage', f)
+        return () => window.removeEventListener('storage', f)
+      }, [])
+      return id
+    }
+    const FRAME = { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' }
 
     const PANEL_ID = 'company-dashboard'
-    const src = new URL('company/', document.baseURI).href
-
-    function CompanyPage() {
-      return e('iframe', {
-        src,
-        title: 'Company',
-        style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' },
-      })
-    }
     const BOARD_ID = 'company-board'
-    const boardSrc = new URL('company/board.html', document.baseURI).href
-    function BoardPage() {
-      return e('iframe', { src: boardSrc, title: 'Company dashboard', style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' } })
+    const frame = (file, title, fixed) => function Page() {
+      const id = useCompany()
+      return e('iframe', { src: fixed ? new URL('company/' + file, document.baseURI).href : pageUrl(id, file), title, style: FRAME })
     }
+    const CompanyPage = frame('', 'Company')
+    const BoardPage = frame('board.html', 'Company dashboard')
+    const CompaniesPage = frame('companies.html', 'Companies', true)
     function BoardIcon(props) {
       const size = props.size ?? 18
       return e('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
@@ -46,16 +57,18 @@ window.__ModuleLoader__.load({
         e('rect', { x: 3, y: 15, width: 4, height: 5, rx: 1 }), e('rect', { x: 10, y: 15, width: 4, height: 5, rx: 1 }), e('rect', { x: 17, y: 15, width: 4, height: 5, rx: 1 }))
     }
 
-    const frame = (file, title) => function Page() { return e('iframe', { src: new URL('company/' + file, document.baseURI).href, title, style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, display: 'block', background: 'transparent' } }) }
     const AdvisoryPage = frame('advisory.html', 'Advisory')
     const ConnectPage = frame('connections.html', 'Connections')
     const icon = d => function Icon(props) { const size = props.size ?? 18; return e('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, e('path', { d })) }
     const AdvisoryIcon = icon('M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2h5c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z')
+    const CompaniesIcon = icon('M3 21h18M5 21V7l5-3v17M10 21V9l9 3v9M13 13h3M13 16h3M7 10h1M7 13h1M7 16h1')
     const ConnectIcon = icon('M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1')
     const inject = ['slots', 'locale']
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, dictionaries), 'company-dashboard: dictionaries')
       const t = ctx.locale.bind(NS)
+      ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'company-list', locale: NS }, CompaniesPage))
+      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'company-list', order: 15, locale: NS, label: () => t('companies') }, CompaniesIcon))
       ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID, locale: NS }, CompanyPage))
       ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: BOARD_ID, locale: NS }, BoardPage))
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({

@@ -13,6 +13,7 @@
  * Backup models (def.fallbacks): when the primary run fails, returns an empty reply or the
  * model declines (stop_reason "refusal"), the same prompt runs on the next backup model.
  */
+import { denyRules, otherCompanyDirs } from './isolation.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -260,9 +261,11 @@ async function runClaudeCode(p, mem, cwd, write) {
     strictMcpConfig: def.externalMcp !== true,
   }
   // permissionRules: { allow: [...], deny: [...] } in Claude Code's rule syntax, e.g. deny: ['Read(//abs/secret/**)']
-  if (def.permissionRules && typeof def.permissionRules === 'object') {
+  // plus, for every agent, read-deny rules for the other companies' forge homes (isolation.js)
+  {
     const list = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : [])
-    options.settings.permissions = { allow: list(def.permissionRules.allow), deny: list(def.permissionRules.deny) }
+    const rules = def.permissionRules && typeof def.permissionRules === 'object' ? def.permissionRules : {}
+    options.settings.permissions = { allow: list(rules.allow), deny: [...new Set([...list(rules.deny), ...denyRules(registry.home)])] }
   }
   if (def.effort) options.effort = def.effort
   if (def.maxTurns) options.maxTurns = def.maxTurns
@@ -329,7 +332,7 @@ async function runClaudeCode(p, mem, cwd, write) {
       network: ex.network === false
         ? { allowedDomains: [] }
         : { allowedDomains: [...DEFAULT_DOMAINS, ...(ex.allowedDomains ?? [])], allowLocalBinding: ex.allowLocalBinding ?? false },
-      filesystem: { allowWrite: [cwd, os.tmpdir(), ...extraDirs, ...(ex.allowWrite ?? [])], denyRead: ex.denyRead ?? [path.join(os.homedir(), '.ssh'), path.join(os.homedir(), '.aws')] },
+      filesystem: { allowWrite: [cwd, os.tmpdir(), ...extraDirs, ...(ex.allowWrite ?? [])], denyRead: [...(ex.denyRead ?? [path.join(os.homedir(), '.ssh'), path.join(os.homedir(), '.aws')]), ...otherCompanyDirs(registry.home)] },
       ...(ex.sandbox ?? {}),
     }
   } else if (ex.mode === 'container' || ex.mode === 'vm') {
