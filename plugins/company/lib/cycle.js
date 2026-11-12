@@ -16,11 +16,15 @@ import path from 'node:path'
 import { now, today, newId, round, str, clip } from './paths.js'
 import { profile as P } from './profile.js'
 import { syncDepartment } from './setup.js'
+import { recordFacts, recordGate, recordReports, purposeOf } from './knowledge-hooks.js'
+import { withMemory } from '../../agent-forge/lib/memctx.js'
+import { decide as staffDecide, apply as staffApply } from './staff.js'
+import { agentNameProblem } from './naming.js'
 
 /** Deterministic facts of the active profile. */
-export const gatherFacts = (co, log) => P.facts(co, log)
+export const gatherFacts = (co, log) => { const f = P.facts(co, log); recordFacts(f); return f }
 /** The active profile's gate. */
-export const gate = (co, api, p, ctx) => P.gate(co, api, p, ctx)
+export const gate = async (co, api, p, ctx) => { const g = await P.gate(co, api, p, ctx); recordGate(co, g); return g }
 
 // ---------------------------------------------------------------- schemas
 const S = { type: 'string' }
@@ -228,7 +232,9 @@ export async function runCycle(co, api, { cycleId, focus }) {
   }
   // two departments at a time: each one already runs several agents in parallel
   const results = []
-  for (let i = 0; i < work.length && !api.signal.aborted; i += 2) results.push(...await api.parallel(work.slice(i, i + 2).map(w => () => runDirective(w))))
+  // each brief runs under its initiative's purpose: the lead and its teams use that initiative's memory
+  const purposeFor = w => purposeOf(co.read().initiatives.find(x => x.id === w.initiativeId))
+  for (let i = 0; i < work.length && !api.signal.aborted; i += 2) results.push(...await api.parallel(work.slice(i, i + 2).map(w => () => withMemory({ purpose: purposeFor(w) }, () => runDirective(w)))))
   const reports = results.filter(r => r?.report)
   applyReports(co, reports.map(r => ({ department: r.dep.id, initiativeId: r.initiativeId, report: r.report })), cycleId)
   await guard('departments')
@@ -312,6 +318,7 @@ export function applyReports(co, reports, tag) {
       }
     }
   })
+  recordReports(co, reports, tag)
 }
 
 // ---------------------------------------------------------------- hiring
@@ -322,11 +329,26 @@ export async function hire(co, api, h, cycleId) {
   if (hc.mode === 'off') { api.log('hiring is off'); return null }
   const dep = s0.departments.find(d => d.id === h.department)
   if (!dep) return null
+  let team = String(h.team ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 40)
+  if (!P.isOurs(team)) team = `${P.prefix}${team}`
+  // staffing first (plugins/company/lib/staff.js): an existing agent that fits joins the team with its own memory
+  // for it, instead of a new hire. Only "create" goes on to the recruiter.
+  const need = { capability: `${str(h.need, 400)} ${str(h.why, 600)}`, purpose: `team ${team}`, kind: 'analyst', team, excludeLeads: s0.departments.map(x => x.lead) }
+  let d = null
+  try { d = await staffDecide(registry, api, need) } catch (e) { api.log(`staffing: ${e.message}`) }
+  if (d && d.action !== 'create') {
+    try {
+      const r = await staffApply(registry, d, need, { by: P.peopleLeadName })
+      const rec = { id: newId('h'), ts: now(), cycle: cycleId, department: dep.id, team, need: str(h.need, 400), why: str(h.why, 600), name: r.agent, description: `${d.action}: ${str(d.reason, 260)}`, model: registry.getAgent(r.agent).model, reused: true }
+      enroll(co, rec)
+      return `${r.agent} (${d.action}, no new agent) → ${team}: ${str(d.reason, 200)}`
+    } catch (e) { api.log(`staffing ${d.action} failed (${e.message}); hiring instead`) }
+  }
   if (s0.hires.filter(x => x.ts.slice(0, 10) === now().slice(0, 10) && x.status === 'hired').length >= hc.maxPerDay) { api.log('hire skipped: daily hiring limit reached'); return null }
   if (registry.listAgents().filter(a => P.isOurs(a.name)).length >= hc.maxAgents) { api.log('hire skipped: the organisation is at its maximum size'); return null }
 
   const existing = registry.listAgents().filter(a => !a.invalid && P.isOurs(a.name)).map(a => `- ${a.name}: ${a.description}`).join('\n')
-  const spec = await api.agent(P.recruiterName, `Hiring request from the COO for the ${dep.name} department (team ${h.team}).\nNeed: ${h.need}\nWhy: ${h.why}\n\nExisting agents (do not duplicate):\n${existing}\n\nWrite the agent specification.`, { schema: RECRUIT, label: 'hr:recruit' })
+  const spec = await api.agent(P.recruiterName, `Hiring request from the COO for the ${dep.name} department (team ${h.team}).\nNeed: ${h.need}\nWhy: ${h.why}\n\nExisting agents (do not duplicate):\n${existing}\n\nName rule: ${P.prefix}<specialty>-<function>, saying what it works on and what it does (e.g. ${P.prefix}funding-researcher, ${P.prefix}listing-scout).\n\nWrite the agent specification.`, { schema: RECRUIT, label: 'hr:recruit' })
   if (!spec) return null
   const review = await api.agent(P.reviewerName, `Review this proposed hire.\nRequest: ${h.need} (${h.why})\nSpecification:\n${J(spec)}\n\nExisting agents:\n${existing}`, { schema: HR_REVIEW, label: 'hr:review' })
   let name = String(spec.name ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36)
@@ -335,6 +357,8 @@ export async function hire(co, api, h, cycleId) {
   const exists = n => { try { registry.getAgent(n); return true } catch { return false } }
   if (!review?.approve) { co.update(s => { s.hires.push({ ...rec, status: 'rejected', reason: str(review?.reason ?? 'HR review failed', 400) }) }); return null }
   if (name.length < P.prefix.length + 3 || exists(name)) { co.update(s => { s.hires.push({ ...rec, status: 'rejected', reason: 'name taken or invalid' }) }); return null }
+  const badName = agentNameProblem(name, P.prefix)
+  if (badName) { co.update(s => { s.hires.push({ ...rec, status: 'rejected', reason: str(badName, 400) }) }); return null }
 
   // the template is fixed in code: a hire can only choose its words, its model tier, web access and skills
   const def = P.baseAgent({
@@ -346,8 +370,6 @@ export async function hire(co, api, h, cycleId) {
     tags: [...P.tags, 'company', 'hired'],
     role: `${str(review.role || spec.role, 2400)}\n\n${P.hardRules}`,
   })
-  let team = String(h.team ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 40)
-  if (!P.isOurs(team)) team = `${P.prefix}${team}`
 
   if (hc.mode === 'observe') {
     co.update(s => {
@@ -363,7 +385,7 @@ export async function hire(co, api, h, cycleId) {
 /** Save a hire's agent file, put it in its team (creating the team if new) and attach the team to the department. */
 export function enroll(co, rec) {
   const { registry } = co.forge
-  registry.saveAgent(rec.def)
+  if (rec.def) registry.saveAgent(rec.def)
   let t
   try { t = registry.getTeam(rec.team) } catch { t = { name: rec.team, description: `Created for: ${rec.need}`, members: [] } }
   if (!t.members.includes(rec.name)) t.members = [...t.members, rec.name]
@@ -373,7 +395,7 @@ export function enroll(co, rec) {
     dep = s.departments.find(d => d.id === rec.department)
     if (dep && !dep.teams.includes(rec.team)) dep.teams.push(rec.team)
     const i = s.hires.findIndex(x => x.id === rec.id)
-    const row = { ...rec, def: undefined, status: 'hired', hiredAt: now() }
+    const row = { ...rec, def: undefined, status: rec.reused ? 'reused' : 'hired', hiredAt: now() }
     if (i >= 0) s.hires[i] = row; else s.hires.push(row)
     s.hires = s.hires.slice(-200)
   })

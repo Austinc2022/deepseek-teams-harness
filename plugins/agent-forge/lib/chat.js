@@ -704,7 +704,7 @@ export class ChatStore {
     return room
   }
 
-  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, supervisor, workerRoles, maxWorkers, maxConcurrent, project }) {
+  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, supervisor, workerRoles, maxWorkers, maxConcurrent, project, purpose }) {
     project = this.#assertProject(project)
     if (!cwd && project) cwd = this.#readProjects().find(p => p.id === project)?.cwd
     if (team && (!agents || agents.length === 0)) agents = this.registry.getTeam(team).members
@@ -715,6 +715,8 @@ export class ChatStore {
       maxHops: clampHops(maxHops), createdAt: now(), messages: [],
     }
     if (project) room.project = project
+    // a room that serves one purpose (initiative, workstream): its agents use that purpose's memory
+    if (purpose) room.purpose = String(purpose).slice(0, 80)
     if (lead) room.lead = lead
     if (workflow) room.workflow = workflow
     if (workflowArgs) room.workflowArgs = this.#args(workflowArgs)
@@ -1184,7 +1186,7 @@ export class ChatStore {
       const run = runner ? (p => runner(who, p).then(r => r ?? { ok: false, error: ac.signal.aborted ? 'Stopped.' : 'not run' })) : runAgent
       const t0 = Date.now()
       const res = await run({
-        def, registry: this.registry, prompt, cwd, team: room.team, label: `chat:${who}`, contextNote, signal: ac.signal,
+        def, registry: this.registry, prompt, cwd, team: room.team, label: `chat:${who}`, contextNote, signal: ac.signal, ...(room.purpose ?? parent?.purpose ? { purpose: room.purpose ?? parent.purpose } : {}),
         extraMcp: def.backend === 'claude-code' && !opts.worker
           ? { ...(opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : {}), forge_chats: this.#chatTools(id, who, () => msg.id, ac.signal) }
           : opts.supervisorTask ? { forge_team: this.#supervisorTools(id, opts.supervisorTask, () => msg.id) } : undefined,

@@ -5,9 +5,11 @@
  */
 import { orgView, who, timeline, people } from './views.js'
 import { board, entity } from './board.js'
+import { handleKnowledge } from './knowledge-http.js'
 
 export async function handleSuper(sa, method, p, body, query) {
   let r
+  if (p.startsWith('/api/super/knowledge/')) return handleKnowledge(sa, method, p, body, query)
   if (method === 'GET' && p === '/api/super/overview') return sa.overview()
   if (method === 'POST' && p === '/api/super/setup') return sa.setup(await body())
   if (method === 'POST' && p === '/api/super/say') { const b = await body(); return sa.store.command({ type: 'say', text: b.text, to: b.to }) }

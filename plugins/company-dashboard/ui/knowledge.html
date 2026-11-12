@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge and memory</title>
+<style>
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17211e; --muted: #5d6b66; --line: #d6dedb; --soft: #e9eeec;
+  --accent: #8a5a12; --accent-ink: #ffffff; --good: #1f7a4d; --warn: #a86400; --bad: #b3261e; --info: #2c5d8f;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111715; --panel: #18201d; --ink: #e6ece9; --muted: #94a39d; --line: #2a3531; --soft: #202a26;
+  --accent: #e0a94a; --accent-ink: #1a1408; --good: #55c08a; --warn: #e3a441; --bad: #f0766c; --info: #7fb0e0; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); padding: 18px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)) }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 20px; margin: 0 }
+h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650 }
+h3 { font-size: 14px; margin: 10px 0 4px }
+p { margin: 0 }
+a { color: var(--info) }
+.muted { color: var(--muted) } .small { font-size: 12px } .num, code { font-family: var(--mono); font-variant-numeric: tabular-nums }
+code { font-size: 12px; background: var(--soft); padding: 0 4px; border-radius: 4px }
+header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; border-radius: 6px; cursor: pointer }
+button:hover { border-color: var(--muted) }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
+button.bad { color: var(--bad) } button.good { color: var(--good) }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+input, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px }
+.stats { display: flex; flex-wrap: wrap; gap: 8px }
+.stat { background: var(--soft); border-radius: 8px; padding: 6px 10px; min-width: 92px }
+.stat b { display: block; font-family: var(--mono); font-size: 18px }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap }
+.s-active { color: var(--good); border-color: var(--good) } .s-stale { color: var(--warn); border-color: var(--warn) }
+.s-conflict, .s-suspect { color: var(--warn); border-color: var(--warn) } .s-quarantined, .s-invalid { color: var(--bad); border-color: var(--bad) }
+.k-judge { color: var(--info); border-color: var(--info) } .k-builder { color: var(--muted) }
+.facts { display: flex; flex-direction: column; gap: 6px }
+.fact { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; overflow-wrap: anywhere }
+.fact:hover { border-color: var(--muted) }
+.fact .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; align-items: center }
+.trust { display: inline-block; width: 60px; height: 6px; background: var(--soft); border-radius: 3px; overflow: hidden; vertical-align: middle }
+.trust i { display: block; height: 100%; background: var(--good) }
+.tree { display: flex; flex-direction: column; gap: 8px }
+.def { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px }
+.def summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline }
+.inst { margin: 6px 0 0 14px; padding: 6px 8px; border-left: 2px solid var(--line); cursor: pointer }
+.inst:hover { border-left-color: var(--accent) }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px }
+.filters input { flex: 1 1 240px; min-width: 0 }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--soft); padding: 8px; border-radius: 6px; font: 12px/1.45 var(--mono); max-height: 420px; overflow: auto; margin: 6px 0 }
+table { border-collapse: collapse; width: 100%; font-size: 13px } td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top }
+dialog { max-width: min(880px, calc(100vw - 32px)); width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 16px }
+dialog::backdrop { background: rgba(0,0,0,.4) }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; max-width: calc(100vw - 32px) }
+.page { overflow-wrap: anywhere } .page h1, .page h2, .page h3 { text-transform: none; letter-spacing: 0; color: var(--ink); font-size: 15px; margin: 10px 0 4px }
+.page ul { margin: 4px 0; padding-left: 20px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Knowledge and memory</h1>
+      <p class="muted small">What the company knows (facts with their source and strength), what each agent remembers per purpose, and how memory is checked. <a href="./">Back to the company desk</a></p>
+    </div>
+    <div class="controls">
+      <span class="small muted" id="dreamInfo">…</span>
+      <button id="dreamNow" class="primary">Dream now</button>
+    </div>
+  </header>
+
+  <section class="panel"><h2>At a glance</h2><div class="stats" id="stats"></div></section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Needs a look</h2>
+      <p class="small muted" style="margin-bottom:8px">Quarantined facts rest on something found wrong; disputed ones were flagged; suspect ones rest on something superseded; stale ones are past their review date. Your verdict decides at once.</p>
+      <div class="facts" id="attention"></div>
+    </section>
+    <section class="panel">
+      <h2>Area page</h2>
+      <div class="page small" id="page"><span class="muted">Loading…</span></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Facts</h2>
+    <div class="filters">
+      <input id="q" placeholder="Search facts (words, a coin, an initiative)" aria-label="Search facts">
+      <select id="status" aria-label="Status"><option value="">any status</option><option>active</option><option>stale</option><option>conflict</option><option>suspect</option><option>quarantined</option><option>invalid</option></select>
+      <select id="kind" aria-label="Kind"><option value="">any kind</option><option>fact</option><option>constraint</option><option>result</option><option>decision</option><option>lesson</option></select>
+      <button id="search">Search</button>
+    </div>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Who remembers what</h2>
+    <p class="small muted" style="margin-bottom:8px">Each agent definition (what it can do) with its purpose memories (what it is working on). Judges and builders are stateless by design. Click a purpose to read its state, starting pack and journal.</p>
+    <div class="grid">
+      <div><h3>Agents</h3><div class="tree" id="agents"></div></div>
+      <div><h3>Teams</h3><div class="tree" id="teams"></div></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Dreaming log</h2>
+      <div id="dreams" class="small"></div>
+    </section>
+    <section class="panel">
+      <h2>What did a run know?</h2>
+      <div class="filters"><input id="runId" placeholder="Run id, e.g. 20261112-013545-642b" aria-label="Run id"><button id="runGo">Show</button></div>
+      <div id="runCtx" class="small"></div>
+      <h3>Source reliability</h3>
+      <p class="small muted">Authors whose checked claims were found wrong get less trust for new claims.</p>
+      <div id="rel" class="small"></div>
+    </section>
+  </div>
+</div>
+
+<dialog id="dlg"><div id="dlgBody"></div><p style="margin-top:12px;text-align:right"><button id="dlgClose">Close</button></p></dialog>
+<div id="toast" hidden></div>
+
+<script>
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+const when = t => t ? new Date(typeof t === 'number' ? t : t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–'
+async function api(path, method = 'GET', body) {
+  const r = await fetch('api/super/knowledge/' + path, { method, headers: { 'x-company-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || ('request failed: ' + r.status))
+  return j
+}
+function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true }, 5000) }
+function md(src) {
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\[(f[0-9a-f]{10})\]/g, '<a href="#" data-fact="$1">[$1]</a>')
+  let out = [], list = false
+  for (const l of esc(src).split('\n')) {
+    const h = l.match(/^(#{1,4})\s+(.*)/), li = l.match(/^\s*[-*]\s+(.*)/)
+    if (!li && list) { out.push('</ul>'); list = false }
+    if (h) out.push(`<h3>${inline(h[2])}</h3>`)
+    else if (li) { if (!list) { out.push('<ul>'); list = true } out.push(`<li>${inline(li[1])}</li>`) }
+    else if (l.trim()) out.push(`<p>${inline(l)}</p>`)
+  }
+  if (list) out.push('</ul>')
+  return out.join('')
+}
+const pill = (s, cls = 's-' + s) => `<span class="pill ${cls}">${esc(s)}</span>`
+function factCard(f) {
+  return `<div class="fact" data-fact="${esc(f.id)}">
+    <div>${esc(f.claim)}</div>
+    <div class="meta small muted">${pill(f.status)} <span class="pill">${esc(f.kind)}</span> <span>${esc(f.strength)} from <b>${esc(f.tier)}</b>${f.by ? ' · ' + esc(f.by) : ''}</span>
+      <span title="trust ${f.trust}"><span class="trust"><i style="width:${Math.round((f.trust ?? 0) * 100)}%"></i></span></span>
+      <span>${(f.corroborations ?? 1) > 1 ? f.corroborations + ' sources' : 'single source'}</span><span>${when(f.recorded_at)}</span><code>${esc(f.id)}</code></div></div>`
+}
+async function openFact(id) {
+  const f = await api('facts/' + id)
+  $('dlgBody').innerHTML = `<h2>Fact ${esc(f.id)}</h2>
+    <p style="font-size:15px">${esc(f.claim)}</p>
+    <p class="small muted" style="margin-top:6px">${pill(f.status)} ${esc(f.kind)} · ${esc(f.strength)} from ${esc(f.tier)} · trust ${f.trust} · recorded ${when(f.recorded_at)} · valid from ${when(f.valid_from)}${f.valid_until ? ' until ' + when(f.valid_until) : ''} · review ${f.review_at ? when(f.review_at) : 'none'}${f.purpose ? ' · purpose <code>' + esc(f.purpose) + '</code>' : ''}</p>
+    ${f.invalid_reason ? `<p class="small" style="color:var(--bad);margin-top:6px">Invalid: ${esc(f.invalid_reason)}${f.superseded_by ? ` (superseded by <a href="#" data-fact="${esc(f.superseded_by)}">${esc(f.superseded_by)}</a>)` : ''}</p>` : ''}
+    ${f.check_note ? `<p class="small" style="margin-top:6px">Last check or dispute: ${esc(f.check_note)}</p>` : ''}
+    <h3>Sources (${f.sources.length})</h3><table>${f.sources.map(s => `<tr><td>${esc(s.tier)}</td><td>${esc(s.by ?? '')}</td><td><code>${esc(s.source_ref)}</code></td><td>${when(s.ts)}</td></tr>`).join('')}</table>
+    ${f.derivedFrom.length ? `<h3>Rests on</h3><p class="small">${f.derivedFrom.map(d => d.startsWith('fact:') ? `<a href="#" data-fact="${esc(d.slice(5))}">${esc(d)}</a>` : esc(d)).join(', ')}</p>` : ''}
+    ${f.dependents.length ? `<h3>Built on it</h3><p class="small">${f.dependents.map(d => d.startsWith('fact:') ? `<a href="#" data-fact="${esc(d.slice(5))}">${esc(d)}</a>` : esc(d)).join(', ')}</p>` : ''}
+    <h3>History</h3><table>${f.history.map(h => `<tr><td>${when(h.ts)}</td><td>${esc(h.kind)}</td><td>${esc(h.by ?? '')}</td><td>${esc(h.note ?? '')}</td></tr>`).join('')}</table>
+    ${f.status !== 'invalid' ? `<h3>Your verdict</h3><p class="small muted">Wrong flags everything built on it (and asks the CEO to reconsider any kill that rested on it). Outdated marks it superseded.</p>
+      <div class="controls" style="margin-top:6px"><input id="vNote" placeholder="Why (evidence)" style="flex:1 1 260px"><button class="good" data-verdict="confirm">Confirm</button><button data-verdict="outdated">Outdated</button><button class="bad" data-verdict="wrong">Wrong</button></div>` : ''}`
+  $('dlgBody').querySelectorAll('[data-verdict]').forEach(b => b.onclick = async () => {
+    try { await api(`facts/${f.id}/${b.dataset.verdict}`, 'POST', { note: $('vNote').value }); toast('Recorded.'); $('dlg').close(); load() } catch (e) { toast(e.message) }
+  })
+  if (!$('dlg').open) $('dlg').showModal()
+}
+async function openInstance(dir, title) {
+  const x = await api('instance?dir=' + encodeURIComponent(dir))
+  $('dlgBody').innerHTML = `<h2>${esc(title)}</h2>
+    <p class="small muted">${esc(x.meta.owner)} · created ${when(x.meta.createdAt)} · ${x.meta.runs ?? 0} run(s) · ${esc(x.meta.status)}${x.meta.fresh ? ' · fresh eyes' : ''}${x.meta.forkedFrom ? ' · forked from ' + esc(x.meta.forkedFrom) : ''}${x.meta.reason ? ' · ' + esc(x.meta.reason) : ''}</p>
+    <h3>Current state</h3>${x.summary ? `<pre>${esc(x.summary)}</pre>` : '<p class="small muted">Not distilled yet (the dreamer writes it after runs).</p>'}
+    <h3>Starting pack</h3><pre>${esc(x.genesis)}</pre>
+    <h3>Notes (${x.notes.length})</h3>${x.notes.map(n => `<p class="small"><b>${esc(n.title ?? n.id)}</b> <span class="muted">${when(n.updated)}</span><br>${esc(String(n.body).slice(0, 400))}</p>`).join('') || '<p class="small muted">none</p>'}
+    <h3>Journal</h3>${x.journal.map(j => `<p class="small"><b>${when(j.ts)}</b> ${esc(j.label ?? '')} ${j.ok ? '' : '<span style="color:var(--bad)">failed</span>'} ${j.runId ? '<code>' + esc(j.runId) + '</code>' : ''}<br>${esc(String(j.outcome).slice(0, 500))}</p>`).join('') || '<p class="small muted">none</p>'}`
+  if (!$('dlg').open) $('dlg').showModal()
+}
+async function search() {
+  const q = $('q').value.trim(), status = $('status').value, kind = $('kind').value
+  const rows = await api(`facts?${new URLSearchParams({ ...(q ? { q } : {}), ...(status ? { status } : {}), ...(kind ? { kind } : {}), limit: 80 })}`)
+  $('facts').innerHTML = rows.map(factCard).join('') || '<p class="muted small">No facts match.</p>'
+}
+async function load() {
+  const [st, att, page, org, dreams] = await Promise.all([api('stats'), api('attention'), api('page'), api('org'), api('dreams')])
+  const F = st.facts ?? {}
+  $('stats').innerHTML = [['active', F.active], ['stale', F.stale], ['disputed', F.conflict], ['suspect', F.suspect], ['quarantined', F.quarantined], ['invalid (kept)', F.invalid], ['to check', st.due], ['transcripts', st.transcripts], ['purpose memories', st.instances]].map(([k, v]) => `<div class="stat"><b>${v ?? 0}</b><span class="small muted">${esc(k)}</span></div>`).join('')
+  $('dreamInfo').textContent = `Dreaming ${st.dream.settings.enabled === false ? 'off' : `every ${st.dream.settings.everyHours ?? 6} h`}; last ${st.dream.last ? when(st.dream.last) : 'never'}; today $${(st.dream.spentTodayUsd ?? 0).toFixed(2)} of $${st.dream.settings.maxUsdPerDay ?? 3}${st.dream.running ? '; running now' : ''}`
+  const need = [...att.quarantined, ...att.conflict, ...att.suspect, ...att.stale.slice(0, 15)]
+  $('attention').innerHTML = need.map(factCard).join('') || '<p class="muted small">Nothing needs a look.</p>'
+  $('page').innerHTML = page.body ? `<p class="small muted">${esc(page.title)} · ${when(page.updated_at)}</p>${md(page.body)}` : '<p class="muted">No area page yet. The dreamer writes it once there are enough facts.</p>'
+  $('agents').innerHTML = org.agents.map(a => `<details class="def"${a.instances.length ? ' open' : ''}><summary><b>${esc(a.title ?? a.name)}</b>${a.title ? ` <code>${esc(a.name)}</code>` : ''} ${pill(a.kind, 'k-' + a.kind)} <span class="small muted">${esc(a.memory.mode)}${a.memory.scope ? '/' + esc(a.memory.scope) : ''}${a.memory.roleNotes ? ` · ${a.memory.roleNotes} role notes` : ''}${a.clonedFrom ? ' · cloned from ' + esc(a.clonedFrom) : ''}</span></summary>
+      <p class="small muted">${esc(a.description)}${a.memory.why ? ' · ' + esc(a.memory.why) : ''}</p>
+      ${a.instances.map(i => `<div class="inst small" data-dir="${esc(i.dir)}" data-title="${esc((a.title ?? a.name) + ' @ ' + i.purpose)}"><b>@ ${esc(i.purpose)}</b> ${pill(i.status, i.status === 'archived' ? 's-invalid' : 's-active')} <span class="muted">${i.runs ?? 0} run(s), last ${when(i.lastUsedAt ?? i.createdAt)}${i.fresh ? ', fresh eyes' : ''}${i.forkedFrom ? ', forked from ' + esc(i.forkedFrom) : ''}${i.hasSummary ? '' : ', not distilled yet'}</span></div>`).join('')}</details>`).join('')
+  $('teams').innerHTML = org.teams.map(t => `<details class="def"${t.instances.length ? ' open' : ''}><summary><b>${esc(t.name)}</b> <span class="small muted">${esc(t.members.join(', '))}</span></summary><p class="small muted">${esc(t.description)}</p>
+      ${t.instances.map(i => `<div class="inst small" data-dir="${esc(i.dir)}" data-title="${esc(t.name + ' @ ' + i.purpose)}"><b>@ ${esc(i.purpose)}</b> ${pill(i.status, i.status === 'archived' ? 's-invalid' : 's-active')} <span class="muted">${i.runs ?? 0} run(s), last ${when(i.lastUsedAt)}</span></div>`).join('')}</details>`).join('')
+  $('dreams').innerHTML = dreams.map(d => `<p><b>${when(d.ts)}</b> ${esc(d.status)} · $${Number(d.costUsd ?? 0).toFixed(2)} · checked: ${d.verified} confirmed, ${d.outdated} outdated, ${d.wrong} wrong, ${d.disputed} disputed, ${d.unclear} unclear · distilled ${d.distilled} purpose(s), ${d.lessons} lesson(s), ${d.facts} fact(s), ${d.retiredNotes} note(s) retired, ${d.retired} purpose(s) archived${d.page ? ' · page rewritten' : ''}</p>`).join('') || '<p class="muted">No dreaming pass yet.</p>'
+  $('rel').innerHTML = st.reliability.length ? `<table><tr><th>Author</th><th>Wrong</th><th>Checked</th><th>Trust factor</th></tr>${st.reliability.map(r => `<tr><td>${esc(r.by)}</td><td class="num">${r.wrong}</td><td class="num">${r.checked}</td><td class="num">${r.factor}</td></tr>`).join('')}</table>` : '<p class="muted">No checks yet.</p>'
+  await search()
+}
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-fact]'); if (f) { e.preventDefault(); openFact(f.dataset.fact).catch(x => toast(x.message)); return }
+  const i = e.target.closest('.inst'); if (i) openInstance(i.dataset.dir, i.dataset.title).catch(x => toast(x.message))
+})
+$('dlgClose').onclick = () => $('dlg').close()
+$('search').onclick = () => search().catch(e => toast(e.message))
+$('q').onkeydown = e => { if (e.key === 'Enter') search().catch(x => toast(x.message)) }
+$('dreamNow').onclick = async () => { try { await api('dream', 'POST', {}); toast('Queued: the next pass starts within a minute (the daily cap still applies).') } catch (e) { toast(e.message) } }
+$('runGo').onclick = async () => {
+  try {
+    const rows = await api(`runs/${encodeURIComponent($('runId').value.trim())}/context`)
+    $('runCtx').innerHTML = rows.map(r => `<p><b>${esc(r.label ?? r.agent)}</b> <span class="muted">${esc(r.agent)}${r.purpose ? ' @ ' + esc(r.purpose) : ''} · ${when(r.ts)}</span><br>${r.facts.map(f => `<a href="#" data-fact="${esc(f.id)}">${esc(f.id)}</a> ${esc(String(f.claim ?? '').slice(0, 120))} ${f.status ? pill(f.status) : ''}`).join('<br>') || '<span class="muted">no facts were in its context</span>'}${r.memory?.instance ? `<br><span class="muted">purpose memory: ${esc(r.memory.instance)}</span>` : ''}</p>`).join('') || '<p class="muted">No record for this run (runs before the knowledge store started have none).</p>'
+  } catch (e) { toast(e.message) }
+}
+load().catch(e => toast(e.message))
+setInterval(() => { if (!$('dlg').open) load().catch(() => {}) }, 60_000)
+</script>
+</body>
+</html>

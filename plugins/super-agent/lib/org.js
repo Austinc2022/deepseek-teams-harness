@@ -8,6 +8,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { profile as P } from '../../company/lib/profile.js'
 import { now, str, clip, slug } from './store.js'
+import { titleProblem, agentNameProblem } from '../../company/lib/naming.js'
+import { listInstances } from '../../agent-forge/lib/memory.js'
 
 export const ROOT_AGENT = P.rootSuperName
 export const WORKER = P.workerName
@@ -74,7 +76,7 @@ export class Org {
       '', '# Teams (ask_team by name)',
       ...pick(teams, 'teams', x => x.name).map(t => `- ${t.name}: ${t.description}; members ${t.members.join(', ')}`),
       '', '# Agents (ask_agent by name)',
-      ...pick(agents, 'agents', x => x.name).filter(a => !(a.tags ?? []).includes('super-agent')).map(a => `- ${a.name} (${a.model}): ${clip(a.description, 160)}`),
+      ...pick(agents, 'agents', x => x.name).filter(a => !(a.tags ?? []).includes('super-agent')).map(a => `- ${a.name}${a.title ? ` "${a.title}"` : ''} (${a.model}${(a.tags ?? []).includes('judge') ? ', judge: stateless' : ''}): ${clip(a.description, 160)}${(() => { const p = listInstances(this.registry.home).filter(i => i.agent === a.name && i.status !== 'archived').map(i => i.purpose); return p.length ? `; remembers: ${p.slice(0, 5).join(', ')}` : '' })()}`),
       '', '# Builder agents (open_ticket worker)',
       ...agents.filter(a => (a.tags ?? []).includes('builder')).map(a => `- ${a.name} (${a.model}): ${clip(a.description, 160)}`),
       '', `# Skills installed: ${skills.join(', ')}`,
@@ -166,6 +168,7 @@ export class Org {
   createSuperTeam(me, a) {
     const { registry, co } = this
     const supervisor = String(a.supervisor ?? '')
+    { const bad = titleProblem(a.title, 'super team title'); if (bad) throw new Error(`${bad} (e.g. "Funding edges programme")`) }
     if (!exists(registry, supervisor)) throw new Error(`no agent ${supervisor} to supervise the super team`)
     const teams = [...new Set((a.teams ?? []).map(String))].filter(t => teamExists(registry, t))
     if (!teams.length) throw new Error('a super team needs at least one existing team')
@@ -188,6 +191,7 @@ export class Org {
     if (id.length < 3 || s.agents.some(x => x.id === id)) throw new Error('give the super agent a new id of 3+ letters')
     const mission = str(a.mission, 1500).trim()
     if (mission.length < 40) throw new Error('mission is too short')
+    { const bad = titleProblem(a.title ?? a.id, 'super agent title'); if (bad) throw new Error(`${bad} (name the area it owns, e.g. "Risk and assurance")`) }
     const agent = `${P.prefix}sa-${id}`.slice(0, 48)
     registry.saveAgent(superDef({ name: agent, description: str(a.title, 120).trim() || `Super agent ${id}`, mission }))
     const reach = (kind, ok) => [...new Set((a[kind] ?? []).map(String))].filter(r => this.canReach(me, kind, r) && ok(r))

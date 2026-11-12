@@ -161,6 +161,8 @@ export class Engine {
           def, registry, prompt, schema: opts.schema, cwd: opts.cwd ?? defaultCwd, team: opts.team ?? state.team,
           runId: state.id, label, signal: opts.signal ? AbortSignal.any([abort.signal, opts.signal]) : abort.signal, transcriptFile: path.join(dir, file),
           ...(opts.contextNote ? { contextNote: opts.contextNote } : {}),
+          ...(opts.purpose ? { purpose: opts.purpose } : {}),
+          ...(opts.fresh ? { fresh: true } : {}),
           ...(opts.extraMcp ? { extraMcp: opts.extraMcp } : {}),
           onEvent: e => { if (e.type === 'tool') { entry.tools++; entry.lastTool = e.brief; if (entry.tools % 3 === 1) persist() } opts.onEvent?.(e) },
         })

@@ -61,6 +61,7 @@ async function serve() {
       if (cookie !== token) return send(res, 401, 'Open the link with ?token=... printed by "company-cli serve".', 'text/plain; charset=utf-8')
       if (url.pathname === '/' && req.method === 'GET') return send(res, 200, fs.readFileSync(page, 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname === '/board.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'board.html'), 'utf8'), 'text/html; charset=utf-8')
+      if (url.pathname === '/knowledge.html' && req.method === 'GET') return send(res, 200, fs.readFileSync(path.join(path.dirname(page), 'knowledge.html'), 'utf8'), 'text/html; charset=utf-8')
       if (url.pathname.startsWith('/api/')) {
         if (req.headers['x-company-request'] !== '1') return send(res, 403, { error: 'forbidden' })
         const out = url.pathname.startsWith('/api/super/') ? await handleSuper(sa, req.method, url.pathname, () => readJson(req), url.searchParams) : await handle(co, req.method, url.pathname, () => readJson(req), url.searchParams)

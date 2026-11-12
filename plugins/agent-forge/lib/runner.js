@@ -21,7 +21,9 @@ import { fileURLToPath } from 'node:url'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { openMemory } from './memory.js'
+import { openMemory, agentKind, areasOf } from './memory.js'
+import { getKnowledge, knowledgeTools } from './knowledge.js'
+import { currentMemory } from './memctx.js'
 import { buildSkillPlugin } from './skills.js'
 import { filesSummary } from './agent-files.js'
 import { McpLibrary } from './mcp.js'
@@ -137,9 +139,13 @@ export async function runAgent(p) {
   p.folders = registry.agentFolders(def)
   const cwd = resolveCwd(registry, def, p.cwd)
   fs.mkdirSync(cwd, { recursive: true })
-  const mem = openMemory(registry.home, def, { team: p.team })
+  // the purpose this run serves: said by the caller, or carried by the work it belongs to (memctx)
+  const mctx = currentMemory()
+  const purpose = p.purpose ?? mctx.purpose ?? null
+  const mem = openMemory(registry.home, def, { team: p.team, purpose, fresh: p.fresh ?? mctx.fresh, forkFrom: mctx.forkFrom })
+  p.know = openKnowledge(registry.home, def, { prompt: p.prompt, purpose, runId: p.runId, label: p.label, memory: mem.injected })
   const write = line => { if (p.transcriptFile) fs.appendFileSync(p.transcriptFile, line) }
-  write(`# ${p.label ?? def.name} (${def.name})\n\n- model: ${def.model}${def.effort ? ` / effort ${def.effort}` : ''}\n- backend: ${def.backend}\n- execution: ${def.execution.mode}\n- memory: ${def.memory.mode}\n- cwd: ${cwd}\n\n## Task\n\n${p.prompt}\n\n## Transcript\n\n`)
+  write(`# ${p.label ?? def.name} (${def.name})\n\n- model: ${def.model}${def.effort ? ` / effort ${def.effort}` : ''}\n- backend: ${def.backend}\n- execution: ${def.execution.mode}\n- memory: ${mem.mode}${purpose ? ` (purpose ${purpose})` : ''}\n- knowledge: ${p.know.ids.length} fact(s) in context\n- cwd: ${cwd}\n\n## Task\n\n${p.prompt}\n\n## Transcript\n\n`)
 
   // primary model, then each backup model in order (see normalizeFallbacks)
   const backup = f => {
@@ -198,8 +204,27 @@ function systemAppend(def, mem, p, cwd) {
     ].filter(Boolean).join('\n'))
   }
   if (mem.context) parts.push(mem.context)
-  if (mem.toolDefs.length) parts.push('Use the memory_* tools to record durable lessons, decisions and facts worth remembering next time.')
+  if (mem.toolDefs.length) parts.push('Memory is for what the next run of you cannot see for itself: the state of the work, tested rules, decisions and traps. Read it first and test it; it can be wrong or out of date.')
+  if (p.know?.context) parts.push(p.know.context)
   return parts.join('\n\n')
+}
+
+/**
+ * Company knowledge for one run: the relevant facts in the context (logged, so the owner can see what the agent
+ * knew) and the knowledge tools. Judges see measured facts only and cannot add.
+ */
+function openKnowledge(home, def, { prompt, purpose, runId, label, memory }) {
+  const none = { context: '', ids: [], toolDefs: [], handle: null }
+  if (def.knowledge === false) return none
+  try {
+    const kb = getKnowledge(home)
+    const kind = agentKind(def)
+    const judge = kind === 'judge'
+    const areas = areasOf(def)
+    const c = kb.context({ query: `${purpose ?? ''} ${String(prompt).slice(0, 6000)}`, purpose, areas, measuredOnly: judge, budget: def.knowledge?.injectChars ?? 2600, runId, label, agent: def.name, memory })
+    const t = knowledgeTools(kb, { judge, by: def.name, areas, purpose, area: def.knowledge?.area ?? areas[0] })
+    return { context: c.text, ids: c.ids, toolDefs: t.defs, handle: t.handle }
+  } catch { return none }
 }
 
 async function runClaudeCode(p, mem, cwd, write) {
@@ -250,6 +275,10 @@ async function runClaudeCode(p, mem, cwd, write) {
   if (mem.toolDefs.length) {
     options.mcpServers.forge_memory = memoryMcp(mem)
     options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_memory']
+  }
+  if (p.know?.toolDefs.length) {
+    options.mcpServers.forge_knowledge = toolsMcp('forge_knowledge', p.know.toolDefs, (n, a) => p.know.handle(n, a))
+    options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_knowledge']
   }
   // extra in-process tool servers from the caller (e.g. the chat supervisor's worker tools)
   for (const [name, server] of Object.entries(p.extraMcp ?? {})) {

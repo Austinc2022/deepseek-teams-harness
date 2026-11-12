@@ -27,6 +27,12 @@ import { progress, rightNow } from './views.js'
 import { recordMetrics } from './board.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
+import { MemoryKeeper } from './dream.js'
+import { withMemory } from '../../agent-forge/lib/memctx.js'
+import { purposeSlug } from '../../agent-forge/lib/memory.js'
+import { purposeOf, recordTicketReport, recordCritique } from '../../company/lib/knowledge-hooks.js'
+import { decide as staffDecide, apply as staffApply, teamCandidates, teamInstance } from '../../company/lib/staff.js'
+import { agentNameProblem, teamNameProblem } from '../../company/lib/naming.js'
 
 const WORKDIR = P.projectDir
 
@@ -51,6 +57,7 @@ const REPORT = obj({
 
 const tool = (name, description, properties = {}, required = Object.keys(properties)) => ({ name, description, inputSchema: { type: 'object', properties, required } })
 const A = { type: 'array', items: S }
+const PURPOSE = { type: 'string', description: 'optional: the initiative, workstream or question this serves. Memory is kept per purpose; default: your current thread' }
 const PLAN_ITEM = { type: 'object', properties: {
   id: { type: 'string', description: 'keep the id of an existing item; leave out for a new one' },
   text: S, owner: { type: 'string', description: 'who does it: you, a super agent, a department, a team, a ticket id, or the owner' },
@@ -70,14 +77,19 @@ const ALL_TOOLS = [
   tool('message_ticket', 'Send more context or a correction to a ticket. Its worker reads it on the next turn; an ended ticket resumes.', { ticket: S, text: S }),
   tool('read_ticket', 'Read a ticket: its reports, its notes and its file list.', { ticket: S }),
   tool('stop_ticket', 'Stop a ticket.', { ticket: S, reason: S }),
-  tool('ask_agent', 'Ask one agent. A quick answer comes back in this turn; a longer one reaches you later as an event, so ask several agents at once when you need several views.', { agent: S, message: S }),
-  tool('ask_team', 'Give a task to a team. It works in its own chat; the reply reaches you later as a trigger.', { team: S, message: S }),
-  tool('ask_super_team', 'Give a task to a super team (a lead over several teams). The reply reaches you later as a trigger.', { id: S, message: S }),
+  tool('ask_agent', 'Ask one agent. A quick answer comes back in this turn; a longer one reaches you later as an event, so ask several agents at once when you need several views. agent may be a staffing handle "name@purpose": the agent then works with its memory for that purpose.', { agent: S, message: S, purpose: PURPOSE }, ['agent', 'message']),
+  tool('ask_team', 'Give a task to a team. It works in its own chat; the reply reaches you later as a trigger.', { team: S, message: S, purpose: PURPOSE }, ['team', 'message']),
+  tool('ask_super_team', 'Give a task to a super team (a lead over several teams). The reply reaches you later as a trigger.', { id: S, message: S, purpose: PURPOSE }, ['id', 'message']),
+  tool('staff', 'Get someone for a piece of work. Describe the capability and the purpose; code and the HR reviewer choose the cheapest fit: reuse an agent that already works on it, give an agent its own memory for this purpose (instance), fork a related purpose, fresh eyes (measured facts only), improve an agent, clone one for this purpose, or create one. unit team does the same for teams. You get a handle to use with ask_agent or ask_team.', {
+    unit: { type: 'string', enum: ['agent', 'team'] }, capability: { type: 'string', description: 'what the work is and what a good result looks like' }, purpose: { type: 'string', description: 'the initiative, workstream or question it serves; its memory is kept per purpose' },
+    kind: { type: 'string', enum: ['analyst', 'builder'] }, fresh: { type: 'boolean', description: 'true when the work must challenge earlier conclusions' },
+    name: { type: 'string', description: `only if a new agent or team may be needed: ${P.prefix}<specialty>-<function> for an agent, ${P.prefix}<mission> for a team` }, description: S, role: { type: 'string', description: 'only if a new agent may be needed: what it does, how, and what a good result looks like' }, model: { type: 'string', enum: P.models.choices }, skills: A, members: { type: 'array', items: S, description: 'for a new team: existing agents' },
+  }, ['unit', 'capability', 'purpose']),
   tool('delegate', 'Hand an area of work to a super agent directly below you. Its answer reaches you later as a trigger.', { to: S, message: S }),
   tool('list_org', 'List the super agents, super teams, teams, agents and skills you can use.'),
-  tool('create_agent', 'Create an agent. kind analyst is read-only (judges, researches, reviews); kind builder gets a sandboxed shell in a ticket folder.', { name: S, description: S, role: { type: 'string', description: 'what it does, how, and what a good result looks like' }, kind: { type: 'string', enum: ['analyst', 'builder'] }, model: { type: 'string', enum: P.models.choices }, skills: A, team: { type: 'string', description: 'optional existing team to join' } }, ['name', 'description', 'role', 'kind']),
+  tool('create_agent_direct', 'Create an agent. kind analyst is read-only (judges, researches, reviews); kind builder gets a sandboxed shell in a ticket folder.', { name: S, description: S, role: { type: 'string', description: 'what it does, how, and what a good result looks like' }, kind: { type: 'string', enum: ['analyst', 'builder'] }, model: { type: 'string', enum: P.models.choices }, skills: A, team: { type: 'string', description: 'optional existing team to join' } }, ['name', 'description', 'role', 'kind']),
   tool('update_agent', 'Improve an existing agent: its role text, description, model, effort or skills. The old version is kept.', { name: S, role: S, description: S, model: S, effort: S, skills: A, why: S }, ['name']),
-  tool('create_team', 'Create a team from existing agents, or change the members of one of your teams.', { name: S, description: S, members: A }),
+  tool('create_team_direct', 'Create a team from existing agents, or change the members of one of your teams.', { name: S, description: S, members: A }),
   tool('create_super_team', 'Create a super team: one supervisor agent over several teams.', { title: S, supervisor: S, teams: A, instructions: S }, ['title', 'supervisor', 'teams']),
   tool('create_super_agent', 'Create a super agent below you that leads the listed super teams, teams and agents.', { id: S, title: S, mission: S, superTeams: A, teams: A, agents: A }, ['id', 'title', 'mission']),
   tool('find_skills', 'Search GitHub for repositories of agent skills.', { query: S }),
@@ -98,9 +110,10 @@ const ALL_TOOLS = [
   tool('run_company_cycle', 'Run one full company cycle (led by the COO) of the company (all departments). Slow and costs a few dollars; use when a broad review is worth it.', { focus: S }, []),
 ]
 /** A company without an engine has no engine change to submit. */
-const TOOLS = ALL_TOOLS.filter(t => P.hasEngine || t.name !== 'submit_engine_change')
+// creation goes through staff (one path, with reasons); the direct tools stay for the code behind it
+const TOOLS = ALL_TOOLS.filter(t => (P.hasEngine || t.name !== 'submit_engine_change') && !t.name.endsWith('_direct'))
 const pick = names => TOOLS.filter(t => names.includes(t.name))
-const COMMON = ['update_plan', 'plan_items', 'list_org', 'ask_agent', 'ask_team']
+const COMMON = ['update_plan', 'plan_items', 'list_org', 'ask_agent', 'ask_team', 'staff']
 /** What each kind of leader can do. The COO and department heads add their own company tools. */
 function leaderTools(me, departments) {
   const k = kindOf(me)
@@ -150,6 +163,7 @@ export class SuperAgent {
     this.changes = P.hasEngine ? new Changes(this) : new NullChanges()
     // evals are keyed "<leader>|<lane>": one turn per thread, several threads per leader
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
+    this.memory = new MemoryKeeper(this)
     this.wakes = new Map() // leader id -> when it was last woken for spare capacity or to plan ahead
     this.holdReason = null
     this.holdAt = 0
@@ -200,6 +214,7 @@ export class SuperAgent {
       this.#seed(this.store.read())
       if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
+      await this.memory.tick({ hold })
       if (s.enabled && !hold) await this.#pollSources()
       if (hold) return
       this.#dispatch()
@@ -267,6 +282,7 @@ export class SuperAgent {
 
   // ---------------- commands (owner actions, from any process)
   #command(c) {
+    if (c.type === 'dream-now') { this.memory.forceNext = true; return }
     if (c.type === 'say') {
       const text = str(c.text, 8000).trim()
       if (!text) return
@@ -307,6 +323,13 @@ export class SuperAgent {
         num('idleWakeMinutes', 5, 240); num('planAheadMinutes', 30, 1440)
         if (typeof c.patch?.leaders?.company === 'boolean') { s.settings.leaders = { ...(s.settings.leaders ?? {}), company: c.patch.leaders.company }; this.leadersSig = null }
         for (const k of ['company', 'engine', 'clock']) if (typeof c.patch?.sources?.[k] === 'boolean') s.settings.sources[k] = c.patch.sources[k]
+        // memory upkeep (dream.js): on/off, how often, and the daily spend cap
+        if (c.patch?.dream && typeof c.patch.dream === 'object') {
+          const d = (s.settings.dream ??= {})
+          if (typeof c.patch.dream.enabled === 'boolean') d.enabled = c.patch.dream.enabled
+          const n = (k, lo, hi) => { const v = Number(c.patch.dream[k]); if (Number.isFinite(v)) d[k] = Math.min(hi, Math.max(lo, v)) }
+          n('everyHours', 1, 72); n('maxUsdPerDay', 0, 50); n('maxFacts', 1, 40); n('maxInstances', 0, 20); n('retireDays', 3, 90)
+        }
       })
     } else if (c.type === 'engine') {
       const on = c.action === 'start'
@@ -561,13 +584,15 @@ export class SuperAgent {
       case 'read_ticket': { const s = this.store.read(); return JSON.stringify(this.ticketDetail(this.#myTicket(s, me, a.ticket).id), null, 1) }
       case 'stop_ticket': { this.#myTicket(this.store.read(), me, a.ticket); this.#stopTicket(a.ticket, `stopped by ${me.id}: ${a.reason ?? ''}`); return 'Stopped.' }
       case 'ask_agent': {
-        const agent = String(a.agent ?? '')
+        // "name@purpose": the agent works with its memory for that purpose (see staff)
+        const [agent, handlePurpose] = String(a.agent ?? '').split('@')
+        const purpose = a.purpose || handlePurpose || this.purposeOf(me, ctx.lane, 'agent')
         const def = registry.getAgent(agent)
         if ((def.tags ?? []).includes('super-agent')) throw new Error('that is a super agent or a builder: use delegate or open_ticket')
         if (!org.canReach(me, 'agents', agent)) throw new Error(`${agent} is not one of your agents`)
         const msg = `${str(a.message, 12000)}\n\n(Asked by ${me.title ?? me.id}. Answer directly, with your evidence.)`
         return this.startJob(me, 'agent', agent, msg, ctx.lane, async api2 => {
-          const r = await api2.agent(agent, msg, { label: `ask:${agent}`, full: true, signal: AbortSignal.timeout(12 * 60_000) })
+          const r = await api2.agent(agent, msg, { label: `ask:${agent}`, full: true, purpose, signal: AbortSignal.timeout(12 * 60_000) })
           if (!r?.ok) throw new Error(`${agent} did not answer: ${r?.error ?? 'no result'}`)
           return r.text ?? JSON.stringify(r.structured)
         }, { graceMs: 75_000 })
@@ -576,13 +601,13 @@ export class SuperAgent {
         const team = String(a.team ?? '')
         registry.getTeam(team)
         if (!org.canReach(me, 'teams', team)) throw new Error(`${team} is not one of your teams`)
-        return this.startJob(me, 'team', team, str(a.message, 12000), ctx.lane)
+        return this.startJob(me, 'team', team, str(a.message, 12000), ctx.lane, null, { purpose: a.purpose || this.purposeOf(me, ctx.lane, 'team') })
       }
       case 'ask_super_team': {
         const id = String(a.id ?? '')
         this.co.supers.get(id)
         if (!org.canReach(me, 'superTeams', id)) throw new Error(`${id} is not one of your super teams`)
-        return this.startJob(me, 'super-team', id, str(a.message, 12000), ctx.lane)
+        return this.startJob(me, 'super-team', id, str(a.message, 12000), ctx.lane, null, { purpose: a.purpose || this.purposeOf(me, ctx.lane, 'super-team') })
       }
       case 'delegate': {
         const child = this.store.read().agents.find(x => x.id === a.to && x.parent === me.id)
@@ -592,9 +617,10 @@ export class SuperAgent {
         return `Delegated to ${child.id}. Its answer will reach you as an event.`
       }
       case 'list_org': return org.list(me)
-      case 'create_agent': return org.createAgent(me, a)
+      case 'create_agent_direct': return org.createAgent(me, a)
+      case 'staff': return this.#staff(me, a, ctx)
       case 'update_agent': return org.updateAgent(me, a)
-      case 'create_team': return org.createTeam(me, a)
+      case 'create_team_direct': return org.createTeam(me, a)
       case 'create_super_team': return org.createSuperTeam(me, a)
       case 'create_super_agent': return org.createSuperAgent(me, a)
       case 'find_skills': return org.findSkills(a.query)
@@ -641,6 +667,70 @@ export class SuperAgent {
     }
   }
 
+  /**
+   * The purpose work started in a lane serves: the initiative of an "ini:" lane, the workstream of a "ws:" lane.
+   * A plain ask to one agent from the main thread gets a purpose of its own per asker, so nothing lands in a
+   * shared pile. Teams and super teams asked from the main thread use their team memory.
+   */
+  purposeOf(me, lane = 'main', kind = 'agent') {
+    const l = String(lane ?? 'main')
+    if (l.startsWith('ini:')) return purposeOf(this.co.read().initiatives.find(i => i.id === l.slice(4)) ?? { id: l.slice(4), title: 'initiative' })
+    if (l.startsWith('ws:')) return `ws-${l.slice(3)}`
+    return kind === 'agent' ? `for-${me.id}` : undefined
+  }
+
+  /** staff: one creation path, with the reason recorded (plugins/company/lib/staff.js). */
+  async #staff(me, a, ctx) {
+    const { registry } = this.forge
+    const org = this.org
+    const purpose = str(a.purpose, 160).trim() || this.purposeOf(me, ctx.lane, a.unit === 'team' ? 'team' : 'agent')
+    if (!purpose) throw new Error('name the purpose')
+    const leads = this.co.read().departments.map(d => d.lead)
+    const need = { capability: str(a.capability, 2000), purpose, kind: a.kind === 'builder' ? 'builder' : 'analyst', fresh: a.fresh === true, name: a.name, description: a.description, role: a.role, excludeLeads: leads }
+    if (a.unit === 'team') {
+      const cands = teamCandidates(registry, need)
+      const best = cands[0]
+      if (best && best.fit >= 1.2) {
+        const dir = teamInstance(registry, best.name, need)
+        org.own(me, 'teams', best.name)
+        this.say({ from: me.id, kind: 'org', text: `Staffing: team ${best.name} for "${purpose}" (fit ${best.fit}); its memory for this purpose is ready.` })
+        return `REUSE team ${best.name} (fit ${best.fit}: ${best.description}). Its memory for "${purpose}": ${dir}.\nUse ask_team with team "${best.name}" and purpose "${purpose}".`
+      }
+      if (!a.name || !(a.members ?? []).length) return `No existing team fits well (best: ${best ? `${best.name}, fit ${best.fit}` : 'none'}). To create one, call staff again with unit team, a name (${P.prefix}<mission>) and members (existing agents; staff agents first if needed).`
+      const bad = teamNameProblem(a.name, P.prefix)
+      if (bad) throw new Error(bad)
+      const out = org.createTeam(me, { name: a.name, description: a.description ?? need.capability, members: a.members })
+      const name = a.name.startsWith(P.prefix) ? a.name : `${P.prefix}${a.name}`
+      try { teamInstance(registry, name, need) } catch {}
+      return `CREATE team: ${out} Best existing fit was ${best ? `${best.name} (${best.fit})` : 'none'}.\nUse ask_team with team "${name}" and purpose "${purpose}".`
+    }
+    const d = await this.#withApi(`staffing for ${me.id}`, api => staffDecide(registry, api, need))
+    const r = await staffApply(registry, d, need, {
+      by: me.id,
+      createFn: async () => {
+        if (!a.name || !a.role) throw new Error(`nothing existing fits (${d.reason}); to create an agent call staff again with name (${P.prefix}<specialty>-<function>), description and role`)
+        const bad = agentNameProblem(a.name.startsWith(P.prefix) ? a.name : `${P.prefix}${a.name}`, P.prefix)
+        if (bad) throw new Error(bad)
+        org.createAgent(me, { name: a.name, description: a.description ?? need.capability, role: a.role, kind: need.kind, model: a.model, skills: a.skills })
+        return a.name.startsWith(P.prefix) ? a.name : `${P.prefix}${a.name}`
+      },
+      // updateAgent appends the template's rules itself: hand it the role without them
+      updateFn: async (agent, change) => { const cur = registry.getAgent(agent); const own = [P.hardRules, P.workerRules, P.superRules].filter(Boolean).reduce((r, x) => r.split(x).join(''), String(cur.role ?? '')).trim(); org.updateAgent(me, { name: agent, role: `${own}\n\n# Added ${now().slice(0, 10)}\n${str(change, 2000)}`, why: d.reason }) },
+    })
+    org.own(me, 'agents', r.agent)
+    this.say({ from: me.id, kind: 'org', text: `Staffing: ${d.action} ${r.agent} for "${purpose}". ${clip(d.reason, 300)}` })
+    return `${r.text}\nCandidates considered: ${d.candidates.map(c => `${c.name} (fit ${c.fit})`).join(', ') || 'none'}. Decided by ${d.source}.`
+  }
+
+  /** Run fn(api) as a small engine run of its own (visible in Runs, cost charged) and return its result. */
+  async #withApi(label, fn) {
+    const { done } = this.forge.engine.startCustom(label, api => fn(api), {}, { cwd: WORKDIR })
+    const st = await done
+    this.co.charge(st.costUsd, label)
+    if (st.status !== 'completed') throw new Error(String(st.error ?? st.status).split('\n')[0])
+    return st.result
+  }
+
   /** A message to the owner. A question goes through Company.askOwner: the host decides whether it is sent. */
   #replyOwner(me, a) {
     const text = str(a.text, 6000).trim()
@@ -676,6 +766,7 @@ export class SuperAgent {
     const scores = got.map(x => Math.min(1, Math.max(0, Number(x.score) || 0)))
     const summary = { ts: now(), by: me.id, critics: got.length, min: scores.length ? Math.min(...scores) : null, mean: scores.length ? Math.round(100 * scores.reduce((n, x) => n + x, 0) / scores.length) / 100 : null, mustFix: got.reduce((n, x) => n + (x.mustFix?.length ?? 0), 0) }
     this.store.update(s => { const y = s.tickets.find(z => z.id === t.id); if (y) { (y.critiques ??= []).push(summary); y.critiques = y.critiques.slice(-12) } })
+    recordCritique(t, summary, got)
     return [
       `Critique of ticket ${t.id} "${t.title}": ${got.length} of ${critics.length} critics answered; lowest score ${summary.min ?? '-'}, mean ${summary.mean ?? '-'}; ${summary.mustFix} must-fix item(s). The gate's bar is ${charter.gate.minConfidence}.`,
       ...out.filter(Boolean).map(x => x.error ? `## ${x.critic}: no verdict (${x.error})` : `## ${x.critic} (score ${x.score})\n${x.verdict}\nMust fix:\n${(x.mustFix ?? []).map(m => `- ${m}`).join('\n') || '- nothing'}\nWould elevate:\n${(x.wouldElevate ?? []).map(m => `- ${m}`).join('\n') || '- nothing'}`),
@@ -696,7 +787,14 @@ export class SuperAgent {
    * critique panel, a hire). The result reaches the leader's thread as an event. With graceMs, a result that is ready
    * within that time comes back in the same turn instead.
    */
-  async startJob(me, kind, target, message, lane = 'main', fn = null, { graceMs = 0 } = {}) {
+  async startJob(me, kind, target, message, lane = 'main', fn = null, { graceMs = 0, purpose } = {}) {
+    // the work runs under its purpose: agents in it use that purpose's memory (plugins/agent-forge/lib/memctx.js)
+    purpose ??= fn ? this.purposeOf(me, lane, kind) : undefined
+    if (purpose) return withMemory({ purpose }, () => this.#startJob(me, kind, target, message, lane, fn, { graceMs, purpose }))
+    return this.#startJob(me, kind, target, message, lane, fn, { graceMs })
+  }
+
+  async #startJob(me, kind, target, message, lane = 'main', fn = null, { graceMs = 0, purpose } = {}) {
     const { chats, engine } = this.forge
     const supers = this.co.supers
     const s0 = this.store.read()
@@ -711,13 +809,17 @@ export class SuperAgent {
       work = done.then(st => { this.co.charge(st.costUsd, `${kind} ${target} for ${me.id}`); if (st.status !== 'completed') throw new Error(String(st.error ?? st.status).split('\n')[0]); return typeof st.result === 'string' ? st.result : JSON.stringify(st.result) })
       runIdOf = runId
     } else if (kind === 'team') {
-      let chatId = this.store.read().teamChats[target]
+      // one chat per team and purpose, so a team's discussion of one initiative is not mixed with another's
+      const chatKey = purpose ? `${target}@${purposeSlug(purpose)}` : target
+      let chatId = this.store.read().teamChats[chatKey]
       try { if (chatId) chats.get(chatId) } catch { chatId = null }
       // a second ask while the team's chat is still answering the first gets a chat of its own
       const busy = chatId && chats.list().find(r => r.id === chatId)?.busy
       if (!chatId || busy) {
-        const fresh = chats.create({ title: `${me.title ?? me.id} · ${target}${busy ? ' (parallel)' : ''}`, team: target, mode: 'parallel', cwd: WORKDIR }).id
-        if (!chatId) this.store.update(s => { s.teamChats[target] = fresh })
+        // the super agent's team chats live in the company's chat project (next to the department chats), not in General
+        const project = (() => { try { return chats.listProjects().projects.find(p => p.name === P.superProject?.name)?.id } catch { return undefined } })()
+        const fresh = chats.create({ title: `${me.title ?? me.id} · ${target}${purpose ? ` · ${clip(purpose, 40)}` : ''}${busy ? ' (parallel)' : ''}`, team: target, mode: 'parallel', cwd: WORKDIR, ...(purpose ? { purpose } : {}), ...(project ? { project } : {}) }).id
+        if (!chatId) this.store.update(s => { s.teamChats[chatKey] = fresh })
         chatId = fresh
       }
       work = chats.postAndWait(chatId, message, { timeoutMs: 40 * 60_000 }).then(r => r.replies.map(x => `## ${x.from}${x.ok ? '' : ' (failed)'}\n${x.text}`).join('\n\n') || '(no replies)')
@@ -903,6 +1005,7 @@ export class SuperAgent {
     else rep = { status: 'failed', summary: `The worker ended without a report: ${clip(String(r?.error ?? st.error ?? st.status).split('\n')[0], 400)}` }
     const proposal = P.proposal.has(rep.proposal) ? rep.proposal : null
     delete rep.proposal
+    { const tk = this.store.read().tickets.find(x => x.id === ticketId); if (tk) recordTicketReport(this.co, tk, rep, st.id) }
     let t
     this.store.update(s => {
       t = s.tickets.find(x => x.id === ticketId)
