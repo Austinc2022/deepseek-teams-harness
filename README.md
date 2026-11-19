@@ -57,6 +57,8 @@ In the Web UI sidebar you get four Agent Forge pages:
 The same console also runs standalone at `http://127.0.0.1:3091/?token=$(cat forge/.cache/console-token)` (or `./forge-cli serve`).
 DSH's own **Agent Teams** feature (`spawn_teammate`) shows up as a team button in a chat's header once the lead agent has spawned teammates; ask it to, for example, *"Spawn a reviewer teammate and a tester teammate for this task"*.
 
+**Chat history per reply.** Every reply in an Agent chat is a fresh agent session that is sent the chat's transcript again, by default its last 60,000 characters. In a busy chat that is paid on every hand-off. A chat can set its own limit, `transcriptChars` (4,000 to 200,000 characters): `PUT /forge/api/chats/<id>` with `{"transcriptChars": 15000}`, or pass it when the chat is created; `null` goes back to the default. With a limit set, the request the current task started from stays at the top of the transcript even when the tail no longer reaches it, and the chat's channels follow the same limit.
+
 All state stays in this folder: `.dsh-home/` holds harness profiles and sessions, and `forge/` holds agents, memory and runs.
 Node 24 is installed in `~/.local/node`, and the launchers add it to `PATH` automatically.
 

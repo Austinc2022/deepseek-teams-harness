@@ -71,6 +71,9 @@ const clampHops = v => Math.max(0, Math.min(MAX_HOPS, Number(v) || 0))
 const clampInt = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt }
 const TRANSCRIPT_CHARS = 60000
 const SIDE_CONTEXT_CHARS = 40000 // group chat background given to an agent in a side chat
+const TASK_PIN_CHARS = 6000 // the request a task started from, kept in view when a room's own transcript limit cuts it off
+// a room's own transcript limit (transcriptChars): empty, null or 0 means "use the default"
+const clampTranscript = v => (v == null || v === '' || Number(v) === 0 ? undefined : clampInt(v, 4000, 200000, undefined))
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
 const now = () => new Date().toISOString()
@@ -704,7 +707,7 @@ export class ChatStore {
     return room
   }
 
-  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, supervisor, workerRoles, maxWorkers, maxConcurrent, project, purpose }) {
+  create({ title, agents, team, mode = 'sequential', cwd, maxHops = 4, lead, workflow, workflowArgs, supervisor, workerRoles, maxWorkers, maxConcurrent, project, purpose, transcriptChars }) {
     project = this.#assertProject(project)
     if (!cwd && project) cwd = this.#readProjects().find(p => p.id === project)?.cwd
     if (team && (!agents || agents.length === 0)) agents = this.registry.getTeam(team).members
@@ -717,6 +720,7 @@ export class ChatStore {
     if (project) room.project = project
     // a room that serves one purpose (initiative, workstream): its agents use that purpose's memory
     if (purpose) room.purpose = String(purpose).slice(0, 80)
+    if (clampTranscript(transcriptChars)) room.transcriptChars = clampTranscript(transcriptChars)
     if (lead) room.lead = lead
     if (workflow) room.workflow = workflow
     if (workflowArgs) room.workflowArgs = this.#args(workflowArgs)
@@ -750,6 +754,8 @@ export class ChatStore {
     if (patch.cwd !== undefined) room.cwd = patch.cwd || undefined
     if (patch.project !== undefined) room.project = this.#assertProject(patch.project || undefined)
     if (patch.maxHops !== undefined) room.maxHops = clampHops(patch.maxHops)
+    // how much chat history each reply carries (characters); null or 0 goes back to the default
+    if (patch.transcriptChars !== undefined) { const n = clampTranscript(patch.transcriptChars); if (n) room.transcriptChars = n; else delete room.transcriptChars }
     if (patch.lead !== undefined) { if (patch.lead && !room.agents.includes(patch.lead)) throw new Error("lead must be one of this chat's agents"); room.lead = patch.lead || undefined }
     if (patch.workflow !== undefined) { if (patch.workflow) this.registry.orchestrationFile(patch.workflow); room.workflow = patch.workflow || undefined }
     if (patch.workflowArgs !== undefined) room.workflowArgs = this.#args(patch.workflowArgs)
@@ -1242,8 +1248,20 @@ export class ChatStore {
     return `\n\nThe message that started this task was posted by the supervisor of super team "${via.title ?? via.superTeam}", which coordinates several agent teams; it holds your team's assignment. Other messages in this chat may come from the human user directly.`
   }
 
+  /**
+   * How much chat history a reply carries. Every reply is a fresh session that is sent the transcript again, so
+   * this is paid on every hand-off. A room may set its own limit (transcriptChars); a channel follows its group
+   * chat. With a room limit, the request the current task started from is kept in view (see #transcript).
+   */
+  #limits(room) {
+    const own = room.transcriptChars ?? (room.parent ? this.#parentOf(room)?.transcriptChars : undefined)
+    if (!own) return { transcript: TRANSCRIPT_CHARS, side: SIDE_CONTEXT_CHARS, pin: false }
+    return { transcript: own, side: Math.min(SIDE_CONTEXT_CHARS, Math.round(own * 2 / 3)), pin: true }
+  }
+
   #promptFor(room, who, def, opts, msg) {
-    const transcript = this.#transcript(room, opts.cutoff ?? room.messages.length - 1)
+    const lim = this.#limits(room)
+    const transcript = this.#transcript(room, opts.cutoff ?? room.messages.length - 1, lim.transcript, lim.pin ? opts.task : undefined)
     const directMsgs = (opts.direct ?? []).map(i => room.messages.find(m => m.id === i)).filter(Boolean)
     const directText = directMsgs.length ? `\n\nMessages addressed to you directly (answer these):\n${directMsgs.map(m => `[${m.from === 'user' ? 'user' : '@' + m.from} → you]\n${m.text}`).join('\n\n')}` : ''
     const tools = def.backend === 'claude-code' && !opts.worker ? '\n\nOther teams: with the forge_chats tools you can list the other team chats, ask one of them (ask_team opens a parallel channel there and returns its answer), or ask the user to approve opening a new team chat (open_team_chat). Use them when part of the work clearly belongs to another team; do not hand off what you can do yourself.' : ''
@@ -1252,7 +1270,7 @@ export class ChatStore {
     const folderNote = room.worktree ? ` This channel works in its own git worktree on branch ${room.worktree.branch} (folder ${room.worktree.cwd}); commit your work there with clear messages, the user merges it.` : ' Other channels may be working in the same folder at the same time: stay within this channel\'s task, do not revert changes you did not make, and avoid broad reformatting.'
     if (room.parent && room.agents.length === 1 && !opts.worker) {
       const others = parent ? parent.agents.filter(a => a !== who) : []
-      const group = parent ? this.#transcript(parent, parent.messages.length, SIDE_CONTEXT_CHARS) : ''
+      const group = parent ? this.#transcript(parent, parent.messages.length, lim.side) : ''
       const digest = parent ? this.#channelDigest(parent.id, room.id) : ''
       const latest = directMsgs.length ? directMsgs.map(m => m.text).join('\n\n') : ''
       const solo = room.kind === 'side' && !room.origin
@@ -1264,7 +1282,7 @@ export class ChatStore {
     const p = this.#promptCore(room, who, def, opts, msg, directMsgs, directText, transcript)
     if (opts.worker) return p
     if (room.parent) {
-      const group = parent ? this.#transcript(parent, parent.messages.length, SIDE_CONTEXT_CHARS) : ''
+      const group = parent ? this.#transcript(parent, parent.messages.length, lim.side) : ''
       const digest = parent ? this.#channelDigest(parent.id, room.id) : ''
       p.contextNote += `\n\nThis conversation is channel "${room.title}" of your team's group chat${parent ? ` "${parent.title}"` : ''}: one of several conversations the team runs in parallel. Only this channel's agents (${room.agents.map(a => `@${a}`).join(', ')}) answer here. The main chat and the other channels are background: read them for context, but nothing said here appears there${room.report !== false ? ', except that when a task here finishes, its final reply is posted into the main chat as a summary' : ''}.${folderNote}${originNote}`
       p.prompt = `${group ? `Background: the team's main chat so far (read-only, latest at the end):\n\n${group}\n\n---\n` : ''}${digest ? `Other parallel channels right now:\n${digest}\n\n---\n` : ''}${p.prompt.replace(/^Group chat transcript so far:/, 'This channel so far:')}`
@@ -1350,11 +1368,25 @@ export class ChatStore {
     }
   }
 
-  #transcript(room, uptoIndex, max = TRANSCRIPT_CHARS) {
+  /**
+   * The room's messages as text, newest last, cut to the last `max` characters. pinTask is the id of the user
+   * message the current task started from: when the cut removes any of it, it is put back at the top (clipped),
+   * so an agent late in a long hand-off chain still reads what was asked.
+   */
+  #transcript(room, uptoIndex, max = TRANSCRIPT_CHARS, pinTask) {
     const msgs = room.messages.slice(0, uptoIndex).filter(m => m.status !== 'failed' && m.status !== 'pending' && !m.dropped)
     const who = m => m.from === 'user' ? (m.via?.fromChat ? `request from ${m.via.agent === 'user' ? 'the user' : `@${m.via.agent}`} in team chat "${m.via.fromTitle}"` : 'user') : m.note ? 'note' : `@${m.from}`
-    let out = msgs.map(m => `[${who(m)}${m.to ? ` → @${m.to}` : ''}]\n${m.text}`).join('\n\n')
-    if (out.length > max) out = `[earlier messages omitted]\n…${out.slice(-max)}`
+    const parts = msgs.map(m => `[${who(m)}${m.to ? ` → @${m.to}` : ''}]\n${m.text}`)
+    let out = parts.join('\n\n')
+    if (out.length > max) {
+      let pin = ''
+      const i = pinTask ? msgs.findIndex(m => m.id === pinTask) : -1
+      if (i >= 0) {
+        const start = parts.slice(0, i).reduce((n, p) => n + p.length + 2, 0)
+        if (start < out.length - max) pin = `[the request this task started from]\n${parts[i].length > TASK_PIN_CHARS ? `${parts[i].slice(0, TASK_PIN_CHARS)}…` : parts[i]}\n\n`
+      }
+      out = `[earlier messages omitted]\n${pin}…${out.slice(-max)}`
+    }
     return out
   }
 
