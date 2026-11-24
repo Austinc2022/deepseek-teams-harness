@@ -108,9 +108,9 @@ const ALL_TOOLS = [
   tool('ask_agent', 'Ask one agent. A quick answer comes back in this turn; a longer one reaches you later as an event, so ask several agents at once when you need several views. agent may be a staffing handle "name@purpose": the agent then works with its memory for that purpose.', { agent: S, message: S, purpose: PURPOSE }, ['agent', 'message']),
   tool('ask_team', 'Give a task to a team. It works in its own chat; the reply reaches you later as a trigger.', { team: S, message: S, purpose: PURPOSE }, ['team', 'message']),
   tool('ask_super_team', 'Give a task to a super team (a lead over several teams). The reply reaches you later as a trigger.', { id: S, message: S, purpose: PURPOSE }, ['id', 'message']),
-  tool('staff', 'Get someone for a piece of work. Describe the capability and the purpose; code and the HR reviewer choose the cheapest fit: reuse an agent that already works on it, give an agent its own memory for this purpose (instance), fork a related purpose, fresh eyes (measured facts only), improve an agent, clone one for this purpose, or create one. unit team does the same for teams. You get a handle to use with ask_agent or ask_team.', {
+  tool('staff', 'Get someone for a piece of work. Describe the capability and the purpose; code and the HR reviewer choose the cheapest fit: reuse an agent that already works on it, give an agent its own memory for this purpose (instance), fork a related purpose, fresh eyes (measured facts only), improve an agent, clone one for this purpose, or create one. With lasting true, when nothing fits a training camp trains and tests an agent for the role (and a stopgap is created now). unit team does the same for teams. You get a handle to use with ask_agent or ask_team.', {
     unit: { type: 'string', enum: ['agent', 'team'] }, capability: { type: 'string', description: 'what the work is and what a good result looks like' }, purpose: { type: 'string', description: 'the initiative, workstream or question it serves; its memory is kept per purpose' },
-    kind: { type: 'string', enum: ['analyst', 'builder'] }, fresh: { type: 'boolean', description: 'true when the work must challenge earlier conclusions' },
+    kind: { type: 'string', enum: ['analyst', 'builder'] }, fresh: { type: 'boolean', description: 'true when the work must challenge earlier conclusions' }, lasting: { type: 'boolean', description: 'true when this is a lasting, central role the company will rely on again and again (not a one-off): if nothing existing fits, a training camp trains and tests an agent for it' },
     name: { type: 'string', description: `only if a new agent or team may be needed: ${P.prefix}<specialty>-<function> for an agent, ${P.prefix}<mission> for a team` }, description: S, role: { type: 'string', description: 'only if a new agent may be needed: what it does, how, and what a good result looks like' }, model: { type: 'string', enum: P.models.choices }, skills: A, members: { type: 'array', items: S, description: 'for a new team: existing agents' },
   }, ['unit', 'capability', 'purpose']),
   tool('delegate', 'Hand an area of work to a super agent directly below you. Its answer reaches you later as a trigger.', { to: S, message: S }),
@@ -829,7 +829,7 @@ export class SuperAgent {
     const purpose = str(a.purpose, 160).trim() || this.purposeOf(me, ctx.lane, a.unit === 'team' ? 'team' : 'agent')
     if (!purpose) throw new Error('name the purpose')
     const leads = this.co.read().departments.map(d => d.lead)
-    const need = { capability: str(a.capability, 2000), purpose, kind: a.kind === 'builder' ? 'builder' : 'analyst', fresh: a.fresh === true, name: a.name, description: a.description, role: a.role, excludeLeads: leads }
+    const need = { capability: str(a.capability, 2000), purpose, kind: a.kind === 'builder' ? 'builder' : 'analyst', fresh: a.fresh === true, name: a.name, description: a.description, role: a.role, excludeLeads: leads, lasting: a.lasting === true, canTrain: kindOf(me) !== 'dept' && await this.camp.available() }
     if (a.unit === 'team') {
       const cands = teamCandidates(registry, need)
       const best = cands[0]
@@ -850,6 +850,7 @@ export class SuperAgent {
     const d = await this.#withApi(`staffing for ${me.id}`, api => staffDecide(registry, api, need))
     const r = await staffApply(registry, d, need, {
       by: me.id,
+      trainFn: need => this.camp.openFor(me, need),
       createFn: async () => {
         if (!a.name || !a.role) throw new Error(`nothing existing fits (${d.reason}); to create an agent call staff again with name (${P.prefix}<specialty>-<function>), description and role`)
         const bad = agentNameProblem(a.name.startsWith(P.prefix) ? a.name : `${P.prefix}${a.name}`, P.prefix)
@@ -860,8 +861,8 @@ export class SuperAgent {
       // updateAgent appends the template's rules itself: hand it the role without them
       updateFn: async (agent, change) => { const cur = registry.getAgent(agent); const own = [P.hardRules, P.workerRules, P.superRules].filter(Boolean).reduce((r, x) => r.split(x).join(''), String(cur.role ?? '')).trim(); org.updateAgent(me, { name: agent, role: `${own}\n\n# Added ${now().slice(0, 10)}\n${str(change, 2000)}`, why: d.reason }) },
     })
-    org.own(me, 'agents', r.agent)
-    this.say({ from: me.id, kind: 'org', text: `Staffing: ${d.action} ${r.agent} for "${purpose}". ${clip(d.reason, 300)}` })
+    if (r.agent) org.own(me, 'agents', r.agent)
+    this.say({ from: me.id, kind: 'org', text: `Staffing: ${d.action} ${r.agent ?? `(training camp ${r.camp})`} for "${purpose}". ${clip(d.reason, 300)}` })
     return `${r.text}\nCandidates considered: ${d.candidates.map(c => `${c.name} (fit ${c.fit})`).join(', ') || 'none'}. Decided by ${d.source}.`
   }
 

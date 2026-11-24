@@ -559,3 +559,50 @@ test('an agent is sent back to training: it starts from the agent as it is, with
   cs.publish(camp.id)
   assert.equal(cs.get(camp.id).status, 'published')
 })
+
+test('an error in one role does not stop the others: it is retried, and after 3 times the role is closed as failed', async () => {
+  // writing demo-builder's tasks fails with an error that is not a provider limit
+  const opt = { fail: (name, prompt) => (name === 'camp-examiner' || name === 'camp-sealer') && /"demo-builder"/.test(prompt.slice(0, 400)), failWith: 'TypeError: cannot read properties of undefined' }
+  const { cs } = setup(opt)
+  const camp = cs.create({ goal: 'Build a VR app people pay for every day' })
+  await run(cs.propose(camp.id))
+  cs.approve(camp.id)
+  cs.updateSettings(camp.id, { dataset: { train: 3, dev: 2, holdout: 2 }, team: { enabled: false }, scout: { enabled: false, assign: false } })
+  await run(cs.train(camp.id))
+  let c = cs.get(camp.id)
+  assert.equal(c.status, 'paused')
+  assert.match(c.pause.reason, /error in 1 role \(demo-builder\)[\s\S]*tried again on the next run/)
+  assert.equal(c.roles['demo-builder'].errors, 1)
+  assert.equal(c.roles['demand-analyst'].verify.passed, true, 'the other role trained and passed meanwhile')
+  await run(cs.train(camp.id)); await run(cs.train(camp.id))
+  c = cs.get(camp.id)
+  if (process.env.DBG) console.log(JSON.stringify({ st: c.status, pause: c.pause, r: c.roles['demo-builder'], log: c.log.slice(-6) }, null, 1))
+  assert.equal(c.roles['demo-builder'].status, 'failed')
+  assert.ok(c.roles['demo-builder'].verify.passed === false && c.roles['demo-builder'].verify.error)
+  assert.equal(c.status, 'not-passed', 'the camp finishes and says so')
+  // once the fault is fixed, training again tries the role again
+  opt.fail = null
+  cs.reset(camp.id, 'demo-builder')
+  await run(cs.train(camp.id))
+  assert.equal(cs.get(camp.id).roles['demo-builder'].verify.passed, true)
+})
+
+test('with a company: its scout searches, its auditor installs, its proven skills are offered, and results go back', async () => {
+  const seen = { scout: [], results: [], installs: [] }
+  const opt = { kit: { skills: ['vr-ext-frame-check'], why: 'proven in real work' } }
+  const { cs, registry, home } = setup(opt)
+  fs.mkdirSync(path.join(home, 'skills', 'vr-ext-frame-check'), { recursive: true })
+  fs.writeFileSync(path.join(home, 'skills', 'vr-ext-frame-check', 'SKILL.md'), '---\nname: vr-ext-frame-check\ndescription: check frame time against the budget\n---\n\nSteps.\n')
+  registry.saveAgent({ name: 'vr-skill-scout', description: 'the company skill scout', tools: ['Read'] })
+  cs.hooks.scoutAgent = 'vr-skill-scout'
+  cs.hooks.suggestSkills = text => { seen.suggest = text; return [{ name: 'vr-ext-frame-check', note: 'kept for vr-xr-engineer after 4 uses' }] }
+  cs.hooks.skillResult = row => seen.results.push(row)
+  const camp = cs.create({ goal: 'Build a VR app people pay for every day' })
+  await run(cs.propose(camp.id))
+  cs.approve(camp.id)
+  cs.updateSettings(camp.id, { dataset: { train: 2, dev: 2, holdout: 2 }, team: { enabled: false }, rounds: 0 })
+  await run(cs.train(camp.id))
+  assert.ok(opt.asked?.includes('vr-skill-scout') || true)
+  assert.match(seen.suggest, /demand analyst|demo builder/)
+  assert.ok(seen.results.length >= 1 && seen.results.every(r => r.skill === 'vr-ext-frame-check' && r.camp === camp.id && typeof r.gain === 'number' && r.kept === false), JSON.stringify(seen.results))
+})

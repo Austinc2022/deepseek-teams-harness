@@ -168,6 +168,22 @@ export class Growth {
       .map(x => { const have = toks(`${x.name.replace(/-/g, ' ')} ${x.description}`); let n = 0; for (const w of have) if (want.has(w)) n++; return { ...x, score: have.size ? n / Math.sqrt(have.size) : 0 } })
       .filter(x => x.score >= 0.9).sort((a, b) => b.score - a.score).slice(0, k)
   }
+  /** A training camp's measured result for one skill on one role (camp-link.js). */
+  campResult({ camp, role, skill, gain, kept }) {
+    this.update(g => { g.camp = [...(g.camp ?? []).filter(x => !(x.agent === role && x.skill === skill)), { ts: now(), camp, agent: role, skill, gain: Number(gain) || 0, kept: !!kept }].slice(-400) })
+  }
+  /** Skills worth trying for a kind of work: kept in real use, kept by a camp, then the closest in the library. */
+  suggestFor(text, k = 6) {
+    const g = this.read()
+    const lib = new Set(this.library().map(x => x.name))
+    const out = new Map()
+    const close = this.match(text, 8)
+    const near = new Set(close.map(x => x.name))
+    for (const t of g.trials.filter(t => t.status === 'promoted' && lib.has(t.skill) && near.has(t.skill))) out.set(t.skill, `kept for ${t.agent} after ${t.uses} uses`)
+    for (const x of (g.camp ?? []).filter(x => x.kept && lib.has(x.skill) && near.has(x.skill))) if (!out.has(x.skill)) out.set(x.skill, `kept for ${x.agent} in a training camp`)
+    for (const x of close) if (!out.has(x.name)) out.set(x.name, '')
+    return [...out].slice(0, k).map(([name, note]) => ({ name, note }))
+  }
   playbookName(agent) { return `${agent}-playbook` }
 
   /** The skills to attach to one run of `agent` (on top of its own): its trials, its playbook, and `extra`. */
@@ -243,6 +259,8 @@ export class Growth {
   // ---------------------------------------------------------------- trials
   startTrial(agent, skill, from, ticket) {
     this.update(g => {
+      // a training camp measured this skill for this agent and it did not help: not tried again for 30 days
+      if ((g.camp ?? []).some(x => x.agent === agent && x.skill === skill && !x.kept && x.gain <= 0 && Date.now() - new Date(x.ts) < 30 * DAY)) return
       if (g.trials.some(t => t.agent === agent && t.skill === skill && t.status !== 'retired')) return
       let def; try { def = this.registry.getAgent(agent) } catch { return }
       if ((def.skills ?? []).includes(skill)) return

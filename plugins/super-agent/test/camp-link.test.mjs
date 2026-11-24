@@ -7,7 +7,7 @@ import { CampLink, CAMP_TOOLS } from '../lib/camp-link.js'
 const ago = min => new Date(Date.now() - min * 60_000).toISOString()
 
 function world(camp) {
-  const state = { sourceState: {} }
+  const state = { sourceState: {}, triggers: [] }
   const triggers = [], said = [], calls = []
   const company = { ceo: 'vr-ceo', superProject: 'p1', departments: [{ id: 'design', name: 'Design', lead: 'vr-head-design', teams: ['vr-design'], superTeamId: 'st0' }] }
   const agents = new Map([['vr-head-design', { name: 'vr-head-design', model: 'sonnet', tags: ['vr'] }]])
@@ -37,9 +37,9 @@ function world(camp) {
     revise: () => { calls.push('revise'); return { done: Promise.resolve() } },
     approve: () => { calls.push('approve'); c.status = 'approved'; c.approvedVersion = c.workflowVersion },
     train: () => { calls.push('train'); c.status = 'training'; delete c.pause; busy = true; return { done: new Promise(() => {}) } },
-    cancel: (_id, o) => { calls.push(`cancel:${o.by}`); busy = false; c.status = 'paused'; c.pause = { reason: 'you paused it', ts: ago(0), by: o.by }; return { ok: true } },
+    cancel: (_id, o) => { calls.push(`cancel:${o.by}`); busy = false; c.status = 'paused'; c.pause = { reason: 'you paused it', ts: ago(0), ...(o.by ? { by: o.by } : {}) }; return { ok: true } },
     redo: (_id, part) => calls.push(`redo:${part}`),
-    updateSettings: (_id, p) => calls.push(`set:${JSON.stringify(p)}`),
+    updateSettings: (_id, p) => { calls.push(`set:${JSON.stringify(p)}`); Object.assign(c.settings ??= {}, p) },
     publish: (_id, o = {}) => { calls.push(`publish${o.force ? ':force' : ''}`); c.status = 'published'; c.published = { ts: ago(0), agents: ['tc-a', 'tc-b'], teams: ['studio'], orchestration: 'vr-app-workflow', skipped: [] } },
     rollback: () => calls.push('rollback'),
   }
@@ -141,4 +141,50 @@ test('camp_set changes only how much is trained, within bounds', async () => {
   await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'budgetUsd', value: 500 }), /you can set/)
   await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'parallelAgents', value: 50 }), /between 1 and 8/)
   assert.ok(CAMP_TOOLS.every(t => t.inputSchema.type === 'object'))
+})
+
+test('code fixes what needs no judgement: it slows a camp the provider keeps limiting, restarts a stuck run, and names a repeating error', async () => {
+  // the provider's limit comes straight back: lowered to 1 agent and 2 calls, then resumed
+  const w = world({ status: 'paused', settings: { parallelAgents: 4, parallelCalls: 8 }, pause: { reason: '429 quota', ts: ago(61) } })
+  w.state.sourceState.camps = { c1: { resumes: 2, calls: 0 } }
+  await w.look()
+  assert.deepEqual(w.calls, ['set:{"parallelAgents":1,"parallelCalls":2}', 'train'])
+  assert.match(w.triggers[0].text, /code lowered it to 1 agent and 2 calls at a time \(it was 4 and 8\)/)
+  // a run that makes no model call for an hour is stopped by code, and resumed on the next looks
+  const s = world({ status: 'training' })
+  s.setBusy(true)
+  s.state.sourceState.camps = { c1: { calls: 0, callsAt: ago(75) } }
+  await s.look()
+  assert.deepEqual(s.calls, ['cancel:'], 'stopped without marking it as a deliberate pause')
+  assert.equal(s.triggers.length, 0, 'the first time, nobody is bothered')
+  s.c.pause = { reason: 'you paused it: no model call for 75 minutes; restarted by code', ts: ago(3) }
+  await s.look()
+  assert.deepEqual(s.calls, ['cancel:', 'train'])
+  // the same error three times is not the provider: the COO is told to have it fixed
+  const e = world({ status: 'paused', runs: [{ id: 'run-9' }], pause: { reason: 'error: TypeError: x is not a function', ts: ago(5) } })
+  for (let i = 0; i < 3; i++) { e.setBusy(false); e.c.status = 'paused'; e.c.pause = { reason: 'error: TypeError: x is not a function', ts: ago(61) }; await e.look() }
+  assert.equal(e.calls.filter(x => x === 'train').length, 3, 'code keeps retrying')
+  assert.equal(e.triggers.length, 1)
+  assert.match(e.triggers[0].text, /stopped three times on the same error[\s\S]*TypeError: x is not a function[\s\S]*Run run-9[\s\S]*repair_harness/)
+  // an event the COO's turn failed on goes to the CEO, once
+  e.state.triggers = [{ ...e.triggers[0], status: 'failed', note: 'API Error 529' }]
+  await e.look(); await e.look()
+  const up = e.triggers.filter(t => t.to === 'ceo')
+  assert.equal(up.length, 1)
+  assert.match(up[0].text, /The COO could not handle this training-camp event/)
+})
+
+test('staffing\'s last rung opens a small camp for a lasting role, or names the camp that already trains for it', async () => {
+  const w = world({ status: 'published' })
+  const need = { capability: 'Build and tune WebXR hand-tracking interactions that feel right at 72 Hz, with comfort options', purpose: 'hand-tracking', name: 'vr-hand-tracking-engineer' }
+  const a = await w.link.openFor(coo, need)
+  assert.equal(a.existing, false)
+  assert.deepEqual(w.calls, ['create', 'propose'])
+  assert.match(w.c.goal, /does this reliably and to a high standard: Build and tune WebXR hand-tracking/)
+  assert.match(w.c.log.at(-1).msg, /opened by COO through staffing/)
+  await new Promise(r => setTimeout(r, 5))
+  assert.match(w.triggers[0].text, /proposed workflow/)
+  const b = await w.link.openFor(coo, need)
+  assert.deepEqual([b.existing, b.id], [true, 'c1'], 'asked again while it trains: the same camp')
+  assert.deepEqual(w.calls, ['create', 'propose'])
 })

@@ -439,6 +439,21 @@ The training camp is connected to the leaders (`plugins/super-agent/lib/camp-lin
 - **`camp_retrain`** sends one agent back: it starts from the agent as it works today, the real work it got wrong becomes practice tasks, and the coach is told why it is back. The other roles and the team keep their training. The agent is replaced only if the retrained one passes the final exam and beats the one it started from.
 - A camp that waits or keeps failing is a health check on the dashboard.
 
+**What code fixes by itself, without a leader's turn:**
+
+| What happens | What code does | When a leader hears |
+|---|---|---|
+| A provider limit, a restart or an error pauses the camp | Resumes it after 2, 10, 20, 40, then every 60 minutes | The fourth time without progress |
+| The provider's limit comes straight back | Lowers the camp to 1 agent and 2 calls at a time, then resumes | Once, as information |
+| No model call for an hour while "training" | Stops the run and resumes it | The second time |
+| One role hits an error (not a limit) | The other roles keep training; the role is retried on the next run, and closed as failed after 3 errors so the camp can finish | When the camp finishes with roles that did not pass |
+| The same error stops the camp three times | Keeps retrying | The COO is told to run that part again, change the workflow, or have the harness fixed (`repair_harness`) |
+| The COO's own turn on a camp event fails | The event goes to the CEO | — |
+
+**Staffing.** `staff` has a last rung, **train**: with `lasting: true`, when nothing existing fits a lasting, central role, a small training camp is opened for it (or the camp that already trains for it is named), and a stopgap agent is created now when a name and role are given. Department heads cannot open camps.
+
+**One skill pipeline.** With a company, a camp no longer has its own: the company's Skill Scout does the camp's searches; a found skill is installed through the company's auditor, name and daily limit (text only, so a skill that ships scripts is rejected and nothing waits for you); the coach is shown the skills the company's own trials kept for similar work; and every skill a camp measures goes into the company's records, so a skill a camp found unhelpful for an agent is not put on trial for it again for 30 days. Without a company the camp scouts and reviews by itself as before.
+
 Tests: `node plugins/super-agent/test/camp-link.test.mjs`.
 
 ## Repairs: the CEO and COO can fix the harness, commit and push

@@ -20,7 +20,7 @@ import { deepMerge, normalizeAgent } from '../../agent-forge/lib/registry.js'
 import { listSkills } from '../../agent-forge/lib/skills.js'
 import { openMemory } from '../../agent-forge/lib/memory.js'
 import { Store, CAMP_ID, now, newId, hash, clip, slug, readJson, writeJson, mean, round } from './store.js'
-import { makeCtx, TEAM } from './evaluate.js'
+import { makeCtx, TEAM, Paused } from './evaluate.js'
 import { WORKFLOW_SCHEMA, normalizeWorkflow, mergeRevision, roleContract, workflowText, proposePrompt, revisePrompt, orchestrationSource } from './workflow.js'
 import { ensureRoleSets, ensureTeamSets, roleStages } from './datasets.js'
 import { initialDef, scoutSkills, equipRoles, installScouted, trainRole, verifyRole, trainTeam, verifyTeam } from './optimize.js'
@@ -76,6 +76,9 @@ const pidAlive = pid => { try { process.kill(pid, 0); return true } catch { retu
 
 export class Camps {
   constructor(forge, { log = () => {} } = {}) {
+    // set by the company when there is one (plugins/super-agent/lib/camp-link.js): its skill scout, its audited
+    // skill install, what its own skill trials found, and where a camp's measured skill results go
+    this.hooks = {}
     this.forge = forge
     this.registry = forge.registry
     this.engine = forge.engine
@@ -333,25 +336,42 @@ export class Camps {
       }
 
       ctx.api.phase('Datasets')
+      // one role's error must not stop the others: it is counted, retried on the next run, and after 3 the role is
+      // closed as failed so the camp can finish and say so. A pause (limit, budget, stop) still stops everything.
+      const MAX_ERRORS = 3
+      const troubled = []
+      const trouble = (r, e, where) => {
+        if (e?.pause) throw e
+        const msg = clip(e?.message ?? e, 400)
+        const n = this.store.update(id, x => { const st = x.roles[r.name]; st.errors = (st.errors ?? 0) + 1; st.lastError = { where, message: msg, ts: now() } }).roles[r.name].errors
+        ctx.log(`${r.name}: ${where} failed (${n} of ${MAX_ERRORS}): ${msg}`)
+        if (n >= MAX_ERRORS) this.store.update(id, x => { const st = x.roles[r.name]; st.status = 'failed'; st.verify = { passed: false, score: null, error: msg, ts: now() } })
+        else troubled.push(r.name)
+      }
       const made = await Promise.allSettled(want.map(r => ensureRoleSets(ctx, r)))
-      const bad = made.find(m => m.status === 'rejected')
-      if (bad) throw bad.reason
-      ctx.log(`datasets ready for ${want.length} role${want.length === 1 ? '' : 's'}`)
+      const pausedSet = made.find(m => m.status === 'rejected' && m.reason?.pause)
+      if (pausedSet) throw pausedSet.reason
+      const noSets = new Set()
+      made.forEach((m, i) => { if (m.status === 'rejected') { noSets.add(want[i].name); trouble(want[i], m.reason, 'writing its tasks') } })
+      ctx.log(`datasets ready for ${want.length - noSets.size} role${want.length - noSets.size === 1 ? '' : 's'}`)
 
       // agents are trained and verified side by side, settings.parallelAgents at a time
       ctx.api.phase('Training and verifying agents')
       const quiet = Object.create(ctx)
       quiet.api = { ...ctx.api, phase() {} }
-      const queue = want.filter(r => !ctx.camp.roles[r.name].verify)
+      const queue = want.filter(r => !ctx.camp.roles[r.name].verify && !noSets.has(r.name))
       let stop = null
       const worker = async () => {
         while (queue.length && !stop) {
           const r = queue.shift()
-          try { await trainRole(quiet, r); await verifyRole(quiet, r) } catch (e) { stop ??= e }
+          try { await trainRole(quiet, r); await verifyRole(quiet, r); this.store.update(id, x => { delete x.roles[r.name].errors; delete x.roles[r.name].lastError }) }
+          catch (e) { try { trouble(r, e, 'training') } catch (p) { stop ??= p } }
         }
       }
       await Promise.all(Array.from({ length: Math.min(S.parallelAgents, queue.length) }, worker))
       if (stop) throw stop
+      // roles that hit an error are tried again: the camp pauses, and whoever watches it (the leaders' loop, or you) resumes it
+      if (troubled.length) throw new Paused(`error in ${troubled.length} role${troubled.length === 1 ? '' : 's'} (${troubled.slice(0, 6).join(', ')}); the rest is done and they are tried again on the next run. Last: ${ctx.camp.roles[troubled[0]].lastError?.message}`)
 
       const team = S.team.enabled && wf.stages.length > 1
       if (team) {
@@ -661,7 +681,7 @@ export class Camps {
     if (this.#busy(camp)) throw new Error(`the camp is busy: ${camp.active.what} (run ${camp.active.runId})`)
     fs.mkdirSync(this.store.dir(id, 'work', 'staff'), { recursive: true })
     const r = this.engine.startCustom(`camp ${clip(camp.name, 40)}: ${what}`, async api => {
-      const ctx = makeCtx({ store: this.store, registry: this.registry, id, api })
+      const ctx = makeCtx({ store: this.store, registry: this.registry, id, api, hooks: this.hooks })
       try {
         return await body(ctx)
       } catch (e) {

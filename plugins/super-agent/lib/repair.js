@@ -116,7 +116,7 @@ export class Repair {
     if (problem.length < 30 || evidence.length < 20) throw new Error('say concretely what is wrong and give the evidence you saw (error text, run id, file or page)')
     if (this.running) return `A repair is already running ("${clip(this.running, 120)}"). Wait for its result; one repair runs at a time.`
     const today = now().slice(0, 10)
-    if (this.history(40).filter(r => r.ts.startsWith(today)).length >= st.maxPerDay) return `The limit of ${st.maxPerDay} repairs a day is reached. Tell the owner what is broken with reply_owner.`
+    if (this.history(60).filter(r => r.ts.startsWith(today) && r.outcome !== 'snapshot').length >= st.maxPerDay) return `The limit of ${st.maxPerDay} repairs a day is reached. Tell the owner what is broken with reply_owner.`
     const failed = this.#failedRestart()
     if (failed) return `The last repair (${failed.sha.slice(0, 8)}) stopped the harness from starting and was undone. Repairs wait for the owner now; tell the owner with reply_owner.`
     const id = newId('r')
@@ -224,14 +224,20 @@ export class Repair {
     const cleanup = async () => { await this.git(['worktree', 'remove', '--force', wt]); await this.git(['branch', '-D', branch]); fs.rmSync(wt, { recursive: true, force: true }) }
     try {
       // dependencies are not part of the repository: the copy uses the installed ones, read-only
-      for (const nm of ['node_modules', 'plugins/node_modules']) { const from = path.join(this.root, nm); if (fs.existsSync(from) && !fs.existsSync(path.join(wt, nm))) fs.symlinkSync(from, path.join(wt, nm)) }
+      const deps = ['node_modules', 'plugins/node_modules'].filter(nm => fs.existsSync(path.join(this.root, nm)))
+      const link = () => { for (const nm of deps) if (!fs.existsSync(path.join(wt, nm))) fs.symlinkSync(path.join(this.root, nm), path.join(wt, nm)) }
+      // the links are not part of the change: they are taken away while the change is staged
+      const unlink = () => { for (const nm of deps) { try { if (fs.lstatSync(path.join(wt, nm)).isSymbolicLink()) fs.unlinkSync(path.join(wt, nm)) } catch {} } }
+      link()
       // 2 fix
       const r = await api.agent(ENGINEER, `# The problem\n${rep.problem}\n\n# The evidence\n${rep.evidence}\n\n# Where you work\nThis folder is a copy of the harness repository (${wt}). Change files only here. Reported by: ${rep.by}.`, { cwd: wt, schema: PLAN, label: `repair:${rep.id}:fix`, full: true, signal: AbortSignal.timeout(50 * 60_000) })
       const plan = r?.structured
       if (!r?.ok || !plan) return fail('failed', `the engineer gave no result: ${clip(r?.error, 200)}`)
       if (!plan.fixed) return fail('no-fix', `the engineer could not fix it: ${clip(plan.cause, 400)}`)
       // 3 limits
+      unlink()
       await this.git(['add', '-A'], wt)
+      link()
       const files = await this.#staged(wt)
       const bad = changeProblems(files)
       if (bad.length) return fail('refused', `the change is outside the limits: ${bad.slice(0, 5).join('; ')}`)

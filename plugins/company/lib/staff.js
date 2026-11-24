@@ -9,6 +9,8 @@
  *   update     a change would make the agent better for ALL its uses             -> improve it, then an instance
  *   clone      capability almost fits; the change is for this purpose only       -> new definition (clonedFrom)
  *   create     nothing fits                                                      -> new definition from the template
+ *   train      nothing fits and the role is lasting and central                   -> a training camp trains and tests
+ *                                                                                    one; a stopgap is created now
  * Judges are never instanced, forked or cloned. The HR reviewer (a judge) chooses the rung from the candidates
  * code found; code checks the choice and carries it out. Every decision is recorded with its reason.
  */
@@ -18,7 +20,7 @@ import { FORGE_HOME, now, str } from './paths.js'
 import { kb } from './knowledge-hooks.js'
 import { agentNameProblem, teamNameProblem } from './naming.js'
 
-export const ACTIONS = ['reuse', 'instance', 'fork', 'fresh', 'update', 'clone', 'create']
+export const ACTIONS = ['reuse', 'instance', 'fork', 'fresh', 'update', 'clone', 'create', 'train']
 const S = { type: 'string' }
 const DECISION = {
   type: 'object', additionalProperties: false,
@@ -67,7 +69,7 @@ export async function decide(registry, api, need) {
   const cands = candidates(registry, need)
   const best = cands[0]
   const fallback = () => {
-    if (!best || best.fit < 1.2) return { action: 'create', agent: '', reason: best ? `the best existing agent (${best.name}) fits weakly (${best.fit})` : 'no existing agent of this kind' }
+    if (!best || best.fit < 1.2) return { action: need.lasting && need.canTrain ? 'train' : 'create', agent: '', reason: best ? `the best existing agent (${best.name}) fits weakly (${best.fit})` : 'no existing agent of this kind' }
     if (best.exact) return { action: 'reuse', agent: best.name, reason: `${best.name} fits (${best.fit}) and already works on this purpose` }
     if (need.fresh) return { action: 'fresh', agent: best.name, reason: `${best.name} fits (${best.fit}); fresh eyes were asked for` }
     if (best.related.length) return { action: 'fork', agent: best.name, forkFrom: best.related[0], reason: `${best.name} fits (${best.fit}) and works on a related purpose (${best.related[0]})` }
@@ -78,7 +80,8 @@ export async function decide(registry, api, need) {
     if (api && registry.getAgent(P.reviewerName)) {
       d = await api.agent(P.reviewerName, [
         'A unit of the company needs someone for a piece of work. Choose how to staff it, cheapest rung first:',
-        ACTIONS.map(a => `- ${a}`).join('\n'),
+        ACTIONS.filter(a => a !== 'train' || (need.lasting && need.canTrain)).map(a => `- ${a}`).join('\n'),
+        need.lasting && need.canTrain ? 'train is the last rung: choose it only when nothing existing fits (you would otherwise say create) and the need is a lasting, central role the company will rely on again and again. A training camp then trains an agent for it on generated tasks and tests it on a sealed set before it is trusted; that takes hours, so a stopgap is created now. For a one-off or a small need, create is right.' : '',
         'Rules: reuse when an agent fits and already has this purpose (exact = true). instance when an agent fits and the purpose is new. fork when it fits and has a related purpose worth starting from (name it in forkFrom). fresh when the work must challenge earlier conclusions. update when the agent fits except for something that would improve it for every use. clone when it almost fits but the change is for this purpose only. create only when nothing fits; then say what no existing agent covers.',
         `# The need\nCapability: ${str(need.capability, 2000)}\nPurpose: ${str(need.purpose, 200)}\nKind: ${need.kind ?? 'analyst'}${need.fresh ? '\nFresh eyes asked for: yes' : ''}${need.parallel ? '\nRuns in parallel with other work: yes' : ''}`,
         `# Candidates (fit is keyword overlap with the role; purposes are what each already remembers)\n${cands.map(c => `- ${c.name} (fit ${c.fit}, ${c.model}): ${c.description}\n  purposes: ${c.purposes.join(', ') || 'none'}; related: ${c.related.join(', ') || 'none'}; exact: ${c.exact}`).join('\n') || '(none of this kind)'}`,
@@ -89,7 +92,8 @@ export async function decide(registry, api, need) {
   else d.source = 'hr-reviewer'
   // code checks the choice
   const known = cands.find(c => c.name === d.agent)
-  if (d.action !== 'create' && !known) d = { ...fallback(), source: 'code', note: `the reviewer named "${d.agent}", which is not a candidate` }
+  if (d.action === 'train' && !(need.lasting && need.canTrain)) d = { ...d, action: 'create' }
+  if (!['create', 'train'].includes(d.action) && !known) d = { ...fallback(), source: 'code', note: `the reviewer named "${d.agent}", which is not a candidate` }
   if (d.action === 'fork' && !(known?.purposes ?? []).includes(d.forkFrom)) d = { ...d, action: known?.related?.[0] ? 'fork' : 'instance', forkFrom: known?.related?.[0] ?? '' }
   if (need.fresh && ['reuse', 'instance', 'fork'].includes(d.action)) d = { ...d, action: 'fresh', forkFrom: '' }
   if (d.action === 'clone' && agentNameProblem(d.cloneName, P.prefix)) d = { ...d, cloneName: need.name ?? '' }
@@ -103,10 +107,17 @@ export const handleOf = (agent, purpose) => `${agent}@${purposeSlug(purpose)}`
  * Carry out a decision for an agent. create is done by the caller (the super agent's createAgent or HR hiring),
  * because each has its own template and limits; it passes createFn. Returns { handle, agent, text }.
  */
-export async function apply(registry, d, need, { createFn, updateFn, by } = {}) {
+export async function apply(registry, d, need, { createFn, updateFn, trainFn, by } = {}) {
   const purpose = need.purpose
   let agent = d.agent
-  if (d.action === 'create') {
+  let trained = ''
+  if (d.action === 'train') {
+    // a camp trains the lasting version; a stopgap from the template does the work until it graduates
+    const camp = await trainFn(need, d)
+    trained = `TRAIN: ${camp.existing ? `the training camp ${camp.id} "${camp.name}" already trains for this` : `a training camp (${camp.id} "${camp.name}") was opened to train and test an agent for this`}. Its workflow proposal reaches the COO as an event; when it has passed, the trained agents join the company as a department.\n`
+    try { kb().add({ claim: `Staffing for "${purpose}": train in camp ${camp.id}. ${str(d.reason, 400)}`, kind: 'decision', strength: 'argued', tier: 'agent', area: P.tags?.[0], purpose: String(purpose).startsWith('ini-') ? purpose : null, by: by ?? d.source, sourceKind: 'staffing', sourceRef: `staff:camp:${camp.id}:${now()}`, volatility: 'org' }) } catch {}
+    try { agent = await createFn(need, d) } catch (e) { return { handle: null, agent: null, dir: null, camp: camp.id, text: `${trained}No agent does the work meanwhile (${str(e.message, 200)}).` } }
+  } else if (d.action === 'create') {
     agent = await createFn(need, d)
   } else if (d.action === 'clone') {
     const name = d.cloneName || need.name
@@ -131,7 +142,7 @@ export async function apply(registry, d, need, { createFn, updateFn, by } = {}) 
   const handle = handleOf(agent, purpose)
   try { kb().add({ claim: `Staffing for "${purpose}": ${d.action} ${agent}${d.forkFrom ? ` (from ${d.forkFrom})` : ''}. ${str(d.reason, 400)}`, kind: 'decision', strength: 'argued', tier: 'agent', area: P.tags?.[0], purpose: String(purpose).startsWith('ini-') ? purpose : null, by: by ?? d.source, sourceKind: 'staffing', sourceRef: `staff:${handle}:${now()}`, volatility: 'org' }) } catch {}
   const memoryNote = kind !== 'stateful' ? `${agent} is stateless (${kind}): every run starts clean.` : dir ? `Its memory for this purpose: ${dir}${d.action === 'fresh' ? ' (fresh eyes: measured facts only)' : d.action === 'fork' ? ` (seeded from ${d.forkFrom})` : ''}.` : ''
-  return { handle, agent, dir, text: `${d.action.toUpperCase()}: ${agent} for "${purpose}". ${d.reason}\n${memoryNote}\nUse it with ask_agent agent "${handle}".` }
+  return { handle, agent, dir, text: `${trained}${d.action === 'train' ? 'STOPGAP (created now)' : d.action.toUpperCase()}: ${agent} for "${purpose}". ${d.reason}\n${memoryNote}\nUse it with ask_agent agent "${handle}".` }
 }
 
 /** Teams: reuse a team that fits (its memory for this purpose is made at once), or create one from existing agents. */

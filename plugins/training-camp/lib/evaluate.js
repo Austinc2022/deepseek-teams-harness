@@ -58,14 +58,15 @@ export function staffDef(settings, kind, mcpDir) {
 }
 
 /** Everything a phase of a camp needs: the store, the registry, the run api, and one door for every model call. */
-export function makeCtx({ store, registry, id, api }) {
+export function makeCtx({ store, registry, id, api, hooks = {} }) {
   const ctx = {
-    id, store, registry, api, home: registry.home,
+    id, store, registry, api, hooks, home: registry.home,
     dir: (...p) => store.dir(id, ...p),
     get camp() { return store.read(id) },
     get settings() { return store.read(id).settings },
     log(msg) { api.log?.(msg); store.log(id, msg) },
-    staff: kind => staffDef(store.read(id).settings, kind, registry.d.mcp),
+    // with a company, its skill scout does the camp's skill searches: one scout for both
+    staff: kind => { if (kind === 'scout' && hooks.scoutAgent) { try { return registry.getAgent(hooks.scoutAgent) } catch {} } return staffDef(store.read(id).settings, kind, registry.d.mcp) },
     /** One model call. Counts spend, enforces the budget, and pauses the camp on infrastructure failures. */
     async agent(name, prompt, opts = {}) {
       if (api.signal?.aborted) throw new Paused('you paused it')

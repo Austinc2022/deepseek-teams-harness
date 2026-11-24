@@ -190,6 +190,8 @@ async function reviewSkill(ctx, item) {
   const files = walkFiles(dir).filter(f => f !== '.forge-source')
   const code = files.filter(f => CODE_FILE.test(f))
   const base = { ...item, source, name: got.name, description: got.description }
+  // with a company there is one install path, and it takes text skills only: nothing waits for the owner
+  if (code.length && ctx.hooks?.installSkill) return { ...base, status: 'rejected', reason: `Not installed: it ships ${code.length} script or program file${code.length === 1 ? '' : 's'} (${code.slice(0, 5).join(', ')}), and skills are installed as text only.` }
   if (code.length) return { ...base, status: 'pending', reason: `Not installed by itself: it ships ${code.length} script or program file${code.length === 1 ? '' : 's'} (${code.slice(0, 5).join(', ')}) that an agent could run. Read the repository, then install or reject it here.` }
   const text = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8')
   const wf = ctx.camp.workflow
@@ -206,6 +208,13 @@ async function reviewSkill(ctx, item) {
   const ok = v.install === true && Number(v.quality) >= 6 && roles.length > 0
   const reason = `${clip(v.reason, 500)} (quality ${Math.round(Number(v.quality) || 0)}/10)${v.install === true && !ok ? ' Not installed: below quality 6, or it fits none of the roles.' : ''}`
   if (!ok) return { ...base, roles, status: 'rejected', reason }
+  // one install path: the company's auditor reads it and installs it under the company's name and daily limit
+  if (ctx.hooks?.installSkill) {
+    const m = String(source).match(/^github:([\w.-]+\/[\w.-]+)(?:\/([^@]+))?/)
+    const r = await ctx.hooks.installSkill({ repo: m?.[1], path: `${m?.[2] ? `${m[2].replace(/\/$/, '')}/` : ''}SKILL.md`, name: got.name }, ctx.api)
+    if (!r?.name) return { ...base, roles, status: 'rejected', reason: `${reason} The company's auditor did not install it: ${clip(r?.reason ?? 'no verdict', 300)}` }
+    return { ...base, name: r.name, roles, status: 'installed', reason: `${reason} Audited and installed through the company's skill library as ${r.name}.` }
+  }
   const dest = path.join(ctx.registry.d.skills, got.name)
   fs.rmSync(dest, { recursive: true, force: true })
   fs.cpSync(dir, dest, { recursive: true })
@@ -262,6 +271,7 @@ export async function equipRoles(ctx, roles) {
         `Its work:\n${stages.map(s => `- ${s.role === role.name ? 'does' : 'reviews'} "${s.title}": ${s.deliverable}`).join('\n')}`,
         `Skills it already has: ${[...new Set([...base, ...(role.skills ?? [])])].join(', ') || 'none'}`,
         scouted.filter(s => s.roles.includes(role.name)).length ? `Found for this role by the scout: ${scouted.filter(s => s.roles.includes(role.name)).map(s => s.name).join(', ')}` : '',
+        (() => { try { const k = ctx.hooks?.suggestSkills?.(`${role.name.replace(/-/g, ' ')} ${role.description} ${stages.map(s => s.title).join(' ')}`) ?? []; return k.length ? `Proven in the company's real work (kept after measured use, or the closest matches in its library): ${k.map(x => `${x.name}${x.note ? ` (${x.note})` : ''}`).join(', ')}` : '' } catch { return '' } })(),
         `Installed skills:\n${lib.map(s => `- ${s.name}: ${clip(s.description, 120)}`).join('\n')}`,
         `Tool servers in the library (extra tools an agent can be given):\n${servers.map(x => `- ${x.name}: ${clip(x.description, 120)}`).join('\n') || '(none)'}`,
         `Give this role what its work really needs, and no more. A simple role may need one skill; a role with complicated, multi-part work (a gameplay programmer, a technical artist, a build engineer) may need several: one per distinct procedure it has to carry out, up to ${max}. A skill that is only loosely related makes the agent worse, so leave it out. For each part of the work that no installed skill covers, write a new skill ("newSkills", at most 3): a concrete step-by-step procedure with a checklist of what to verify before handing over. Do not write one where a good one exists. Name the tool servers the role needs ("toolServers"). Every choice is then tried and measured, and only what raises the score is kept.`,
@@ -526,6 +536,8 @@ export async function trainRole(ctx, role) {
       accepted = e.score - cur.best.dev >= S.minGain
       ctx.log(`${name} trial: ${label(top)} check ${e.score} against ${cur.best.dev}: ${accepted ? 'kept' : 'not kept'}`)
     }
+    // what the trial measured goes to the company's skill records, so its own trials do not repeat it
+    try { for (const x of scored.filter(x => x.skills.length === 1 && !x.mcp.length && !(x.tools ?? []).length)) ctx.hooks?.skillResult?.({ camp: ctx.id, role: name, skill: x.skills[0], gain: round(x.train - cur.best.train, 3), kept: accepted && top.skills.includes(x.skills[0]) }) } catch {}
     set(r => {
       r.rounds.push({ n: 0, kind: 'skills', diagnosis: adds.length ? `Each skill and tool server chosen for this role was tried alone on the practice tasks${good.length > 1 ? ', and the ones that helped were then combined' : ''}. ${good.length ? `Helped: ${good.map(label).join(', ')}.` : 'None raised the score, so the agent keeps what it had.'}` : 'What was chosen for this role was already part of the agent.', candidates: scored, promoted: devScore == null ? null : top.id, dev: devScore, accepted })
       if (accepted) r.best = { id: top.id, train: top.train, dev: devScore, costUsd: top.costUsd }

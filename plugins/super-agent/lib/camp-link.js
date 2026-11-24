@@ -25,6 +25,7 @@ import { now, str, clip, slug } from './store.js'
 import { profile as P } from '../../company/lib/profile.js'
 import { addDepartment } from '../../company/lib/setup.js'
 import { runNamed } from '../../agent-forge/lib/engine.js'
+import { SCOUT } from './growth.js'
 import { COO_ID } from './company-leaders.js'
 
 const S = { type: 'string' }
@@ -52,6 +53,7 @@ export const CAMP_TOOLS = [
   tool('run_workflow', 'Run a published camp workflow from start to finish toward a goal: its trained agents do every stage in order, with the reviews and go / stop decisions the camp trained. It runs in the background for a long time; the full report reaches you as an event, and every agent in it is scored on the work it did. Use it to execute toward the goal with the trained team; run it again with a sharper goal when the result is not there yet.', { workflow: { type: 'string', description: 'the workflow name, as camp_list or camp_status shows it for a published camp' }, goal: { type: 'string', description: 'what this run must achieve, concretely, with what you already know' } }),
 ]
 const NAMES = new Set(CAMP_TOOLS.map(t => t.name))
+const hashOf = s => { let h = 0; for (const ch of String(s).slice(0, 200)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h.toString(36) }
 
 export class CampLink {
   constructor(sa, { camps } = {}) {
@@ -69,11 +71,51 @@ export class CampLink {
       const { camps } = await import('../../training-camp/lib/camp.js')
       this.given = camps(this.sa.forge, { log: m => this.sa.log(`camp: ${m}`) })
       try { this.adopt() } catch {}
+      this.#hooks()
     } catch (e) { this.none = true; this.sa.log(`training camp not available: ${e.message}`) }
     return this.given
   }
 
   tools() { return CAMP_TOOLS }
+  async available() { return !!(await this.cs()) }
+
+  /**
+   * One skill pipeline for the company and its camps: the company's scout searches for both, a found skill is
+   * installed through the company's auditor and library, the camp is shown what the company's own trials kept,
+   * and what a camp measured goes back into the company's skill records.
+   */
+  #hooks() {
+    const sa = this.sa, { registry } = sa.forge
+    const h = this.given.hooks ??= {}
+    if (registry.listAgents().some(a => a.name === SCOUT)) h.scoutAgent = SCOUT
+    h.installSkill = async (a, api) => {
+      const before = new Set(fs.readdirSync(registry.d.skills))
+      const root = sa.store.read().agents.find(x => !x.parent)
+      let msg
+      try { msg = await sa.org.installSkill(root, a, { ...api, agent: (n, p, o = {}) => api.agent(n, p, { ...o, full: false }) }) } catch (e) { return { reason: e.message } }
+      const name = String(msg).match(/Installed (\S+)\./)?.[1] ?? fs.readdirSync(registry.d.skills).find(n => !before.has(n))
+      return name ? { name } : { reason: String(msg) }
+    }
+    h.suggestSkills = text => sa.growth.suggestFor(text, 6)
+    h.skillResult = row => sa.growth.campResult(row)
+  }
+
+  /** staff's last rung: open a camp for a lasting role nothing fits, or name the camp that already trains for it. */
+  async openFor(me, need) {
+    const cs = await this.cs()
+    if (!cs) throw new Error('the training camp plugin is not installed')
+    const words = t => new Set(String(t).toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? [])
+    const want = words(`${need.capability} ${need.purpose}`)
+    const overlap = c => { const have = words(`${c.name} ${c.goal}`); let n = 0; for (const w of want) if (have.has(w)) n++; return want.size ? n / want.size : 0 }
+    const same = cs.list().filter(c => !['published'].includes(c.status)).map(c => ({ c, o: overlap(c) })).sort((a, b) => b.o - a.o)[0]
+    if (same && same.o >= 0.5) return { id: same.c.id, name: same.c.name, existing: true }
+    const goal = `An agent, with the small team around it if the work needs one, that does this reliably and to a high standard: ${str(need.capability, 1500)}\nIt serves: ${str(need.purpose, 200)}.`
+    const c = cs.create({ goal, name: clip(String(need.name ?? need.purpose).replace(/^[a-z]+-/, m => (m === P.prefix ? '' : m)).replace(/-/g, ' '), 50), hint: 'Keep it small: one to three roles and only the stages this capability needs. No market or business stages unless the capability is about them.' })
+    cs.store.update(c.id, x => { x.by = me.id; x.log.push({ ts: now(), msg: `opened by ${me.title ?? me.id} through staffing: nothing existing fits this lasting role` }) })
+    Promise.resolve(cs.propose(c.id)?.done).then(() => this.#after(c.id, 'propose'), e => this.#tell(c.id, 'propose-failed', `Camp ${c.id}: the workflow proposal failed: ${clip(e?.message ?? e, 400)}`)).catch(() => {})
+    this.sa.say({ from: me.id, kind: 'org', text: `Staffing opened the training camp "${c.name}" (${c.id}): nothing existing fits "${clip(need.capability, 200)}".` })
+    return { id: c.id, name: c.name, existing: false }
+  }
 
   // ---------------- what a leader does
   /** Returns undefined for a tool that is not ours. */
@@ -259,6 +301,13 @@ export class CampLink {
     this.#tell(c.id, `workflow-v${c.workflowVersion}`, `Camp ${c.id} "${c.name}" has a proposed workflow, version ${c.workflowVersion}: ${wf.stages.length} stages, ${wf.roles.length} roles, ${wf.teams.length} teams.\n${clip(wf.summary, 600)}\nStages: ${wf.stages.map(s => s.title).join(' -> ')}\nRead it with camp_workflow. Approving is yours, not the owner's: check that the stages lead to the goal, that each role is one job, and that nothing is missing or doubled. Change it with camp_change, or approve it with camp_approve, which starts training.`)
   }
 
+  /** A camp event the COO could not handle (its turn failed twice) goes to the CEO, once. */
+  #escalate() {
+    for (const t of this.sa.store.read().triggers.filter(t => t.source === 'training-camp' && t.status === 'failed' && t.to === COO_ID && t.key).slice(-20)) {
+      this.sa.trigger({ source: 'training-camp', kind: 'camp', to: 'ceo', lane: t.lane, key: `${t.key}:ceo`, text: `The COO could not handle this training-camp event (its turn failed: ${clip(t.note, 200)}). It is yours now.\n\n${t.text}` })
+    }
+  }
+
   /** Look at every camp. Called from the loop; does its work at most once a minute. */
   async tick({ hold = null } = {}) {
     if (this.busy || Date.now() - this.at < MIN) return
@@ -270,6 +319,7 @@ export class CampLink {
       for (const row of cs.list()) {
         try { this.#watch(cs, cs.get(row.id), row.busy, hold) } catch (e) { this.sa.log(`camp ${row.id}: ${e.message}`) }
       }
+      try { this.#escalate() } catch {}
     } finally { this.busy = false }
   }
 
@@ -293,14 +343,21 @@ export class CampLink {
     }
 
     if (c.status === 'not-passed' && !busy) {
-      const failed = c.workflow.roles.filter(r => !c.roles[r.name]?.verify?.passed).map(r => `${r.name} (${c.roles[r.name]?.verify?.score ?? 'no score'})`)
-      return this.#tell(id, `not-passed-${c.runs.length}`, `Camp ${id} "${c.name}" finished, and not everything passed. Did not pass: ${failed.join(', ') || '-'}${c.team?.verify && !c.team.verify.passed ? '; the team as a whole' : ''}.\nRead camp_status. Your options: coach those roles again (camp_redo rounds, after camp_set rounds or dataset sizes higher), change the workflow so the role is one clearer job (camp_change), or publish what passed (camp_publish with force) and keep training the rest.`)
+      const failed = c.workflow.roles.filter(r => !c.roles[r.name]?.verify?.passed).map(r => `${r.name} (${c.roles[r.name]?.verify?.error ? `stopped by an error 3 times: ${clip(c.roles[r.name].verify.error, 160)}` : c.roles[r.name]?.verify?.score ?? 'no score'})`)
+      const broke = c.workflow.roles.some(r => c.roles[r.name]?.verify?.error)
+      return this.#tell(id, `not-passed-${c.runs.length}`, `Camp ${id} "${c.name}" finished, and not everything passed. Did not pass: ${failed.join(', ') || '-'}${c.team?.verify && !c.team.verify.passed ? '; the team as a whole' : ''}.\n${broke ? 'A role stopped by the same error three times was not judged on its work. If the error is in the harness and not in the provider, have it fixed (repair_harness, with the error text), then train again (camp_train): those roles are tried again.\n' : ''}Read camp_status. Your options: coach those roles again (camp_redo rounds, after camp_set rounds or dataset sizes higher), change the workflow so the role is one clearer job (camp_change), or publish what passed (camp_publish with force) and keep training the rest.`)
     }
 
     if (c.status === 'training' && busy) {
       const idle = Date.now() - new Date(st.callsAt ?? c.active?.ts ?? now()).getTime()
-      if (idle > 60 * MIN) this.#tell(id, `stalled-${new Date().toISOString().slice(0, 13)}`, `Camp ${id} "${c.name}" says it is training but has made no model call for ${Math.round(idle / MIN)} minutes. The provider may be refusing calls. Read camp_status; if it does not move, pause it (camp_pause), lower camp_set parallelCalls, and resume (camp_train).`)
-      if (st.resumes && calls - (st.resumeCalls ?? 0) >= 25) this.#save(id, { resumes: 0 })
+      if (idle > 60 * MIN) {
+        // stuck: code stops the run so the next look resumes it; the COO hears when that keeps happening
+        cs.cancel(id, { by: '', reason: `no model call for ${Math.round(idle / MIN)} minutes; restarted by code` })
+        cs.store.update(id, x => { x.log.push({ ts: now(), msg: `no model call for ${Math.round(idle / MIN)} minutes: the run was stopped by code and will be resumed` }) })
+        this.#save(id, { callsAt: now(), stalls: (st.stalls ?? 0) + 1 })
+        if ((st.stalls ?? 0) + 1 >= 2) this.#tell(id, `stalled-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" stopped making model calls twice and was restarted by code each time. Read camp_status and the last log lines. If the provider is refusing calls, train fewer things at once (camp_set); if the harness hangs, have it fixed (repair_harness, with what you see).`)
+      }
+      if ((st.resumes || st.stalls) && calls - (st.resumeCalls ?? 0) >= 25) this.#save(id, { resumes: 0, stalls: 0, sameError: 0 })
       return
     }
 
@@ -315,9 +372,20 @@ export class CampLink {
     const n = st.resumes ?? 0
     const wait = Math.max(WAITS[Math.min(n, WAITS.length - 1)], TRANSIENT_LIMIT.test(reason) && n === 0 ? 10 : 0) * MIN
     if (Date.now() - new Date(c.pause.ts ?? now()).getTime() < wait) return
+    // a provider limit that comes straight back: code trains fewer things at once before it tries again
+    const S = c.settings ?? {}
+    if (n >= 2 && TRANSIENT_LIMIT.test(reason) && ((S.parallelAgents ?? 1) > 1 || (S.parallelCalls ?? 1) > 2)) {
+      const was = `${S.parallelAgents} and ${S.parallelCalls}`
+      cs.updateSettings(id, { parallelAgents: 1, parallelCalls: 2 })
+      cs.store.update(id, x => { x.log.push({ ts: now(), msg: `the provider keeps limiting: lowered automatically to 1 agent and 2 calls at a time (was ${was})` }) })
+      this.#tell(id, `slowed-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" kept hitting the provider's limit, so code lowered it to 1 agent and 2 calls at a time (it was ${was}) and resumed it. Nothing for you to do unless you want it faster: that needs a model with more quota, which is the owner's setting.`)
+    }
+    // the same error again and again is not the provider: it needs a fix, not another try
+    const sameError = !TRANSIENT_LIMIT.test(reason) && !/restart|stopped|process that ran/.test(reason) && clip(reason, 120) === clip(st.lastReason, 120) ? (st.sameError ?? 0) + 1 : 0
     cs.store.update(id, x => { x.log.push({ ts: now(), msg: `resumed automatically (attempt ${n + 1}) after: ${clip(reason, 160)}` }) })
     cs.train(id)
-    this.#save(id, { resumes: n + 1, resumeCalls: calls, lastReason: clip(reason, 300) })
+    this.#save(id, { resumes: n + 1, resumeCalls: calls, lastReason: clip(reason, 300), sameError })
+    if (sameError === 2) this.#tell(id, `same-error-${hashOf(reason)}`, `Camp ${id} "${c.name}" has stopped three times on the same error, and resuming does not get past it:\n${clip(reason, 600)}\nRun ${c.runs.at(-1)?.id ?? '-'}. Decide what it is. A fault in one stage or role: run that part again (camp_redo) or make the role a clearer job (camp_change). A fault in the harness itself (an exception, a broken tool, a bad file): have it fixed with repair_harness, giving this error text and the run id; code resumes the camp after the fix. Code keeps retrying meanwhile.`)
     if (n + 1 === 4) this.#tell(id, `keeps-pausing-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" has paused and been resumed ${n + 1} times with almost no progress. The last reason: ${clip(reason, 300)}\nCode keeps retrying every hour. If the provider's limit is the cause, train fewer things at once (camp_set parallelAgents 1, parallelCalls 2) or smaller task sets; if a stage fails every time, run it again (camp_redo) or change the workflow (camp_change).`)
   }
 
