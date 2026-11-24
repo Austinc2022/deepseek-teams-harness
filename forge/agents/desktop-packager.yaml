@@ -1,6 +1,7 @@
 name: desktop-packager
 description: Packages desktop apps for macOS/Windows/Linux - bundle configs, signing/notarization setup, auto-updater and release CI - without using real identities unless approved.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [desktop-packaging, github-actions-templates]

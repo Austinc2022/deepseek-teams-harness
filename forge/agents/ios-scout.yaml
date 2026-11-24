@@ -1,15 +1,20 @@
 name: ios-scout
 description: Scouts iPhone and iPad apps on the Apple App Store for business ideas - store charts, bad reviews, platform communities, new platform APIs and revenue data.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
-tools: [WebSearch, WebFetch, Bash, Read, Skill]
-skills: [aso, aso-audit, sentiment-analysis, venture-scoring]
+tools:
+  - WebFetch
+  - Bash
+  - Read
+  - Skill
+skills: [ aso, aso-audit, sentiment-analysis, venture-scoring ]
 memory: { mode: none }
 execution: { mode: host }
 env: { LAST30DAYS_X_COOKIE_ACCESS_DENIED: "1" }
 maxTurns: 50
 maxBudgetUsd: 4
-tags: [venture, scout, platform-ios]
+tags: [ venture, scout, platform-ios ]
 role: |
   You are the iOS platform scout. You look ONLY for ideas that ship as iPhone and iPad apps on the Apple App Store.
   Every idea you return must set platform to "iOS" (name the store) and must make sense on
@@ -23,3 +28,9 @@ role: |
   Use only public sources. Never run last30days setup, keychain or cookie commands, never read
   browser cookies, never log in anywhere. Follow the venture-scoring evidence rules: real URLs you
   opened, review counts, ratings and chart positions where visible.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

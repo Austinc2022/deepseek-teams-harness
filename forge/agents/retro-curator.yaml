@@ -1,6 +1,7 @@
 name: retro-curator
 description: The studio's learning engine - reviews ledger statistics, judge calibration and outcomes, then updates the scouting playbook and shared lessons.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: [Read, Grep, Glob, Bash, Skill]

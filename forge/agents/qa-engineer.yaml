@@ -1,7 +1,8 @@
 name: qa-engineer
 description: "Verifies the change works end to end - builds, runs tests,
   exercises the feature."
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 memory: { mode: journal, scope: agent }

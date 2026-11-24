@@ -26,6 +26,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { ROOT, FORGE_HOME, now, today, newId, round, str, clip } from '../lib/paths.js'
 import { finishGate, orderId } from '../lib/gate-common.js'
+import { withCommunitySearch } from '../../agent-forge/lib/mcp.js'
 
 const S = { type: 'string' }
 const arr = (items, maxItems) => ({ type: 'array', items, ...(maxItems ? { maxItems } : {}) })
@@ -298,7 +299,9 @@ export function makeProfile(spec) {
   P.superRules = spec.superRules ?? genericSuperRules(P.companyName)
   P.workerRules = spec.workerRules ?? genericWorkerRules
   P.secretDirs = spec.secretDirs ?? secretDirs
-  P.isOurs = n => String(n ?? '').startsWith(P.prefix)
+  // agents and teams a training camp published into this company keep their own names (company.json: adopted)
+  P.adopted = new Set()
+  P.isOurs = n => String(n ?? '').startsWith(P.prefix) || P.adopted.has(String(n ?? ''))
   P.name = n => (P.isOurs(n) ? n : `${P.prefix}${n}`)
   P.ceoName = P.name('ceo')
   P.auditorName = spec.auditorName ?? P.name('auditor')
@@ -331,7 +334,7 @@ export function makeProfile(spec) {
   P.auditorIsExisting = !!spec.auditorName
 
   /** Read-only analyst: the template every company agent and every analyst hire gets. */
-  P.baseAgent = extra => ({
+  P.baseAgent = extra => withCommunitySearch({
     backend: 'claude-code',
     ...P.modelFields(P.models.lead),
     effort: 'high',
@@ -346,7 +349,7 @@ export function makeProfile(spec) {
     maxTurns: 40,
     tags: [...P.tags, 'company'],
     ...extra,
-  })
+  }, path.join(FORGE_HOME, 'mcp'))
 
   P.worker = {
     allowedDomains: spec.worker?.allowedDomains ?? [],
@@ -391,7 +394,7 @@ ${P.workerRules}`,
     ...extra,
   })
   /** What the top tier runs on: the strongest model at the highest effort, with a fallback. */
-  P.leaderFields = () => ({ ...P.modelFields(P.models.ceo), effort: P.models.ceoEffort ?? 'xhigh', ...(P.models.ceoFallback ? { fallbackModel: P.models.ceoFallback } : {}) })
+  P.leaderFields = () => ({ ...(P.models.ceoProvider ? { provider: P.models.ceoProvider, model: P.models.ceo } : P.modelFields(P.models.ceo)), effort: P.models.ceoEffort ?? 'xhigh', ...(P.models.ceoFallback ? { fallbackModel: P.models.ceoFallback } : {}) })
   P.superDef = ({ name, description, mission }) => P.baseAgent({
     name, description,
     ...P.leaderFields(),

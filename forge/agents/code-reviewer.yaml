@@ -1,6 +1,7 @@
 name: code-reviewer
 description: Reviews a diff for correctness bugs, regressions and missing tests.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: [ Read, Grep, Glob, Bash, Skill ]

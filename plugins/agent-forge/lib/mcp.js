@@ -130,3 +130,26 @@ export class McpLibrary {
     }
   }
 }
+
+/** Name of the community web search server in the library (forge/mcp/websearch.yaml: open-websearch, no API key). */
+export const SEARCH_SERVER = 'websearch'
+// fetch tools of that server for sites these agents do not use
+const SEARCH_HIDE = ['fetchCsdnArticle', 'fetchLinuxDoArticle', 'fetchJuejinArticle'].map(t => `mcp__${SEARCH_SERVER}__${t}`)
+
+/**
+ * Claude Code's own WebSearch tool is served by Anthropic, so it does not exist for an agent on another provider
+ * (provider: free, deepseek). For such an agent that asks for WebSearch, this returns the definition with the
+ * community search server instead. Other agents, and a library without the server, are returned unchanged.
+ * It is applied where agent definitions are written (company profiles, training camp), never at run time.
+ */
+export function withCommunitySearch(def, mcpDir) {
+  const other = def.provider && def.provider !== 'claude-code'
+  if (!other || !Array.isArray(def.tools) || !def.tools.includes('WebSearch')) return def
+  if (!fs.existsSync(path.join(mcpDir, `${SEARCH_SERVER}.yaml`))) return def
+  return {
+    ...def,
+    tools: def.tools.filter(t => t !== 'WebSearch'),
+    mcp: [...new Set([...(def.mcp ?? []), SEARCH_SERVER])],
+    disallowedTools: [...new Set([...(def.disallowedTools ?? []), ...SEARCH_HIDE])],
+  }
+}

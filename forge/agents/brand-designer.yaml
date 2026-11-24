@@ -1,6 +1,7 @@
 name: brand-designer
 description: Creates the brand - name options, voice, visual identity, color/type theme, logo concepts and launch visuals.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Write, Edit, Bash, Glob, Skill]
 skills: [canvas-design, theme-factory, frontend-design]

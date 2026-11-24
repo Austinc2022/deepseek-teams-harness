@@ -1,6 +1,7 @@
 name: release-manager
 description: Prepares a release - version bump, changelog, release notes, local tag.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [ release-checklist, finishing-a-development-branch ]

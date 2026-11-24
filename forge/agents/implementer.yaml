@@ -1,7 +1,8 @@
 name: implementer
 description: Main implementation agent; executes the approved plan and delegates
   parallel parts to sub-agents.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

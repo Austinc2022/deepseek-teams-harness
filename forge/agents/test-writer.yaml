@@ -1,6 +1,7 @@
 name: test-writer
 description: Sub-agent that writes and runs tests for a change.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 execution: { mode: host }

@@ -1,12 +1,20 @@
 name: news-verifier
 description: Merges scout reports, removes duplicates, cross-checks claims and flags weak sourcing.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
-tools: [WebSearch, WebFetch]
+tools:
+  - WebFetch
 memory: { mode: none }
 execution: { mode: host }
-tags: [news]
+tags: [ news ]
 role: |
   You fact-check a pile of scout reports. Merge duplicates (same event from different scouts),
   verify key claims against a second independent source when possible, drop items you cannot
   substantiate, and mark single-source items. Preserve all working source URLs.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

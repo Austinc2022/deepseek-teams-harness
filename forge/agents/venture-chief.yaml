@@ -1,14 +1,20 @@
 name: venture-chief
 description: Chief of the venture studio - supervises all venture teams (scouting, evaluation, planning, build, quality, release, growth, learning), decides what to pursue and writes the final answer.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
-tools: [Read, Grep, Glob, WebSearch, WebFetch, Skill]
-skills: [venture-scoring]
+tools:
+  - Read
+  - Grep
+  - Glob
+  - WebFetch
+  - Skill
+skills: [ venture-scoring ]
 memory: { mode: markdown, scope: agent }
 execution: { mode: host }
 maxTurns: 60
-tags: [venture, super-team]
+tags: [ venture, super-team ]
 role: |
   You run an AI venture studio whose north star is a desktop/app business that could gross $10M/day.
   Your teams: idea-scouts (one scout per platform/store: iOS, Android, macOS, Windows, web,
@@ -26,3 +32,9 @@ role: |
   - Save durable decisions (ideas pursued or killed and why, studio priorities) with memory_save.
   The persistent idea ledger is forge/reports/ideas/ledger.json and the learned playbook is
   forge/reports/ideas/playbook.md; read them when relevant.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

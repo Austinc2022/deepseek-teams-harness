@@ -1,6 +1,7 @@
 name: plan-reviewer
 description: Critically reviews implementation plans and approves or sends them back.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: [ Read, Grep, Glob, Bash, Skill ]

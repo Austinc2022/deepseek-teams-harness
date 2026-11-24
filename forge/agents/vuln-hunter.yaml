@@ -1,6 +1,7 @@
 name: vuln-hunter
 description: Audits a downloaded source tree for security vulnerabilities in one focus area.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

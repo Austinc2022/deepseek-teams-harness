@@ -23,8 +23,10 @@ export default makeProfile({
   superProject: { name: 'VR Studio', color: '#7c3aed' },
   // the top tier leads on the strongest model at the highest effort; the auditor stays on a different model
   // from the builders
-  models: { provider: 'claude-code', ceo: 'opus', ceoEffort: 'xhigh', ceoFallback: 'sonnet', lead: 'sonnet', worker: 'sonnet', fast: 'haiku', auditor: 'opus' },
-  scale: { maxWorkers: 6, maxEvals: 5, maxTicketsPerDay: 40, maxSuperAgents: 12, maxAssignments: 10 },
+  // the two leaders (CEO super agent and COO) run on the Claude subscription: they decide, approve and repair, and a
+  // provider limit must not stop them. Every other tier is on the free models (provider "free" = the our-free-model gateway).
+  models: { provider: 'free', ceoProvider: 'claude-code', ceo: 'opus', ceoEffort: 'xhigh', ceoFallback: 'sonnet', lead: 'combo:recommended-free', worker: 'combo:recommended-free', fast: 'combo:recommended-free', auditor: 'combo:recommended-free', choices: ['combo:recommended-free'] },
+  scale: { maxWorkers: 3, maxEvals: 2, maxTicketsPerDay: 20, maxSuperAgents: 12, maxAssignments: 10 },
   critics: [
     { agent: 'head-design', lens: 'creative direction and taste: is the core mechanic a delight in the first 60 seconds, is the look and sound distinctive and cohesive, what would make a player show it to a friend' },
     { agent: 'xr-engineer', lens: 'engineering: correctness of the WebXR session and input, comfort options, the frame budget, anything that would crash or stutter' },

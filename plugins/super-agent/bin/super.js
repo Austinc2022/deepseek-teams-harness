@@ -46,6 +46,14 @@ async function main() {
     out.push('Right now:', ...(o.now.items.length ? o.now.items.map(i => `  ${i.who}: ${i.what}`) : [`  ${o.now.idle}`]))
     return console.log(out.join('\n'))
   }
+  // repairs: ./super-cli repair push on|off, repair restart on|off, repair on|off
+  if (cmd === 'repair') {
+    const on = v => ({ on: true, off: false })[v]
+    const key = ['push', 'restart'].includes(rest[0]) ? rest[0] : 'enabled'
+    const val = on(key === 'enabled' ? rest[0] : rest[1])
+    if (val === undefined) { console.log('usage: super-cli repair on|off | repair push on|off | repair restart on|off'); return }
+    return queued(sa.store.command({ type: 'settings', patch: { repair: { [key]: val } } }))
+  }
   if (cmd === 'on' || cmd === 'off') return queued(sa.store.command({ type: 'enabled', on: cmd === 'on' }))
   if (cmd === 'run') {
     if (!sa.store.claim()) { console.error(`the loop already runs in pid ${sa.store.holder().pid}`); process.exit(1) }

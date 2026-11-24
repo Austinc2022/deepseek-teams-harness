@@ -15,6 +15,7 @@ This folder contains a local install of [DeepSeek Harness](https://github.com/de
 | `plugins/company-dashboard` | Two pages. **Company** (the desk, where you act): decisions waiting for you, goal progress, what is happening now, each super agent's plan, tickets, the initiative pipeline, engine controls, the organisation, a timeline and the charter. **Dashboard** (read-only): every business unit and what it is working on, an activity chart, what happens next, trends and daily operating numbers. |
 | `plugins/super-agent` | An always-on **super agent** (after DeepSeek's dsh-superagent prototype): it reacts to events, opens tickets worked by sandboxed workers with a shell, talks to agents, teams and super teams, and builds its own organisation. Super agents form a tree under one CEO. |
 | `plugins/group-hq` | A **group headquarters** (not loaded in the web profile by default): companies on this or other computers join it from their own **Connections** page with an invite code; it shows everything each company shares, sends directives and policies within the authority each company's owner gives it (observe, advise, direct), and has a group CEO and an independent review team. See [docs/GROUP.md](docs/GROUP.md). |
+| `plugins/training-camp` | A **Training camp** page: give it a goal and it proposes a workflow, which you change until you approve it. It then trains each agent and the team on generated tasks, verifies them on a sealed set, and publishes the ones that pass as agents, teams and a workflow in Agent Forge. |
 
 ### What it looks like
 
@@ -105,6 +106,7 @@ disallowedTools: [WebSearch, mcp__github__delete_repository]   # always blocked
 mcp: [github, playwright]     # servers from the shared MCP library (forge/mcp/<name>.yaml)
 externalMcp: false            # true = also load .mcp.json, your Claude Code MCP config and claude.ai connectors
 fallbackModel: sonnet
+provider: free                # optional: free = the our-free-model plugin's local gateway (model e.g. combo:recommended-free; works while ./dsh web runs, costs nothing, no web search); deepseek = DeepSeek API key; omit for the Claude subscription
 maxBudgetUsd: 5
 settingSources: [project]     # project | local | user Claude Code settings to load
 env: { MY_FLAG: "1" }
@@ -113,6 +115,17 @@ folders: [~/Documents/specs]  # extra folders the agent may read and write
 ```
 
 **MCP servers** live in a shared library (Agents page, MCP servers tab, with templates for filesystem, GitHub, Playwright, memory, sequential thinking and Context7, plus a connection test). Each agent ticks the servers it should get; by default an agent sees only those, not your personal Claude Code MCP servers or claude.ai connectors. Put secrets in as `${VAR}` references to the harness environment; literal values are stored in `forge/mcp/` (mode 600) and shown masked in the browser.
+
+**Web search without Claude.** Claude Code's `WebSearch` tool is served by Anthropic, so an agent on another provider (`provider: free` or `deepseek`) does not have it. The library's `websearch` server fills the gap: the community [open-websearch](https://github.com/Aas-ee/open-webSearch) server (Apache-2.0, no API key; DuckDuckGo, Bing, Brave, Startpage, Exa, Hacker News, plus page and GitHub README fetch), installed at a pinned version in `tools/open-websearch/` (`npm install --ignore-scripts` there to restore it). Add `websearch` to an agent's `mcp` list to give it search. Company profiles and the training camp do this by themselves for agents that ask for `WebSearch` on a non-Claude provider. It scrapes result pages, so many searches in a short time can get an engine to block you for a while.
+
+**Self-learning.** Every agent on the `claude-code` backend has a `learn_skill` tool: when it works out a procedure worth repeating, it writes it down as a skill for its later runs. Nobody approves it. Instead: a skill is text only, a fixed screen rejects dangerous text, a reviewer model installs or rejects it with a reason, and learning only ever changes the agent's skill list (never its tools, permissions, model or instructions). At most 2 per run and 12 learned skills per agent. Decisions are logged in `forge/learning.jsonl` and in the agent's `files/learned-skills.md`. Learned skills are named `learned-...`; remove one on the Agents page. Switch it off for an agent with `selfLearning: false`. In a training camp the same tool only proposes: the camp reviews the skill and keeps it only if it raises the score.
+
+**Tools agents give themselves.** The same agents have two more tools, also with no approval step:
+
+- `build_tool`: the agent writes a small JavaScript tool (`export default async function (input)`), with an example input. It is run on that example first; a tool that fails is not saved. A reviewer model then keeps or rejects it. Kept tools live in `forge/agent-tools/<id>/`, are listed in the agent's file as `ownTools`, and reach the agent as the tool server `forge_tools`. Every call runs in a new process inside the macOS sandbox with an empty environment: no network, no other programs, read access to the working folder and the agent's own files only, no writes. At most 1 per run and 8 per agent.
+- `install_tool`: `npm:<package>[@version]` installs an MCP server from npm; `library:<name>` adds a server that is already in `forge/mcp/`. For npm, fixed rules come first: the package is at least 60 days old, has at least 1000 downloads a week, the version is at least 14 days old and not deprecated, and it has a start command. Then the reviewer decides, the package is installed with `--ignore-scripts` into `forge/tool-servers/<id>/`, and it is started once: a server that does not start or offers no tools is removed again. It runs with an empty environment inside the sandbox: internet yes, services on this machine no, files under `/Users` no. Servers that need an API key are not installed, and a library server that carries your credentials is never self-assigned. At most 1 per run and 4 per agent.
+
+Both need the macOS sandbox (`sandbox-exec`); on another system the two tools answer that they are unavailable. In a training camp both only propose: the camp runs the same checks, then tries the tool on the practice tasks and keeps it only if the score goes up. To take a tool away, remove its name from `ownTools` or `mcp` in the agent's file.
 
 Every agent also has its own folder, `forge/agent-homes/<name>/`. Its `files/` subfolder is the agent's content library: reference docs, briefs, examples or data you give it, plus work products it saves. The files are listed in the agent's instructions on every run, and you can browse, upload, edit and delete them on the Agents page under **Folders and files**. Working folder order: the folder a run or chat passes, then `project`, then the agent's own folder. Cloning an agent copies its content library. Sandbox and container modes grant access to all of these folders.
 
@@ -376,6 +389,75 @@ The **Companies** page lists every company on this computer and creates new ones
 - **Execution targets**: builders can run on a VM or another computer over ssh, or in Docker, instead of this machine's sandbox. You set the target per ticket, agent, team, super team, or as the company default. The ticket folder is copied there and back; keys and `.env` files are never copied. Set them up under **Connections → Execution targets**.
 
 Details: [docs/GROUP.md](docs/GROUP.md) and [docs/EXECUTION-TARGETS.md](docs/EXECUTION-TARGETS.md).
+
+## Training camp: train agents and teams for a goal
+
+`plugins/training-camp` adds the **Training camp** sidebar page, `./camp-cli`, and `camp_*` tools for the lead agent.
+A camp takes one goal and works in this order:
+
+1. **Workflow.** An architect agent proposes the stages (with go / stop decisions), the roles and the teams. You ask for changes in your own words, edit the JSON yourself, or go back to an earlier version. Every change is a new version, and nothing trains until you approve one.
+2. **Datasets.** For every role an examiner writes practice tasks (`train`, `dev`), each with a rubric and optional deterministic checks. A different staff member (by default a different model) writes the verification set, which is stored under `sealed/`. The trainees, the coach and the examiner never read it.
+3. **Training.** Each role starts from the existing agent of that name, or from a first draft. In every round a coach reads where the current best lost points on `train` and proposes candidates, each changing one lever: the role text, the model and effort, skills (installed, newly written, or found on GitHub), tools and MCP servers, memory lessons, or the turn limit. The best candidate on `train` replaces the current best only if it also wins on `dev`.
+4. **Team.** With the roles trained, the workflow's hand-offs and review loops are varied and scored on small end-to-end goals.
+5. **Verification.** Each role and the team run once on the sealed set. A role passes when it reaches the bar and its score did not fall much from `dev`. If the trained version is worse there than the original, the original is kept.
+6. **Publish.** You publish what passed: agents (tagged `camp-trained`), the workflow's teams, and the workflow as an orchestration you can run from Workflows or with `./forge-cli run <name> goal="..."`. What publishing replaces is backed up, and `rollback` restores it.
+
+```bash
+./camp-cli new "Build a VR app people pay for every day" --idea "demand finding, demand evaluation, plan, demos, full product"
+./camp-cli workflow <id>                      # read the proposal
+./camp-cli change <id> "merge the two demand stages and add a playtest after the demos"
+./camp-cli approve <id>
+./camp-cli set <id> budgetUsd=40 rounds=3     # optional
+./camp-cli train <id>                         # start or resume; Ctrl-C stops, nothing is lost
+./camp-cli status <id>                        # scoreboard
+./camp-cli publish <id>                       # or: rollback <id>
+```
+
+What to know:
+
+- **Trials are isolated.** Each runs in its own folder under `forge/camps/<id>/work/`, with its own memory namespace and no project folder, so training never writes into a live agent's memory or your projects. An analyst role can never gain write or shell tools through training.
+- **Cost.** A trial is two model calls (the agent and the judge). With the defaults, one role needs roughly 50 trials. The camp pauses at `budgetUsd` (estimated from run costs; default 20), at `maxCalls`, and at a subscription or spend limit. A limit is never recorded as a bad score, and `train` continues from the trial cache.
+- **"Fine-tuning" here means configuration, not weights.** The camp chooses the model and tunes everything around it. It does not train model weights.
+- **Scores measure the work, not the market.** A camp can show that the team researches, decides and builds well on its tasks. It cannot show that a product will sell.
+- **Skills from GitHub.** A scout proposes skills. Those from owners in `scout.allowOwners` (default `anthropics`) are installed, pinned to the commit; every other one waits for your approval on the page or with `./camp-cli skill <id> <n> approve`.
+- **Models.** The page's *Models for this camp* panel sets which model every role trains on, and the models of the camp's staff, judge and sealed-set writer. The default is the free models. After publishing, change any agent's model on the Agents page (Provider and Model).
+- **What stays after training.** A published agent keeps its trained instructions, skills and memory lessons, plus a record in its content library (`training-camp.md`). Each workflow team gets team-memory notes: how it works, its hand-offs and its members' lessons. A later camp adds to these.
+- **Settings** (`./camp-cli settings <id>`): dataset sizes, rounds and candidates, the pass criteria, `trainee` and `staff` models (set `provider: deepseek` or `backend: dsh` to run them elsewhere), `roles` to train only some roles, `team.enabled`, `publish.auto`.
+- **Tests:** `node --test plugins/training-camp/test/camp.test.mjs` runs a whole camp against a scripted engine, without model calls.
+
+Everything about a camp is in `forge/camps/<id>/` (excluded from git).
+
+### The COO runs the camps
+
+The training camp is connected to the leaders (`plugins/super-agent/lib/camp-link.js`). The CEO sets the goal; the COO owns the workforce.
+
+- **Tools** for the COO and the CEO: `camp_new`, `camp_status`, `camp_workflow`, `camp_change`, `camp_approve`, `camp_train`, `camp_pause`, `camp_redo`, `camp_set`, `camp_publish`, `camp_rollback`, `camp_retrain`, `run_workflow`. The COO approves a camp's workflow itself; you are not asked.
+- **Code watches every camp once a minute.** A camp paused by a provider limit, a restart or an error is resumed, waiting longer each time (2, 10, 20, 40, then 60 minutes). A camp that passed its final exams is published. A camp you or a leader paused on purpose is left alone, and so is one that stopped at its budget or call limit.
+- **The COO gets an event only for what needs a decision:** a proposed workflow, a pause at the budget, a camp that keeps pausing or makes no model call for an hour, roles that did not pass, and what was published.
+- **Publishing deploys.** The published agents and teams become a department of the company (`camp-<name>`, with a head and a super team), next to the departments that exist. They keep their names; `company.json` lists them under `adopted`, and they do not count against the hiring limit.
+- **`run_workflow`** runs a published workflow end to end toward a goal. Every agent's answer in the run is scored by the work judge, so the performance scores cover camp graduates.
+- **`camp_retrain`** sends one agent back: it starts from the agent as it works today, the real work it got wrong becomes practice tasks, and the coach is told why it is back. The other roles and the team keep their training. The agent is replaced only if the retrained one passes the final exam and beats the one it started from.
+- A camp that waits or keeps failing is a health check on the dashboard.
+
+Tests: `node plugins/super-agent/test/camp-link.test.mjs`.
+
+## Repairs: the CEO and COO can fix the harness, commit and push
+
+`plugins/super-agent/lib/repair.js`. A leader never edits code. It calls `repair_harness` with the problem and the evidence, and code runs a fixed sequence in which every step has to pass:
+
+1. **Snapshot.** Tracked configuration that changed while the company ran is committed first.
+2. **Fix.** A harness engineer (`<prefix>harness-engineer`, a sandboxed builder) works in a git worktree, on its own branch.
+3. **Limits.** Allowed paths only (`plugins/`, `docs/`, `README.md`, the `*-cli` launchers, `forge/agents|teams|skills|orchestrations|agent-tools`). Never `package.json` or lock files, `node_modules`, `.dsh-home`, `forge/company`, `forge/super-agent`, `forge/mcp`, secrets, or the repair machinery and the sandbox themselves. At most 25 files and 800 changed lines, no test deleted, no secret in an added line, every changed script parses.
+4. **Tests.** Every `plugins/*/test/*.test.*` file runs on the changed code inside the OS sandbox: no network, writes only to a scratch folder.
+5. **Review.** An independent read-only reviewer (`<prefix>harness-reviewer`) approves or rejects with the reason. It rejects anything that weakens a limit, a gate or a check.
+6. **Commit and push.** Committed and fast-forwarded into `main` (never forced). Pushed to `origin main` when pushing is switched on.
+7. **Restart.** When code changed, a guard process restarts the harness. If it is not back within 90 seconds, the guard reverts the commit, pushes the revert and starts the old code; repairs then wait for you.
+
+Once a day the current state of the allowed paths is also committed ("State: ..."), and pushed when pushing is on. Repairs are logged in `forge/super-agent/repairs.jsonl` and told in the feed; the guard writes `forge/super-agent/repair.log`.
+
+Settings (`settings.repair` in `forge/super-agent/state.json`): `enabled` and `restart` (on), `push` (off), `maxPerDay` (4), `snapshotHours` (24; 0 switches the daily commit off). **Pushing is off until you switch it on** with `./super-cli repair push on`; until then commits stay on this machine. If the repository is public, everything pushed this way is public. `./super-cli repair off` switches repairs off, `./super-cli repair restart off` keeps the harness from restarting itself.
+
+Tests: `node plugins/super-agent/test/repair.test.mjs`.
 
 ## CLI workbench: many Claude Code terminals on one page
 

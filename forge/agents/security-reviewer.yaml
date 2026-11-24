@@ -1,6 +1,7 @@
 name: security-reviewer
 description: Reviews a diff for security vulnerabilities.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools:

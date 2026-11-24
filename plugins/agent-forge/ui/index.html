@@ -442,6 +442,46 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
   body[data-tab="chat"] .detail { height: 78vh; }
   .page-head { padding-top: 20px; }
 }
+/* ==== shared look (same as Training camp) ==== */
+:root {
+  --accent: light-dark(#4f46e5, #8b84ff); --accent-soft: light-dark(#e8e7fd, #272a52); --accent-ink: light-dark(#ffffff, #0d0f1a);
+  --bg: light-dark(#f4f5f8, #0f1218); --surface: light-dark(#ffffff, #171b24); --surface-2: light-dark(#eef0f5, #1f2430);
+  --ink: light-dark(#161a23, #e8ebf2); --ink-2: light-dark(#454c5c, #c3cad8); --ink-3: light-dark(#5c6475, #98a1b3); --ink-inv: var(--accent-ink);
+  --line-1: light-dark(#e9ecf1, #222838); --line: light-dark(#dfe3ea, #2a3040); --line-3: light-dark(#d2d7e0, #343b4d);
+  --hover: light-dark(#eef0f5, #1f2430); --active: var(--accent-soft);
+  --ok: light-dark(#15803d, #4ade80); --bad: light-dark(#b91c1c, #f87171); --warn: light-dark(#b45309, #f5b04c);
+  --info: var(--accent); --info-bg: var(--accent-soft);
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 14px; --r-xl: 18px;
+  --shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 4px 14px rgba(20, 24, 40, .05);
+}
+body { font-size: 14px; line-height: 1.5; }
+button { font-weight: 500; }
+button.primary, button.b.p { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+button.primary:hover, button.b.p:hover { opacity: .92; background: var(--accent); }
+button.b { height: 34px; border-width: 1px; background: var(--surface); }
+button.b:hover:not(:disabled) { border-color: var(--ink-3); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input, select, textarea { border-width: 1px; background: var(--surface); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
+.chip { height: auto; padding: 1px 9px; border-radius: 999px; border: 0; background: var(--surface-2); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.chip.info, .chip.on, .chip.sel { background: var(--accent-soft); color: var(--accent); }
+.item { border-radius: var(--r-sm); }
+.item.on, .item.sel { background: var(--accent-soft); }
+.item.on .t, .item.sel .n { color: var(--accent); }
+.tile { border-width: 1px; background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 650; }
+.tabs button { font-weight: 600; }
+.tabs button.on { color: var(--accent); }
+.tabs button.on::after { background: var(--accent); height: 3px; }
+.tab.sel { color: var(--accent); background: var(--surface); }
+.seg button.on { background: var(--accent-soft); color: var(--accent); }
+.card, .sec, .col > .cards .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); }
+.msg.user .bubble { background: var(--accent-soft); }
+.side, .panel, dialog, .toast { background: var(--surface); }
+dialog { border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.page-head h1, h1 { font-weight: 700; letter-spacing: -.02em; }
+h2 { font-weight: 650; letter-spacing: -.01em; }
+/* ==== end shared look ==== */
 </style>
 </head>
 <body>
@@ -660,7 +700,8 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       section('Model and limits', true,
         h('div', { class: 'row' },
           field('Backend', sel('backend', M.backends, d.backend), `claude-code: Agent SDK. claude-cli / codex / opencode: your local CLI login, one process per reply, so many run at once (model "default" = the CLI's own default; codex/opencode take ids like gpt-5.5 or provider/model). dsh: dsh headless.${Object.entries(M.cli ?? {}).filter(([, v]) => !v.installed).map(([k]) => ` Not installed: ${k}.`).join('')}`),
-          field('Model', inp('model', d.model, 'opus', { list: 'models' }), 'opus, sonnet, haiku, default, or a full model id'),
+          field('Provider', sel('provider', (M.providers ?? [{ id: 'claude-code', label: 'Claude subscription', ready: true }]).map(p => [p.id, p.label + (p.ready ? '' : ' (not set up)')]), d.provider ?? 'claude-code'), 'Where the model calls go (claude-code backend). Free models: pick a model such as combo:recommended-free.'),
+          field('Model', inp('model', d.model, 'opus', { list: 'models' }), 'opus, sonnet, haiku (Claude), a free model id, default, or a full model id'),
           field('Effort', sel('effort', [['', 'default'], ...M.efforts], d.effort ?? '')),
           field('Fallback model', inp('fallbackModel', d.fallbackModel, 'optional', { list: 'models' }), 'Used if the main model is overloaded.')),
         field('Backup models (one per line, tried in order)', area('fallbacks', fallbacksText(d.fallbacks), 'codex gpt-5.5\nopencode deepseek/deepseek-chat\nhaiku', 2), BACKUP_HELP),
@@ -700,7 +741,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
         field('Environment variables (KEY=VALUE, one per line)', area('env', Object.entries(d.env ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'), 'MY_FLAG=1', 2), 'Passed to the agent and its tools. Prefer referencing secrets in MCP servers as ${VAR}.'),
         tick('externalMcp', 'Also load MCP servers from Claude Code config (project .mcp.json, your user settings and claude.ai connectors)', d.externalMcp === true),
         tick('useApiKey', 'Bill this agent to ANTHROPIC_API_KEY instead of the Claude subscription', d.useApiKey === true)),
-      h('datalist', { id: 'models' }, ['opus', 'sonnet', 'haiku', ...M.models].filter((v, i, a) => a.indexOf(v) === i).map(m => h('option', { value: m }))),
+      h('datalist', { id: 'models' }, ['opus', 'sonnet', 'haiku', ...M.models, ...(M.providers ?? []).flatMap(p => p.models)].filter((v, i, a) => a.indexOf(v) === i).map(m => h('option', { value: m }))),
     )
     drawExec()
 
@@ -709,6 +750,7 @@ pre.diff { max-height: none; white-space: pre; overflow: auto; word-break: norma
       Object.assign(def, { name: f.name.value.trim(), backend: f.backend.value, model: f.model.value.trim(), description: f.description.value, role: f.role.value, permission: f.permission.value })
       const opt = (key, v) => { if (v === '' || v == null || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) delete def[key]; else def[key] = v }
       opt('effort', f.effort.value)
+      opt('provider', f.provider.value === 'claude-code' ? '' : f.provider.value)
       opt('fallbackModel', f.fallbackModel.value.trim())
       def.fallbacks = parseFallbacks(f.fallbacks.value); if (!def.fallbacks.length) delete def.fallbacks
       opt('maxTurns', f.maxTurns.value ? Number(f.maxTurns.value) : '')

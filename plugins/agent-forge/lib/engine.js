@@ -92,11 +92,11 @@ export class Engine {
    * workflows). It gets the same run folder, transcripts, live state and
    * Runs-tab entry as any orchestration. fn(api, state) returns the result.
    */
-  startCustom(label, fn, args = {}, { cwd, meta } = {}) {
-    return this.#launch(label, 'custom', args, cwd, fn, meta)
+  startCustom(label, fn, args = {}, { cwd, meta, maxParallel } = {}) {
+    return this.#launch(label, 'custom', args, cwd, fn, meta, maxParallel)
   }
 
-  #launch(name, format, args, cwd, body, meta) {
+  #launch(name, format, args, cwd, body, meta, maxParallel) {
     const id = runIdNow()
     const dir = path.join(this.registry.d.runs, id)
     fs.mkdirSync(path.join(dir, 'agents'), { recursive: true })
@@ -111,7 +111,7 @@ export class Engine {
 
     const done = (async () => {
       try {
-        const api = this.#api(live, cwd)
+        const api = this.#api(live, cwd, maxParallel)
         const result = await body(api, state)
         state.result = result ?? null
         state.status = abort.signal.aborted ? 'cancelled' : 'completed'
@@ -130,9 +130,10 @@ export class Engine {
     return { id, dir, done }
   }
 
-  #api(live, defaultCwd) {
+  #api(live, defaultCwd, maxParallel) {
     const { state, abort, dir, persist } = live
-    const sem = new Semaphore(this.maxParallel)
+    // how many agents of this run work at once: the run's own number (startCustom), else the engine's
+    const sem = new Semaphore(Number(maxParallel) > 0 ? Math.min(64, Math.round(Number(maxParallel))) : this.maxParallel)
     const registry = this.registry
     let seq = 0
     const log = msg => { state.log.push({ ts: new Date().toISOString(), msg: String(msg) }); persist() }

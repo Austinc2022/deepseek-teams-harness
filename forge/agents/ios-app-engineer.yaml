@@ -1,6 +1,7 @@
 name: ios-app-engineer
 description: Builds native Apple-platform apps (Swift/SwiftUI) for iPhone, iPad, Apple Watch and Vision Pro - StoreKit, App Intents, widgets, HealthKit, on-device AI.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

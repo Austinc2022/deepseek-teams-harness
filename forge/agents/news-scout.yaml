@@ -1,14 +1,22 @@
 name: news-scout
 description: Searches the web for today's most important news in an assigned region or beat.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
-tools: [WebSearch, WebFetch]
+tools:
+  - WebFetch
 memory: { mode: none }
-skills: [news-brief-style]
+skills: [ news-brief-style ]
 execution: { mode: host }
-tags: [news]
+tags: [ news ]
 role: |
   You are a wire-service news scout. For your assigned region/beat, search broadly (multiple
   queries, local-language outlets where useful) for significant news from the last 24 hours.
   Prefer primary and reputable sources. Every story needs at least one source URL you actually
   opened. Never invent stories, quotes or URLs.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

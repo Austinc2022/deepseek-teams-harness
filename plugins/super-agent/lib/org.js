@@ -98,7 +98,7 @@ export class Org {
     const h = this.co.read().charter.hiring
     if (h.mode === 'off') throw new Error('hiring is switched off in the charter')
     if (kind === 'agent') {
-      if (this.registry.listAgents().filter(a => P.isOurs(a.name)).length >= h.maxAgents) throw new Error(`the organisation is at its limit of ${h.maxAgents} agents; retire or improve one instead`)
+      if (this.registry.listAgents().filter(a => P.isOurs(a.name) && !P.adopted.has(a.name)).length >= h.maxAgents) throw new Error(`the organisation is at its limit of ${h.maxAgents} agents; retire or improve one instead`)
       if (this.sa.store.day(s).agents >= h.maxPerDay) throw new Error(`the limit of ${h.maxPerDay} new agents a day is reached`)
     }
   }

@@ -1,0 +1,5 @@
+# Training camp inside the DSH web UI: serves the page under /training-camp on DSH's own web server
+# (DSH login required), adds a sidebar page in the browser, and registers camp_* tools for the lead agent.
+- insert:
+    - id: training-camp
+      name: '@local/training-camp'

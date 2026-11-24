@@ -1,6 +1,7 @@
 name: extension-engineer
 description: Builds and packages Manifest V3 browser extensions for Chrome, Edge and Firefox - content scripts, side panel, built-in AI APIs, store listing zips.
-model: opus
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [frontend-design, test-driven-development, verification-before-completion]

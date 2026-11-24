@@ -187,6 +187,8 @@ export class Health {
     this.lastProblems = probs
     const stop = probs.filter(p => p.severity === 'showstopper')
     add('failures', 'Agent runs', stop.length ? 'fail' : probs.some(p => p.severity === 'warning') ? 'warn' : 'ok', stop.length ? `${stop.length} error(s) keep stopping work: ${stop.map(p => `${p.signature} (${p.count}x)`).join('; ')}` : probs.length ? `${probs.reduce((n, p) => n + p.count, 0)} failure(s) in 6 h, none stopping work now.` : 'No failed runs in 6 hours.', stop[0]?.hint ?? null)
+    // training camps that wait or keep failing (camp-link.js)
+    try { for (const c of this.sa.camp?.checks() ?? []) checks.push(c) } catch {}
     return checks
   }
 

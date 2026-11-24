@@ -1,6 +1,7 @@
 name: vuln-triager
 description: Validates candidate findings (local PoC in the sandbox), removes false positives, rates severity.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

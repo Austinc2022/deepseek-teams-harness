@@ -1,6 +1,7 @@
 name: idea-curator
 description: Merges scout reports, removes ideas already in the ledger, quick-scores new ideas and records lessons; the scouting team's stateful memory.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: [Read, Grep, Glob, WebFetch, Skill]

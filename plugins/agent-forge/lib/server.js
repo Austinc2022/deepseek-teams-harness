@@ -22,6 +22,7 @@ import { CHAT_MODES } from './chat.js'
 import { listFiles, readFile, writeFile, deleteFile } from './agent-files.js'
 import { McpLibrary, MCP_TYPES, MASK } from './mcp.js'
 import { cliStatus } from './cli-backends.js'
+import { availableProviders } from './providers.js'
 
 /** Claude Code built-in tools, grouped for the agent editor (names as reported by a live session). */
 export const BUILTIN_TOOLS = [
@@ -58,7 +59,7 @@ export function createForgeHandler({ registry, engine, chats }) {
   const adhoc = new Map()
   const mcp = new McpLibrary(registry.d.mcp)
   const routes = [
-    ['GET', /^\/api\/meta$/, () => ({ models: MODELS, efforts: EFFORTS, permissions: PERMISSIONS, execModes: EXEC_MODES, memoryModes: MEMORY_MODES, memoryScopes: MEMORY_SCOPES, backends: BACKENDS, cli: Object.fromEntries(Object.entries(cliStatus()).map(([k, v]) => [k, { installed: v.installed }])), chatModes: CHAT_MODES, mcpTypes: MCP_TYPES, mask: MASK, builtinTools: BUILTIN_TOOLS, home: registry.home })],
+    ['GET', /^\/api\/meta$/, () => ({ models: MODELS, efforts: EFFORTS, permissions: PERMISSIONS, execModes: EXEC_MODES, memoryModes: MEMORY_MODES, memoryScopes: MEMORY_SCOPES, backends: BACKENDS, providers: availableProviders(), cli: Object.fromEntries(Object.entries(cliStatus()).map(([k, v]) => [k, { installed: v.installed }])), chatModes: CHAT_MODES, mcpTypes: MCP_TYPES, mask: MASK, builtinTools: BUILTIN_TOOLS, home: registry.home })],
     ['GET', /^\/api\/mcp$/, () => mcp.list().map(s => ({ ...s, usedBy: registry.listAgents().filter(a => (a.mcp ?? []).includes(s.name)).map(a => a.name) }))],
     ['GET', /^\/api\/mcp\/([\w-]+)$/, (_, [n]) => mcp.masked(mcp.get(n))],
     ['PUT', /^\/api\/mcp\/([\w-]+)$/, (b, [n]) => mcp.save({ ...b, name: n })],

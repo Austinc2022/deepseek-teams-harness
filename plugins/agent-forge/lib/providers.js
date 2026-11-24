@@ -25,6 +25,25 @@ export const PROVIDERS = {
     defaultModel: 'deepseek-v4-pro',
     fastModel: 'deepseek-flash',
   },
+  // The free models of the our-free-model plugin, through its local gateway (which speaks the Anthropic format).
+  // The gateway runs inside `./dsh web`, so these agents work only while the harness is up. No account, no cost;
+  // the upstream gateways may log prompts, so do not send secrets through it.
+  free: {
+    label: 'Free models (our-free-model gateway)',
+    local: true,
+    models: ['combo:recommended-free', 'deepseek-v4.1-flash-free', 'hy4-flash-free', 'mimo-v2.6-flash-free', 'big-pickle'],
+    defaultModel: 'combo:recommended-free',
+    fastModel: 'combo:recommended-free',
+  },
+}
+
+/** Where the our-free-model gateway listens and the key it wants, read from the plugin's own settings file. */
+export function freeGateway() {
+  const home = process.env.DSH_HOME ?? path.join(ROOT, '.dsh-home')
+  let s
+  try { s = JSON.parse(fs.readFileSync(path.join(home, 'our-free-model', 'settings.json'), 'utf8')) } catch { return null }
+  if (s?.enabled === false || s?.forward?.enabled === false || !s?.forwardKey) return null
+  return { baseURL: `http://${s.forward?.host || '127.0.0.1'}:${s.forward?.port || 18899}`, key: s.forwardKey }
 }
 
 function envFiles() {
@@ -46,18 +65,32 @@ export function secret(name) {
   return undefined
 }
 
+/** The provider an agent runs on: its own `provider`, else the Claude subscription. */
+export const providerOf = def => def?.provider || 'claude-code'
+
+/** True when the provider costs nothing, so the notional cost Claude Code reports must not count as spend. */
+export const isFree = def => PROVIDERS[providerOf(def)]?.local === true
+
 /** Environment variables that point a Claude Code session at the agent's provider; {} for the default (subscription). */
 export function providerEnv(def) {
   const name = def.provider
   if (!name || name === 'claude-code') return {}
   const p = PROVIDERS[name]
   if (!p) throw new Error(`agent ${def.name}: unknown provider "${name}" (known: ${Object.keys(PROVIDERS).join(', ')})`)
-  const key = secret(p.keyEnv)
-  if (!key) throw new Error(`agent ${def.name}: provider ${name} needs ${p.keyEnv} (set it in the environment or in .dsh-home/.env)`)
+  let key, baseURL = p.baseURL
+  if (p.local) {
+    const g = freeGateway()
+    if (!g) throw new Error(`agent ${def.name}: provider ${name} needs the our-free-model plugin with its local gateway switched on (Settings > Our Free Model > Local forward)`)
+    key = g.key; baseURL = g.baseURL
+  } else {
+    key = secret(p.keyEnv)
+    if (!key) throw new Error(`agent ${def.name}: provider ${name} needs ${p.keyEnv} (set it in the environment or in .dsh-home/.env)`)
+  }
+  // the gateway reads the key from x-api-key; DeepSeek reads the bearer token
   return {
-    ANTHROPIC_BASE_URL: p.baseURL,
-    ANTHROPIC_AUTH_TOKEN: key,
-    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_BASE_URL: baseURL,
+    ANTHROPIC_AUTH_TOKEN: p.local ? '' : key,
+    ANTHROPIC_API_KEY: p.local ? key : '',
     // Claude Code's own background calls (titles, summaries) must use a model this provider has
     ANTHROPIC_SMALL_FAST_MODEL: p.fastModel,
     ANTHROPIC_DEFAULT_HAIKU_MODEL: p.fastModel,
@@ -79,4 +112,11 @@ export async function providerBalance(name = 'deepseek') {
     const usd = (j.balance_infos ?? []).find(b => b.currency === 'USD') ?? (j.balance_infos ?? [])[0]
     return usd ? { usd: Number(usd.total_balance), currency: usd.currency, available: j.is_available !== false } : null
   } catch { return null }
+}
+
+/** The providers an agent can be set to right now, with their models: for the pages that let the owner choose. */
+export function availableProviders() {
+  const out = [{ id: 'claude-code', label: 'Claude subscription', models: ['haiku', 'sonnet', 'opus'], free: false, ready: true }]
+  for (const [id, p] of Object.entries(PROVIDERS)) out.push({ id, label: p.label, models: p.models, free: p.local === true, ready: p.local ? !!freeGateway() : !!secret(p.keyEnv) })
+  return out
 }

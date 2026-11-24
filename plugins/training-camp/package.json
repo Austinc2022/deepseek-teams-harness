@@ -1,0 +1,30 @@
+{
+  "name": "@local/training-camp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Training camp: proposes a workflow for a goal, trains the agents and the team that run it on generated tasks, verifies them on a sealed set, and publishes the ones that pass into Agent Forge.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "bin": { "camp": "./bin/camp.js" },
+  "scripts": { "test": "node --test test/camp.test.mjs" },
+  "files": ["index.js", "lib/*.js", "bin/*.js", "ui/index.html", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
+  }
+}

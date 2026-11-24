@@ -1,6 +1,7 @@
 name: coder
 description: Focused sub-agent that implements one well-scoped step of a plan.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 execution: { mode: host }

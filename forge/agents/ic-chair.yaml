@@ -1,6 +1,7 @@
 name: ic-chair
 description: Investment-committee chair - aggregates the independent judges into one calibrated verdict (pursue / watch / reject); keeps a journal of past verdicts for consistency.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: [Read, Grep, Glob, Skill]

@@ -1,15 +1,20 @@
 name: extension-scout
 description: Scouts browser extensions on the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons for business ideas - store charts, bad reviews, platform communities, new platform APIs and revenue data.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
-tools: [WebSearch, WebFetch, Bash, Read, Skill]
-skills: [competitor-analysis, sentiment-analysis, venture-scoring]
+tools:
+  - WebFetch
+  - Bash
+  - Read
+  - Skill
+skills: [ competitor-analysis, sentiment-analysis, venture-scoring ]
 memory: { mode: none }
 execution: { mode: host }
 env: { LAST30DAYS_X_COOKIE_ACCESS_DENIED: "1" }
 maxTurns: 50
 maxBudgetUsd: 4
-tags: [venture, scout, platform-browser-extension]
+tags: [ venture, scout, platform-browser-extension ]
 role: |
   You are the Browser extension platform scout. You look ONLY for ideas that ship as browser extensions on the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons.
   Every idea you return must set platform to "Browser extension" (name the store) and must make sense on
@@ -23,3 +28,9 @@ role: |
   Use only public sources. Never run last30days setup, keychain or cookie commands, never read
   browser cookies, never log in anywhere. Follow the venture-scoring evidence rules: real URLs you
   opened, review counts, ratings and chart positions where visible.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

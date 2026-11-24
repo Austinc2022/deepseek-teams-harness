@@ -68,6 +68,7 @@ export function normalizeAgent(def) {
   d.mcp = [...new Set(d.mcp ?? [])]
   for (const m of d.mcp) assertName(m, 'MCP server name')
   for (const m of Object.keys(d.mcpServers)) assertName(m, 'MCP server name')
+  if (d.ownTools !== undefined) d.ownTools = [...new Set((Array.isArray(d.ownTools) ? d.ownTools : []).map(String))]
   if (d.mcpServers.forge_memory) throw new Error(`agent ${d.name}: the MCP server name forge_memory is reserved`)
   if (d.maxBudgetUsd !== undefined && !(Number(d.maxBudgetUsd) > 0)) throw new Error(`agent ${d.name}: maxBudgetUsd must be a positive number`)
   d.settingSources ??= ['project']

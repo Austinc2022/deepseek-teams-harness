@@ -1,0 +1,6 @@
+{
+  "name": "forge-open-websearch",
+  "private": true,
+  "description": "Pinned install of the community open-websearch MCP server (github.com/Aas-ee/open-webSearch) for Agent Forge agents.",
+  "dependencies": { "open-websearch": "2.2.0" }
+}

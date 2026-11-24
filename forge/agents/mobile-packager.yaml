@@ -1,6 +1,7 @@
 name: mobile-packager
 description: Makes iOS/watchOS/visionOS and Android/Wear OS apps store-ready - release configs, signing via CI secrets, fastlane, TestFlight and Play internal testing, store metadata.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [aso, github-actions-templates, privacy-policy]

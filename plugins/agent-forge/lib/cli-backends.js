@@ -12,6 +12,7 @@
  * Binary lookup: agent `cliPath`, then FORGE_CLAUDE_BIN / FORGE_CODEX_BIN /
  * FORGE_OPENCODE_BIN, then the command name on PATH (plus ~/.local/node/bin).
  */
+import { providerEnv } from './providers.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -84,6 +85,7 @@ export async function runCli(p, mem, cwd, write, system) {
   let args, stdin, parse
   if (def.backend === 'claude-cli') {
     if (!def.useApiKey) { delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL }
+    Object.assign(env, providerEnv(def))
     args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt', system]
     if (def.model && def.model !== 'default') args.push('--model', def.model)
     if (def.effort) args.push('--effort', def.effort)

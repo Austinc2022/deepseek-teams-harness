@@ -1,6 +1,7 @@
 name: advisory-writer
 description: Writes private vulnerability reports ready for coordinated disclosure.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Write, WebFetch]
 skills: [responsible-disclosure]

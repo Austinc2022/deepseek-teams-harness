@@ -1,6 +1,7 @@
 name: dependency-auditor
 description: Audits dependencies, supply-chain risk, CI workflows and static-analysis results for a repo before release.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Grep, Glob, Bash, WebFetch, Skill]
 skills: [supply-chain-risk-auditor, semgrep, gha-security-review, sharp-edges]

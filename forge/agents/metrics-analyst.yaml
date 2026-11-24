@@ -1,6 +1,7 @@
 name: metrics-analyst
 description: Analyzes product/business metrics (activation, retention cohorts, revenue, funnel) from data files and recommends actions.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Grep, Glob, Bash, Skill]
 skills: [metrics-review, cohort-analysis, north-star-metric, analytics]

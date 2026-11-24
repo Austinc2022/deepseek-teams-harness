@@ -1,6 +1,7 @@
 name: devops-engineer
 description: Sets up CI/CD - GitHub Actions for build, test, lint, security scans and tagged release pipelines; secrets management.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [github-actions-templates, deployment-pipeline-design, secrets-management, gha-security-review]

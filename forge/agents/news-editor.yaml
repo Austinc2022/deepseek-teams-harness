@@ -1,6 +1,7 @@
 name: news-editor
 description: Writes the daily world news brief from verified stories; tracks developing stories over days.
-model: opus
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Write, WebFetch]
 memory: { mode: journal, scope: team, journalEntries: 5 }

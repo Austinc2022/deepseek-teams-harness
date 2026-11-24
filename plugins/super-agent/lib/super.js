@@ -31,6 +31,8 @@ import { Health } from './health.js'
 import { kindOf, isSuper, rewritePlan, editItems, planText, readyItems, laneOf, workLane, shareOf, wakeReason } from './leaders.js'
 import { toolsFor, seedLeaders, companyLeadersOn, companyContext, companyAct, COO_ID } from './company-leaders.js'
 import { Desk } from './desk.js'
+import { CampLink, CAMP_TOOLS } from './camp-link.js'
+import { Repair, REPAIR_TOOLS } from './repair.js'
 import { Advisory, ADVICE_TOOL } from './advisory.js'
 import { GroupLink, HQ_TOOL } from './group-link.js'
 import { MemoryKeeper } from './dream.js'
@@ -151,9 +153,9 @@ const PERF_TOOLS = perfTools()
 function leaderTools(me, departments) { return [...baseTools(me, departments), ...PERF_TOOLS] }
 function baseTools(me, departments) {
   const k = kindOf(me)
-  if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'accept_ticket', 'ask_super_team', 'delegate', 'update_agent', 'respond_advice', 'respond_hq']), ...toolsFor('coo', departments)]
-  if (k === 'dept') return [...pick([...COMMON, 'update_agent']), ...toolsFor('dept', departments)]
-  return TOOLS
+  if (k === 'coo') return [...pick([...COMMON, 'reply_owner', 'open_ticket', 'critique', 'message_ticket', 'read_ticket', 'stop_ticket', 'accept_ticket', 'ask_super_team', 'delegate', 'update_agent', 'respond_advice', 'respond_hq']), ...toolsFor('coo', departments), ...CAMP_TOOLS, ...REPAIR_TOOLS]
+  if (k === 'dept') return [...pick([...COMMON, 'update_agent']), ...toolsFor('dept', departments), ...CAMP_TOOLS.filter(t => t.name === 'camp_retrain')]
+  return [...TOOLS, ...CAMP_TOOLS, ...REPAIR_TOOLS]
 }
 const CRITIQUE = obj({
   score: { type: 'number', description: '0..1 through your lens; 1 is the best work in the field' },
@@ -197,6 +199,8 @@ export class SuperAgent {
     this.ops = P.hasEngine ? new EngineOps(this) : new NullOps()
     this.changes = P.hasEngine ? new Changes(this) : new NullChanges()
     this.desk = new Desk(this)
+    this.camp = new CampLink(this)
+    this.repair = new Repair(this)
     // evals are keyed "<leader>|<lane>": one turn per thread, several threads per leader
     this.live = { evals: new Map(), tickets: new Map(), jobs: new Map() }
     this.memory = new MemoryKeeper(this)
@@ -260,6 +264,9 @@ export class SuperAgent {
       if (Date.now() - (this.metricsAt ?? 0) > 10 * 60_000) { this.metricsAt = Date.now(); try { recordMetrics(this) } catch (e) { this.log(`metrics: ${e.message}`) } }
       const hold = await this.#hold()
       await this.memory.tick({ hold })
+      // training camps: resume, publish and tell the COO what needs a decision (camp-link.js)
+      this.camp.tick({ hold }).catch(e => this.log(`camps: ${e.message}`))
+      this.repair.tick().catch(e => this.log(`repair: ${e.message}`))
       if (!this.growthSeeded) {
         this.growthSeeded = true
         try { this.growth.seed() } catch (e) { this.log(`growth seed: ${e.message}`) }
@@ -413,6 +420,13 @@ export class SuperAgent {
         num('maxWorkers', 1, 12); num('maxEvals', 1, 8); num('maxLanes', 1, 6); num('maxJobs', 1, 20); num('assignmentMinutes', 5, 180); num('maxAssignments', 1, 30)
         num('maxTicketsPerDay', 0, 200); num('maxEvalsPerDay', 1, 3000); num('maxSuperAgents', 1, 20); num('maxSkillsPerDay', 0, 50)
         num('idleWakeMinutes', 5, 240); num('planAheadMinutes', 30, 1440)
+        // repairs (repair.js): on/off, pushing, restarting, how many a day, the periodic commit
+        if (c.patch?.repair && typeof c.patch.repair === 'object') {
+          const r = { ...(s.settings.repair ?? {}) }
+          for (const k of ['enabled', 'push', 'restart']) if (typeof c.patch.repair[k] === 'boolean') r[k] = c.patch.repair[k]
+          for (const [k, lo, hi] of [['maxPerDay', 0, 20], ['snapshotHours', 0, 168]]) { const n = Number(c.patch.repair[k]); if (Number.isFinite(n)) r[k] = Math.min(hi, Math.max(lo, Math.round(n))) }
+          s.settings.repair = r
+        }
         if (typeof c.patch?.leaders?.company === 'boolean') { s.settings.leaders = { ...(s.settings.leaders ?? {}), company: c.patch.leaders.company }; this.leadersSig = null }
         for (const k of ['company', 'engine', 'clock']) if (typeof c.patch?.sources?.[k] === 'boolean') s.settings.sources[k] = c.patch.sources[k]
         // memory upkeep (dream.js): on/off, how often, and the daily spend cap
@@ -575,6 +589,7 @@ export class SuperAgent {
       `# Tickets${me.parent ? ' you own' : ''}\n${tk.filter(t => !me.parent || t.owner === me.id).map(t => `- ${t.id} [${stage(t, this.live.tickets.has(t.id))}] "${t.title}" (${t.workstream ? `workstream ${t.workstream}; ` : ''}${t.dependsOn?.length ? `after ${t.dependsOn.join(', ')}; ` : ''}${t.talent ? 'principal; ' : ''}${t.critiques?.length ? `last critique: lowest ${t.critiques.at(-1).min}, ${t.critiques.at(-1).mustFix} must-fix; ` : 'not critiqued; '}owner ${t.owner}; folder ${t.dir})${t.assignments.at(-1)?.report ? `: ${clip(t.assignments.at(-1).report.summary, 300)}` : ''}`).join('\n') || '(none)'}`,
       `# Asked and still running\n${s.jobs.filter(j => j.status === 'running' && (!me.parent || j.from === me.id)).map(j => `- ${j.kind} ${j.target}${j.from !== me.id ? ` (by ${j.from})` : ''}: ${clip(j.message, 140)}`).join('\n') || '(nothing)'}`,
       ...(kindOf(me) === 'super' ? [] : [companyContext(this, me)]),
+      kindOf(me) === 'dept' ? '' : this.camp.context(),
       `# Recent messages\n${s.feed.slice(-8).map(m => `- ${m.ts.slice(5, 16)} ${m.from}: ${clip(m.text, 240)}`).join('\n') || '(none)'}`,
     ].filter(Boolean).join('\n\n')
   }
@@ -650,7 +665,7 @@ export class SuperAgent {
 
   async #tool(me, name, a, api, actions, ctx) {
     const cur = this.store.read().agents.find(x => x.id === me.id) ?? me // the plan may have changed in another thread
-    const out = (await companyAct(this, cur, name, a, ctx)) ?? this.perf.act(cur, name, a) ?? await this.#act(cur, name, a, api, ctx)
+    const out = (await companyAct(this, cur, name, a, ctx)) ?? this.perf.act(cur, name, a) ?? await this.camp.act(cur, name, a, ctx) ?? await this.repair.act(cur, name, a, ctx) ?? await this.#act(cur, name, a, api, ctx)
     if (name === 'update_plan' || name === 'plan_items') return clip(out, 12000)
     if (name !== 'list_org' && name !== 'read_ticket' && name !== 'find_skills' && name !== 'list_repo_skills') actions.push({ tool: name, arg: clip(a.title ?? a.agent ?? a.team ?? a.id ?? a.to ?? a.name ?? a.ticket ?? a.text ?? '', 80) })
     return clip(out, 12000)

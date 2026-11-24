@@ -1,6 +1,7 @@
 name: android-app-engineer
 description: Builds native Android apps (Kotlin/Jetpack Compose) for phones, tablets and Wear OS - Play Billing, Health Connect, on-device AI.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

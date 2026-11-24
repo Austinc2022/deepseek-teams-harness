@@ -1,6 +1,7 @@
 name: frontend-engineer
 description: Builds polished, accessible UI (React/TypeScript/Tailwind) for web and desktop webviews, test-first.
-model: opus
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [frontend-design, vercel-react-best-practices, web-design-guidelines, test-driven-development, verification-before-completion]

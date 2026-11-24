@@ -1,6 +1,7 @@
 name: feedback-analyst
 description: Synthesizes customer feedback (reviews, support tickets, interviews, feature requests) into themes, sentiment and prioritized requests.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: [Read, Grep, Glob, Bash, WebFetch, Skill]
 skills: [sentiment-analysis, analyze-feature-requests, synthesize-research]

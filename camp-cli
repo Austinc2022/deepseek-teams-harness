@@ -1,0 +1,9 @@
+#!/bin/bash
+# Training camp CLI (standalone; does not need the harness running).
+#   ./camp-cli new "goal" | list | status <id> | workflow <id> | change <id> "what to change" | approve <id>
+#              train <id> | stop <id> | publish <id> | rollback <id> | set <id> key=value | help
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/node/bin:$PATH"
+export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"
+exec node "$ROOT/plugins/training-camp/bin/camp.js" "$@"

@@ -87,6 +87,32 @@ export function seed(co, { force = false, refreshAgents = false } = {}) {
   return done
 }
 
+/**
+ * Add a department that is not in the profile (a training camp's graduates), with its super team, or update its
+ * teams when it exists. `dep`: { id, name, lead, teams, mission, ...extra }. Returns the stored department.
+ */
+export function addDepartment(co, dep) {
+  const { registry } = co.forge
+  const teams = dep.teams.filter(n => { try { registry.getTeam(n); return true } catch { return false } })
+  let out
+  co.update(s => {
+    let d = s.departments.find(x => x.id === dep.id)
+    if (!d) { d = { ...dep, teams, createdAt: now() }; s.departments.push(d) } else Object.assign(d, { ...dep, teams: [...new Set([...d.teams, ...teams])], superTeamId: d.superTeamId, createdAt: d.createdAt })
+    let live = false
+    if (d.superTeamId) { try { co.supers.get(d.superTeamId); live = true } catch {} }
+    if (!live && d.teams.length) {
+      d.superTeamId = co.supers.create({
+        title: `${P.label} · ${d.name}`, project: s.superProject, supervisor: d.lead, mode: 'auto', maxRounds: 4, maxHops: 1, cwd: P.projectDir,
+        teams: d.teams.map(team => ({ team, mode: 'parallel', chat: 'copy' })),
+        instructions: `You are the head of the ${d.name} department. Department mission: ${d.mission}\nThe request you receive is a brief from the COO. Deliver exactly what it asks for, with the evidence. Keep assignments few and concrete.`,
+      }).id
+    }
+    out = d
+  })
+  try { syncDepartment(co, out) } catch (e) { co.log?.(`sync ${out.id}: ${e.message}`) }
+  return out
+}
+
 /** Keep a department's super team in line with its team list (after a hire created a new team). */
 export function syncDepartment(co, dep) {
   if (!dep.superTeamId) return

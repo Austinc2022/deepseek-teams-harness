@@ -1,6 +1,7 @@
 name: desktop-app-engineer
 description: Builds the native side of desktop apps (Tauri 2 / Rust or Electron) - OS integration, file system, IPC, updater, packaging configs.
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: allow
 tools: default

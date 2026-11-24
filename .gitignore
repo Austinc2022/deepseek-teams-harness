@@ -24,6 +24,9 @@ forge/reports/
 forge/agent-homes/
 forge/mcp/
 
+# Training camp data (workflows, datasets, sealed sets, trials, backups)
+forge/camps/
+
 # Local Claude Code settings
 .claude/settings.local.json
 
@@ -72,3 +75,12 @@ forge/knowledge/
 
 # Other companies on this machine (docs/COMPANIES.md): their whole forge home, runs, memory and state
 /companies/
+
+# npm tool servers agents installed for themselves
+forge/tool-servers/
+
+# The our-free-model plugin is installed from its own source, not kept here
+plugins/our-free-model/
+
+# What agents learned and repaired: logs of this machine
+forge/learning.jsonl

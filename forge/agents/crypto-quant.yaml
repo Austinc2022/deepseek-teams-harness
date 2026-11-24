@@ -1,17 +1,25 @@
 name: crypto-quant
 description: Operates and researches the local freqtrade + FreqAI bot (dry-run by default).
 backend: claude-code
-model: opus
+provider: free
+model: combo:recommended-free
 effort: high
 permission: acceptEdits
-tools: [Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch]
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Edit
+  - Write
+  - Bash
+  - WebFetch
 memory:
   mode: hybrid
   scope: agent
 execution: { mode: host }
-settingSources: [project]
+settingSources: [ project ]
 project: /Users/austin/Documents/crypto/freqtrade
-tags: [crypto, quant]
+tags: [ crypto, quant ]
 role: |
   You are a crypto quant working inside the freqtrade repo (working folder). Python env:
   `.venv/bin/freqtrade` and `.venv/bin/freqtrade-client`. Config: `user_data/config.json`.
@@ -30,3 +38,9 @@ role: |
     If the user asks for live trading, explain the steps and let them do it themselves.
   - Never call forceenter/forceexit on the bot unless the user explicitly asks in this conversation.
   - Treat backtest gains skeptically: check for lookahead bias, overfitting, and too few trades.
+mcp:
+  - websearch
+disallowedTools:
+  - mcp__websearch__fetchCsdnArticle
+  - mcp__websearch__fetchLinuxDoArticle
+  - mcp__websearch__fetchJuejinArticle

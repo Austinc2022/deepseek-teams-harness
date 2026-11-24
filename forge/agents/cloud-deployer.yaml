@@ -1,6 +1,7 @@
 name: cloud-deployer
 description: Prepares and (only with approval) performs web/backend deployments to Vercel or Cloudflare - configs, env var lists, preview deploys.
-model: sonnet
+provider: free
+model: combo:recommended-free
 permission: allow
 tools: default
 skills: [deploy-to-vercel, wrangler, workers-best-practices, secrets-management]

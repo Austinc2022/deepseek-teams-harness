@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training camp</title>
+<style>
+/* One camp at a time. Top: which camp, and one card that says where it stands and what to press.
+   Below: five tabs (Overview, Agents, Workflow, Results, Settings), so nothing is a mile-long scroll. */
+:root {
+  --bg: #f4f5f8; --panel: #ffffff; --ink: #161a23; --muted: #5c6475; --line: #dfe3ea; --soft: #eef0f5;
+  --accent: #4f46e5; --accent-soft: #e8e7fd; --accent-ink: #ffffff;
+  --good: #15803d; --good-soft: #dcf3e3; --warn: #b45309; --warn-soft: #fbecd3; --bad: #b91c1c; --bad-soft: #fbe1e1; --info: #1d5fa8; --info-soft: #dbe9f8;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 4px 14px rgba(20, 24, 40, .05);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1218; --panel: #171b24; --ink: #e8ebf2; --muted: #98a1b3; --line: #2a3040; --soft: #1f2430;
+  --accent: #8b84ff; --accent-soft: #272a52; --accent-ink: #0d0f1a;
+  --good: #4ade80; --good-soft: #14321f; --warn: #f5b04c; --warn-soft: #3a2a10; --bad: #f87171; --bad-soft: #3b1717; --info: #7db8f5; --info-soft: #152a41;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); color-scheme: dark } }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); padding: 0 16px 60px }
+.page { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+h1 { font-size: 24px; line-height: 1.2; margin: 0; letter-spacing: -.02em; overflow-wrap: anywhere }
+h2 { font-size: 17px; margin: 0; letter-spacing: -.01em }
+h3 { font-size: 15px; margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) } .small { font-size: 13px } .num { font-variant-numeric: tabular-nums }
+.mono { font-family: var(--mono); font-size: 12.5px }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 500 }
+button:hover:not(:disabled) { border-color: var(--muted) }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; padding: 10px 20px; font-size: 16px }
+button.danger { color: var(--bad); border-color: var(--bad) }
+button.ghost { border-color: transparent; background: none; color: var(--accent); padding: 4px 6px }
+button:disabled { opacity: .5; cursor: default }
+input, textarea, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100% }
+textarea { resize: vertical; min-height: 76px }
+textarea.code { font: 12.5px/1.5 var(--mono); min-height: 280px; white-space: pre }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1 1 180px; min-width: 0 }
+label.f > b { color: var(--ink); font-weight: 600 }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; box-shadow: var(--shadow) }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.between { justify-content: space-between }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)) }
+
+/* top bar */
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 0 0 }
+.bar .brand { font-weight: 700; font-size: 16px; margin-right: 6px }
+.bar select { width: auto; max-width: min(100%, 420px); font-weight: 600 }
+
+/* status chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--soft); color: var(--muted); white-space: nowrap }
+.chip.good { background: var(--good-soft); color: var(--good) } .chip.warn { background: var(--warn-soft); color: var(--warn) }
+.chip.bad { background: var(--bad-soft); color: var(--bad) } .chip.info { background: var(--info-soft); color: var(--info) }
+.chip.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1.4s ease-in-out infinite }
+@keyframes pulse { 50% { opacity: .25 } }
+@media (prefers-reduced-motion: reduce) { .chip.live::before, .dot.now { animation: none } }
+.tag { font-size: 12.5px; padding: 1px 8px; border-radius: 6px; background: var(--soft); white-space: nowrap }
+
+/* hero */
+.hero { border-left: 5px solid var(--accent) }
+.hero.good { border-left-color: var(--good) } .hero.warn { border-left-color: var(--warn) } .hero.bad { border-left-color: var(--bad) }
+.hero .say { font-size: 18px; font-weight: 600; line-height: 1.35 }
+.meter { height: 10px; background: var(--soft); border-radius: 999px; overflow: hidden }
+.meter > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; min-width: 4px; transition: width .4s }
+.meter.good > i { background: var(--good) }
+.note { background: var(--warn-soft); color: var(--ink); border-radius: 8px; padding: 10px 12px; font-size: 14px }
+.note.err { background: var(--bad-soft) } .note.ok { background: var(--good-soft) }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line) }
+.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 10px 14px; color: var(--muted); font-weight: 600 }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent) }
+
+/* stage tracker */
+.track { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px }
+.stage { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; background: var(--panel); text-align: left; font-weight: 400 }
+.stage[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft) }
+.stage .top { display: flex; align-items: center; gap: 8px; font-weight: 650 }
+.dot { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--soft); color: var(--muted); flex: none }
+.dot.done { background: var(--good); color: #fff } .dot.now { background: var(--accent); color: var(--accent-ink); animation: pulse 1.6s ease-in-out infinite } .dot.part { background: var(--info-soft); color: var(--info) } .dot.hold { background: var(--warn-soft); color: var(--warn) }
+
+/* agents */
+.agent { cursor: pointer; text-align: left; font-weight: 400; gap: 10px; padding: 14px }
+.agent:hover { border-color: var(--accent) }
+.phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px }
+.ph { border-radius: 8px; padding: 6px 8px; background: var(--soft); font-size: 12.5px; display: flex; flex-direction: column; gap: 1px; min-width: 0 }
+.ph b { font-size: 12px; color: var(--muted); font-weight: 600 }
+.ph.done { background: var(--good-soft) } .ph.now { background: var(--info-soft) } .ph.bad { background: var(--bad-soft) }
+.ph span { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 650 }
+td.r, th.r { text-align: right }
+tr.click { cursor: pointer } tr.click:hover td { background: var(--soft) }
+.scroll { overflow-x: auto }
+pre { margin: 0; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; background: var(--soft); border-radius: 8px; padding: 10px }
+details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--panel) }
+details[open] { display: flex; flex-direction: column; gap: 8px }
+summary { cursor: pointer; font-weight: 550 }
+.box { background: var(--soft); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px }
+ol.flow { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: s }
+ol.flow > li { counter-increment: s; border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 12px 48px; position: relative; display: flex; flex-direction: column; gap: 4px }
+ol.flow > li::before { content: counter(s); position: absolute; left: 12px; top: 12px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; display: grid; place-items: center }
+ol.flow > li.decision { border-style: dashed; border-color: var(--warn) }
+ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px }
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: min(560px, calc(100vw - 32px)); background: var(--panel); color: var(--ink); box-shadow: 0 20px 60px rgba(0, 0, 0, .3) }
+dialog::backdrop { background: rgba(10, 12, 20, .5) }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
+.seg button { border: 0; border-radius: 0; padding: 6px 12px; background: none }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent) }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="bar">
+    <span class="brand">Training camp</span>
+    <select id="pick" aria-label="Camp"></select>
+    <button id="newBtn">+ New camp</button>
+  </div>
+  <div id="main" class="col" style="gap:16px"></div>
+</div>
+<dialog id="newDlg">
+  <form method="dialog" class="col">
+    <h2>New training camp</h2>
+    <p class="muted small">Say what the trained team should be able to do. The camp proposes a workflow and the agents for it; you can change it before anything is trained.</p>
+    <label class="f"><b>Goal</b><textarea id="goal" placeholder="Build a VR app that people pay for every day"></textarea></label>
+    <label class="f"><b>Name</b> optional<input id="name" maxlength="60"></label>
+    <label class="f"><b>Your own idea of the steps</b> optional<textarea id="hint" placeholder="find demand, evaluate it, plan, small demos, evaluate demos, build the product, deliver"></textarea></label>
+    <p class="small" id="createErr" style="color:var(--bad)"></p>
+    <div class="row" style="justify-content:flex-end"><button value="cancel">Cancel</button><button id="create" class="primary" value="ok" type="button">Create and propose a workflow</button></div>
+  </form>
+</dialog>
+<script>
+const $ = id => document.getElementById(id)
+/** Build an element. Text always goes in as text nodes, never as HTML: workflow and trial text comes from models. */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs ?? {})) {
+    if (v == null || v === false) continue
+    if (k === 'class') el.className = v
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else if (k === 'value') el.value = v
+    else el.setAttribute(k, v === true ? '' : v)
+  }
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(String(k)))
+  return el
+}
+async function api(method, path, body) {
+  const r = await fetch('api/' + path, { method, headers: { 'x-camp-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+
+// ---------------------------------------------------------------- words
+const pc = v => (v == null || Number.isNaN(Number(v)) ? '–' : Math.round(Number(v) * 100) + '%')
+const SET = { train: 'Practice', dev: 'Check', holdout: 'Final exam' }
+/** A tried configuration, in words: the original agent, or change 1A, 1B, 2A ... */
+const ver = id => (!id || id === 'base' ? 'Original' : 'Change ' + String(id).split('-')[0].replace(/^[rt]/, '').toUpperCase().replace(/^S1M$/, 'S1 mix'))
+const when = ts => (ts ? new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '')
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`
+const STATUS = { draft: ['No workflow yet', ''], workflow: ['Workflow waits for you', 'warn'], approved: ['Ready to train', 'info'], training: ['Training', 'info'], paused: ['Paused', 'warn'], ready: ['Ready to publish', 'good'], 'not-passed': ['Finished, not all passed', 'bad'], published: ['Published', 'good'] }
+
+// ---------------------------------------------------------------- state
+const hash = location.hash.match(/^#(c[a-f0-9]{8})(?:@([a-z0-9_-]+))?$/)
+const query = new URLSearchParams(location.search)
+let current = hash ? hash[1] : null
+let camps = [], camp = null, meta = null, steps = null
+let active = {}       // { agent: trials } for agents being measured right now
+let dirty = false     // the owner is typing: do not redraw under them
+let message = null    // { text, tone }
+const ui = { tab: query.get('tab'), stage: query.get('stage'), agent: hash?.[2] ?? null, agentData: null, results: query.get('results') ?? 'agents', step: null, stepData: null, edit: false, versions: null, advanced: false }
+if (ui.agent) ui.tab = 'agents'
+
+const setHash = () => history.replaceState(null, '', current ? `#${current}${ui.agent ? '@' + ui.agent : ''}` : location.pathname)
+async function act(fn, done) {
+  message = null
+  try { const r = await fn(); if (done) message = { text: typeof done === 'function' ? done(r) : done, tone: 'ok' } } catch (e) { message = { text: e.message, tone: 'err' } }
+  dirty = false
+  await refresh(true)
+}
+const reading = () => !!document.querySelector('#main details[open]')
+
+// ---------------------------------------------------------------- what the numbers mean
+const wanted = c => { const all = c.workflow.roles.map(r => r.name); const pick = c.settings.roles ?? []; return pick.length ? all.filter(r => pick.includes(r)) : all }
+
+/** Everything the page shows about progress, worked out once from the camp. */
+function model(c) {
+  const S = c.settings, names = wanted(c), all = names.length
+  const st = r => c.roles[r] ?? {}
+  const need = S.dataset.train + S.dataset.dev + S.dataset.holdout
+  const running = c.run?.running ?? []
+  const training = c.busy && c.active?.what === 'train'
+  const agents = names.map(r => {
+    const x = st(r), s = c.sets[r] ?? { train: 0, dev: 0, holdout: 0 }
+    const written = Math.min(s.train, S.dataset.train) + Math.min(s.dev, S.dataset.dev) + Math.min(s.holdout, S.dataset.holdout)
+    const rounds = x.rounds ?? [], kept = rounds.filter(k => k.accepted).length
+    const coached = ['trained', 'verified'].includes(x.status)
+    const now = training && running.some(a => String(a.label).split(':').includes(r))
+    const role = c.workflow.roles.find(k => k.name === r)
+    const works = c.workflow.stages.map((k, i) => (k.role === r ? { n: i + 1, title: k.title, as: 'does' } : k.reviewer === r ? { n: i + 1, title: k.title, as: 'reviews' } : null)).filter(Boolean)
+    const frac = (written / need + (x.baseline ? 1 : 0) + (coached ? 1 : S.rounds ? Math.min(rounds.length / S.rounds, .9) * (x.baseline ? 1 : 0) : 0) + (x.verify ? 1 : 0)) / 4
+    return { name: r, role, works, x, sets: s, written, need, tasksDone: written >= need, rounds, kept, coached, now, frac }
+  })
+  const count = f => agents.filter(f).length
+  const team = S.team.enabled && c.workflow.stages.length > 1
+  const sum = k => agents.reduce((a, g) => a + Math.min(g.sets[k], S.dataset[k]), 0)
+  const stages = [
+    ...(S.scout.enabled ? [{ k: 'scout', t: 'Find skills', what: 'For every agent, a scout looks on GitHub for skills that fit its role. Each find is reviewed, then installed or rejected with the reason.', frac: c.scout?.done ? 1 : 0, line: c.scout?.done ? `${(c.scout.skills ?? []).filter(x => x.status === 'installed').length} installed, ${(c.scout.skills ?? []).filter(x => x.status === 'rejected').length} rejected` : '' }] : []),
+    { k: 'sets', t: 'Write tasks', what: `An examiner writes ${S.dataset.train} practice, ${S.dataset.dev} check and ${S.dataset.holdout} final-exam tasks for every agent.`, frac: all ? agents.reduce((a, g) => a + g.written / g.need, 0) / all : 0, line: `${count(g => g.tasksDone)} of ${all} agents` },
+    { k: 'base', t: 'First scores', what: 'Each agent does its practice and check tasks as it is today, and a judge scores the work.', frac: all ? count(g => g.x.baseline) / all : 0, line: `${count(g => g.x.baseline)} of ${all} agents` },
+    { k: 'rounds', t: 'Coaching', what: `Up to ${S.rounds} rounds per agent. A coach reads where the agent lost points and tries ${S.candidates} changes; a change is kept only if the agent then does better on the check tasks.`, frac: all ? count(g => g.coached) / all : 0, line: `${count(g => g.coached)} of ${all} agents` },
+    { k: 'verify', t: 'Final exam', what: `Each agent does tasks it has never seen. It passes at ${pc(S.criteria.minScore)} or more.`, frac: all ? count(g => g.x.verify) / all : 0, line: count(g => g.x.verify) ? `${count(g => g.x.verify?.passed)} passed${count(g => g.x.verify && !g.x.verify.passed) ? `, ${count(g => g.x.verify && !g.x.verify.passed)} did not` : ''}` : `0 of ${all} agents` },
+    ...(team ? [{ k: 'team', t: 'Team practice', what: 'The whole team runs the workflow on small goals. Hand-offs and reviews are tuned, then the team takes its own final exam.', frac: c.team?.verify ? 1 : c.team?.baseline ? .5 : (c.sets._team?.dev ?? 0) ? .2 : 0, line: c.team?.verify ? (c.team.verify.passed ? `passed, ${pc(c.team.verify.score)}` : `not passed, ${pc(c.team.verify.score)}`) : c.team?.baseline ? `first score ${pc(c.team.baseline.dev)}` : '' }] : []),
+    { k: 'publish', t: 'Publish', what: 'You publish the agents that passed, their teams and the workflow into Agent Forge.', frac: c.published ? 1 : 0, line: c.published ? when(c.published.ts) : c.status === 'ready' ? 'ready for you' : '' },
+  ]
+  const cur = stages.findIndex(x => x.frac < 1)
+  const work = stages.filter(x => x.k !== 'publish')
+  return { S, names, all, agents, stages, cur, training, running, team, overall: work.reduce((a, x) => a + x.frac, 0) / work.length, sum, count }
+}
+
+/** What one running model call is doing, in words. */
+function sayCall(label, c) {
+  const p = String(label).split(':')
+  const set = { train: 'practice', dev: 'check', holdout: 'final-exam' }
+  if (p[0] === 'examiner' || p[0] === 'sealer') return p[1] === '_team' ? `Writing ${set[p[2]] ?? p[2]} goals for the whole team` : `Writing ${set[p[2]] ?? p[2]} tasks for ${p[1]}`
+  if (p[0] === 'judge') return p[1] === 'team' ? 'The judge is scoring a team run' : `The judge is scoring a task of ${p[1]}`
+  if (p[0] === 'coach') return p[1] === 'team' ? 'The coach is looking for a better hand-off in the team' : `The coach is reading where ${p[1]} lost points (round ${p[2]})`
+  if (p[0] === 'scout') return 'The scout is looking for useful skills on GitHub'
+  if (p[0] === 'team') return `Team run: ${p[4] ?? 'an agent'} is on step "${p[3] ?? ''}"`
+  if (p[0].startsWith('architect')) return 'The architect is working on the workflow'
+  if (c.roles?.[p[0]]) return `${p[0]} is doing a task (${ver(p[1]).toLowerCase()})`
+  return label
+}
+
+// ---------------------------------------------------------------- hero: where it stands and what to press
+function hero(c, m) {
+  const B = (label, fn, cls = 'primary') => h('button', { class: cls, onclick: fn }, label)
+  const post = (path, body, done) => () => act(() => api('POST', `camps/${c.id}/${path}`, body ?? {}), done)
+  const train = label => B(label, post('train', {}, 'Training is running.'))
+  const [word, tone0] = STATUS[c.status] ?? [c.status, '']
+  let say, sub = null, btn = [], tone = tone0
+  if (c.busy && m?.training) {
+    const s = m.stages[m.cur] ?? m.stages.at(-2)
+    say = `Training is running: step ${Math.min(m.cur, m.stages.length - 1) + 1} of ${m.stages.length}, ${s.t.toLowerCase()}.`
+    sub = `${s.line ? s.line + ' done. ' : ''}You can pause at any time; finished work is kept.`
+    btn = [B('Pause training', post('cancel', {}, 'Pausing. Press "Resume training" to continue from where it stopped.'), '')]
+  } else if (c.busy) {
+    say = 'The architect is working on the workflow. This takes a few minutes.'
+    btn = [B('Stop', post('cancel', {}, 'Stopping.'), '')]
+  } else if (c.status === 'draft') {
+    say = 'This camp has no workflow yet.'
+    btn = [B('Propose a workflow', post('propose', {}, 'The architect is working; this takes a few minutes.'))]
+  } else if (c.status === 'workflow') {
+    say = `Workflow version ${c.workflowVersion} is waiting for you.`
+    sub = 'Read it on the Workflow tab. Ask for changes there, or approve it. Nothing is trained until you approve.'
+    btn = [B('Approve this workflow', post('approve', {}, r => `Approved.${r.kept.length ? ' Kept the training of: ' + r.kept.join(', ') + '.' : ''} Press "Start training".`)), B('Read the workflow', () => { ui.tab = 'workflow'; render() }, '')]
+  } else if (c.status === 'approved') {
+    const started = m && m.overall > 0
+    say = started ? `Training is stopped at "${m.stages[m.cur]?.t}". Finished work is kept.` : `Ready to train ${plural(m.all, 'agent')}.`
+    sub = started ? null : 'Training makes many model calls and can take hours. It pauses by itself at the budget or at a model limit, and continues later from where it stopped.'
+    btn = [train(started ? 'Continue training' : 'Start training')]
+  } else if (c.status === 'training' || c.status === 'paused') {
+    const why = c.pause?.reason ?? 'the harness stopped while training ran'
+    say = /you paused/.test(why) || why === 'cancelled' ? 'You paused the training.' : 'Training has paused.'
+    sub = h('div', { class: 'note' + (/^error/.test(why) ? ' err' : '') }, /you paused|cancelled/.test(why) ? 'Finished tasks, scores and rounds are kept.' : `Why: ${why.replace(/^error: /, '')}`)
+    btn = [train('Resume training')]
+  } else if (c.status === 'ready') {
+    say = `All ${plural(m.all, 'agent')}${m.team ? ' and the team' : ''} passed.`
+    sub = 'Publishing writes the agents, their teams and the workflow into Agent Forge. Whatever it replaces is backed up.'
+    btn = [B('Publish', post('publish', {}, r => `Published. Run the workflow "${r.orchestration}" from Workflows.`)), B('See the results', () => { ui.tab = 'results'; render() }, '')]
+  } else if (c.status === 'not-passed') {
+    say = `Training finished. ${m.count(g => g.x.verify?.passed)} of ${m.all} agents passed the final exam.`
+    sub = 'See Results for who did not pass and why. You can train an agent again, change the workflow, or publish only what passed.'
+    btn = [B('See the results', () => { ui.tab = 'results'; render() }), B('Publish what passed', () => { if (confirm('Publish only the agents that passed?\n\nAgents that did not pass keep their current version, or are published marked "below the bar" when they are new.')) act(() => api('POST', `camps/${c.id}/publish`, { force: true }), 'Published what passed.') }, '')]
+  } else if (c.status === 'published') {
+    say = `Published on ${when(c.published.ts)}.`
+    sub = `Agents: ${c.published.agents.join(', ') || 'none'}. Workflow: "${c.published.orchestration}" (run it from Workflows).`
+    btn = [B('Roll back', () => { if (confirm('Restore the files this publish replaced and remove the ones it created?')) act(() => api('POST', `camps/${c.id}/rollback`, {}), 'Rolled back.') }, 'danger')]
+  }
+  if (c.busy) tone = 'info'
+  const spent = c.settings.budgetUsd ? Math.min(1, c.spend.usd / c.settings.budgetUsd) : 0
+  return h('div', { class: 'card hero ' + (tone === 'info' ? '' : tone) },
+    h('div', { class: 'row between' }, h('h1', null, c.name), h('span', { class: `chip ${tone}${c.busy ? ' live' : ''}` }, c.busy ? (m?.training ? 'Training' : 'Working') : word)),
+    h('p', { class: 'muted' }, c.goal),
+    h('p', { class: 'say' }, say), typeof sub === 'string' ? h('p', { class: 'muted' }, sub) : sub,
+    message ? h('div', { class: 'note ' + message.tone }, message.text) : null,
+    h('div', { class: 'row' }, btn),
+    m ? h('div', { class: 'col', style: 'gap:6px' },
+      h('div', { class: 'row between small' }, h('span', null, h('b', null, `${pc(m.overall)} of the training done`)), h('span', { class: 'muted num' }, `${c.spend.calls} model calls · about $${c.spend.usd} of $${c.settings.budgetUsd} budget${spent >= 1 ? ' (spent)' : ''}`)),
+      h('div', { class: 'meter' + (m.overall >= 1 ? ' good' : '') }, h('i', { style: `width:${Math.round(m.overall * 100)}%` }))) : null)
+}
+
+// ---------------------------------------------------------------- Overview
+function overviewTab(c, m) {
+  const dot = (x, i) => (x.frac >= 1 ? ['done', '✓'] : i === m.cur && m.training ? ['now', i + 1] : i === m.cur && ['paused', 'training'].includes(c.status) && !c.busy ? ['hold', i + 1] : x.frac > 0 ? ['part', i + 1] : ['', i + 1])
+  const word = (x, i) => (x.frac >= 1 ? 'Done' : i === m.cur && m.training ? 'Running now' : i === m.cur && ['paused', 'training'].includes(c.status) && !c.busy ? 'Paused here' : x.frac > 0 ? 'Started' : 'Not started')
+  const sel = m.stages.find(x => x.k === ui.stage)
+  return [
+    h('div', { class: 'card' },
+      h('div', { class: 'row between' }, h('h2', null, 'Training steps'), h('span', { class: 'small muted' }, 'Click a step to see what was done in it.')),
+      h('div', { class: 'track' }, m.stages.map((x, i) => { const [cls, mark] = dot(x, i); return h('button', { class: 'stage', 'aria-expanded': ui.stage === x.k ? 'true' : 'false', onclick: () => { ui.stage = ui.stage === x.k ? null : x.k; render() } },
+        h('span', { class: 'top' }, h('span', { class: 'dot ' + cls }, mark), x.t),
+        h('span', { class: 'small muted' }, word(x, i)), x.line ? h('span', { class: 'small num' }, x.line) : null) })),
+      sel ? stageDetail(c, m, sel) : null),
+    h('div', { class: 'card' },
+      h('div', { class: 'row between' }, h('h2', null, 'Right now'), m.training ? h('span', { class: 'chip info live' }, `${plural(m.running.length, 'model call')} running`) : null),
+      m.running.length ? h('ul', { class: 'plain' }, m.running.map(a => h('li', null, sayCall(a.label, c), h('span', { class: 'muted small' }, ` · ${a.model}`))))
+        : h('p', { class: 'muted' }, c.busy ? 'Between two model calls.' : 'Nothing is running.'),
+      c.run?.error ? h('div', { class: 'note err' }, c.run.error) : null),
+    h('div', { class: 'card' },
+      h('div', { class: 'row between' }, h('h2', null, `Agents (${m.all})`), h('button', { class: 'ghost', onclick: () => { ui.tab = 'agents'; ui.agent = null; render() } }, 'Open all agents →')),
+      h('div', { class: 'scroll' }, h('table', null, h('tbody', null, m.agents.map(g => h('tr', { class: 'click', onclick: () => openAgent(g.name) },
+        h('td', null, h('b', null, g.name), g.now ? h('span', { class: 'chip info live', style: 'margin-left:8px' }, 'working') : null),
+        h('td', { style: 'width:34%' }, h('div', { class: 'meter' + (g.frac >= 1 ? ' good' : '') }, h('i', { style: `width:${Math.round(g.frac * 100)}%` }))),
+        h('td', { class: 'small' }, agentLine(g)),
+        h('td', { class: 'r' }, g.x.verify ? h('span', { class: 'chip ' + (g.x.verify.passed ? 'good' : 'bad') }, g.x.verify.passed ? `Passed ${pc(g.x.verify.score)}` : `Not passed ${pc(g.x.verify.score)}`) : null))))))),
+    h('details', null, h('summary', null, `Activity log (${c.log.length})`), h('pre', null, c.log.length ? c.log.slice().reverse().map(l => `${when(l.ts)}  ${l.msg}`).join('\n') : 'Nothing yet.')),
+  ]
+}
+/** Where one agent is, in a few words. */
+function agentLine(g) {
+  if (g.x.verify) return `score ${pc(g.x.baseline?.dev)} → ${pc(g.x.best?.dev)}`
+  if (g.coached) return `coached: ${pc(g.x.baseline?.dev)} → ${pc(g.x.best?.dev)}, final exam next`
+  if (g.x.pending) return `coaching round ${g.x.pending.n} running`
+  if (g.rounds.length) return `coaching round ${g.rounds.length} done`
+  if (g.x.baseline) return `first score ${pc(g.x.baseline.dev)}, coaching next`
+  const tr = active[g.name]
+  if (tr?.length) return `first score: ${tr.filter(t => t.cand === 'base').length} tasks scored`
+  if (g.tasksDone) return 'tasks written, first score next'
+  return g.written ? `tasks: ${g.written} of ${g.need} written` : 'waiting for its tasks'
+}
+
+/** What was done in one training step, per agent, with the log of that step and a way to run it again. */
+function stageDetail(c, m, x) {
+  const S = m.S, k = x.k
+  const name = g => h('button', { class: 'ghost', onclick: e => { e.stopPropagation(); openAgent(g.name) } }, g.name)
+  const table = (heads, rows) => h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, heads.map(t => h('th', null, t)))), h('tbody', null, rows)))
+  const log = re => { const l = c.log.filter(e => re.test(e.msg)); return l.length ? h('details', null, h('summary', null, `Log of this step (${l.length})`), h('pre', null, l.map(e => `${when(e.ts)}  ${e.msg}`).join('\n'))) : null }
+  const wait = t => h('span', { class: 'muted' }, t ?? 'not yet')
+  let body
+  if (k === 'scout') {
+    const sk = c.scout?.skills ?? []
+    const failed = c.log.find(e => /skill scout: the scout gave no usable answer/.test(e.msg))
+    body = [
+      !c.scout?.done ? h('p', { class: 'muted' }, 'The scout has not run yet.') : sk.length
+        ? table(['Skill', 'Decision and why', 'For', 'Status'], sk.map((s, i) => h('tr', null, h('td', null, h('b', null, s.name), h('div', { class: 'mono muted' }, s.source)), h('td', { class: 'small' }, s.reason ?? s.why, s.reason ? h('div', { class: 'muted' }, 'Scout: ' + s.why) : null), h('td', { class: 'small' }, (s.roles ?? []).join(', ') || '–'), h('td', null, s.status === 'pending'
+          ? h('div', { class: 'row' }, h('button', { onclick: () => act(() => api('POST', `camps/${c.id}/skills/${i}`, { approve: true }), r => `Skill ${r.status}.`) }, 'Install'), h('button', { class: 'ghost', onclick: () => act(() => api('POST', `camps/${c.id}/skills/${i}`, { approve: false })) }, 'Reject'))
+          : h('span', { class: 'chip ' + (s.status === 'installed' ? 'good' : s.status === 'failed' || s.status === 'rejected' ? 'bad' : '') }, s.status)))))
+        : h('div', { class: 'note' }, failed ? 'The scout ran out of turns before it could answer, so no skills were added. This step is optional: training continues with the skills already installed. You can run it again below.' : 'The scout found no skill it could confirm. Training continues with the skills already installed.'),
+      h('p', { class: 'small muted' }, `A skill is a set of instructions an agent follows. Every skill the scout finds is checked before any agent sees it: a reviewer reads it and installs or rejects it, with the reason. A skill that ships scripts or programs is never installed by the camp; it waits for you. Skills from ${S.scout.allowOwners.join(', ')} are trusted and installed directly.`),
+      h('h3', null, 'Skills given to each agent'),
+      m.agents.some(g => g.x.kit) ? table(['Agent', 'Skills and tools chosen to try', 'Why'], m.agents.map(g => { const kit = g.x.kit; return h('tr', null, h('td', null, name(g)), h('td', { class: 'small' }, kit ? (kit.skills.length ? kit.skills.map(n => h('span', { class: 'tag', style: 'margin-right:4px' }, [].concat(kit.created ?? []).includes(n) ? n + ' (newly written)' : n), (kit.mcp ?? []).map(n => h('span', { class: 'tag', style: 'margin-right:4px' }, 'tool server: ' + n))) : (kit.mcp ?? []).length ? kit.mcp.map(n => h('span', { class: 'tag' }, 'tool server: ' + n)) : 'none added') : wait('not chosen yet')), h('td', { class: 'small muted' }, kit?.why ?? '')) }))
+        : h('p', { class: 'muted small' }, 'Each agent gets what its role needs: as many installed skills as its work calls for, new skills written for the parts nothing covers, and the tool servers it needs.'),
+      h('p', { class: 'small muted' }, 'Being chosen is not being kept: after its first score, each agent tries every chosen skill alone on its practice tasks, the ones that help are combined, and the best mix is kept only if it also does better on the check tasks. Open an agent and look at "Skill trial" under Coaching.'),
+      log(/skill scout/i)]
+  } else if (k === 'sets') {
+    const cell = (g, key) => { const n = g.sets[key], w = S.dataset[key]; return h('td', null, h('span', { class: 'chip ' + (n >= w ? 'good' : n ? 'info' : '') }, `${Math.min(n, w)} of ${w}`)) }
+    body = [h('p', { class: 'small muted' }, `Written so far: ${m.sum('train')} practice, ${m.sum('dev')} check and ${m.sum('holdout')} final-exam tasks. Practice tasks are where the coach looks for mistakes; check tasks decide whether a change is kept; final-exam tasks are never shown to the agent or the coach.`),
+      table(['Agent', 'Practice', 'Check', 'Final exam'], m.agents.map(g => h('tr', null, h('td', null, name(g)), cell(g, 'train'), cell(g, 'dev'), cell(g, 'holdout')))),
+      log(/datasets ready|tasks could be written|task could be written|could not write/i)]
+  } else if (k === 'base') {
+    body = [table(['Agent', 'Practice score', 'Check score'], m.agents.map(g => { const b = g.x.baseline; return h('tr', null, h('td', null, name(g)), h('td', { class: 'num' }, b ? pc(b.train) : wait()), h('td', { class: 'num' }, b ? h('b', null, pc(b.dev)) : wait())) })),
+      h('p', { class: 'small muted' }, `A score is the judge's mark against the task's rubric, with the task's automatic checks. Coaching aims for ${pc(S.target)}.`), log(/: baseline /)]
+  } else if (k === 'rounds') {
+    body = [table(['Agent', 'Before', 'Rounds', 'What was tried', 'What was kept', 'After'], m.agents.map(g => {
+      const tried = g.rounds.flatMap(q => q.candidates.map(z => `${z.lever} (${pc(z.train)})`))
+      const kept = g.rounds.filter(q => q.accepted).map(q => { const z = q.candidates.find(y => y.id === q.promoted); return `${z?.lever ?? ''}: ${z?.why ?? ''}` })
+      return h('tr', null, h('td', null, name(g)), h('td', { class: 'num' }, g.x.baseline ? pc(g.x.baseline.dev) : wait()),
+        h('td', { class: 'small' }, g.x.pending ? `${g.rounds.length} done, round ${g.x.pending.n} running` : g.x.baseline ? g.rounds.length : '–'),
+        h('td', { class: 'small' }, tried.join(', ') || '–'), h('td', { class: 'small' }, kept.length ? h('ul', { class: 'plain' }, kept.map(z => h('li', null, z))) : g.rounds.length ? 'nothing' : '–'),
+        h('td', { class: 'num' }, g.x.best ? h('b', null, pc(g.x.best.dev)) : wait()))
+    })),
+      h('p', { class: 'small muted' }, `"What was tried" shows what the coach changed (instructions, model, skills, tools, memory or turn limit) and the practice score it got. Open an agent to read the coach's diagnosis and the exact change.`), log(/ round \d+: /)]
+  } else if (k === 'verify') {
+    body = [table(['Agent', 'Final exam', 'Coached version', 'Original', 'Kept', 'Result'], m.agents.map(g => { const v = g.x.verify; return h('tr', null, h('td', null, name(g)), h('td', { class: 'num' }, v ? h('b', null, pc(v.score)) : wait()), h('td', { class: 'num' }, v ? pc(v.trained) : '–'), h('td', { class: 'num' }, v ? pc(v.original) : '–'), h('td', { class: 'small' }, v ? ver(v.chosen) : '–'), h('td', null, v ? h('span', { class: 'chip ' + (v.passed ? 'good' : 'bad') }, v.passed ? 'Passed' : 'Not passed') : wait(), v?.reasons?.length ? h('div', { class: 'small muted' }, v.reasons.join(' ')) : null)) })),
+      h('p', { class: 'small muted' }, `An agent passes at ${pc(S.criteria.minScore)} or more, as long as its score did not drop by more than ${pc(S.criteria.maxGap)} from the check tasks. If the coached version does worse than the original here, the original is kept.`), log(/: verification /)]
+  } else if (k === 'team') {
+    const t = c.team ?? {}
+    body = [h('ul', { class: 'plain' },
+      h('li', null, `Team goals written: ${c.sets._team?.dev ?? 0} of ${S.team.dev} check and ${c.sets._team?.holdout ?? 0} of ${S.team.holdout} final-exam goals.`),
+      h('li', null, t.baseline ? `First score of the whole workflow: ${pc(t.baseline.dev)}.` : 'The workflow has not been run as a whole yet. That starts when every agent has taken its final exam.'),
+      (t.rounds ?? []).map(q => h('li', null, `Round ${q.n}: ${q.diagnosis ?? ''}`, h('ul', { class: 'plain' }, (q.candidates ?? []).map(z => h('li', null, `${ver(z.id)}: ${z.why} → ${pc(z.dev)}${q.promoted === z.id ? (q.accepted ? ' (kept)' : ' (not kept)') : ''}`))))),
+      t.verify ? h('li', null, h('span', { class: 'chip ' + (t.verify.passed ? 'good' : 'bad') }, t.verify.passed ? 'Passed' : 'Not passed'), ` Final exam ${pc(t.verify.score)}. Kept: ${t.verify.chosen === 'base' ? 'the workflow you approved' : 'the tuned workflow'}. ${t.verify.reasons.join(' ')}`) : null), log(/^team/)]
+  } else {
+    const p = c.published
+    body = [p ? h('ul', { class: 'plain' }, h('li', null, `Agents: ${p.agents.join(', ') || 'none'}`), h('li', null, `Teams: ${p.teams.join(', ') || 'none'}`), h('li', null, `Workflow: ${p.orchestration}`), p.skipped.length ? h('li', null, `Left as they were: ${p.skipped.join(', ')}`) : null)
+      : h('p', { class: 'muted' }, c.status === 'ready' ? 'Everything passed. Press Publish at the top.' : 'Nothing is published yet. You can publish once the agents and the team have passed.'), log(/publish/i)]
+  }
+  const REDO = { scout: ['Run the scout again', 'The skill search runs again when training continues. Nothing else changes.'], sets: ['Write all tasks again', 'Every task of every agent is written again. All scores, coaching rounds and final-exam results are cleared with them.'], base: ['Measure first scores again', 'Every agent is measured again. Coaching rounds and final-exam results are cleared; the tasks are kept.'], rounds: ['Run the coaching again', 'Coaching starts again from the first scores. Changes tried so far and final-exam results are cleared; tasks and first scores are kept.'], verify: ['Run the final exam again', 'Every agent takes the final exam again. Tasks, first scores and coaching are kept.'], team: ['Train the team again', 'The team is trained and examined again. The agents stay as they are.'] }[k]
+  return h('div', { class: 'box' }, h('div', { class: 'row between' }, h('h3', null, x.t), h('span', { class: 'small muted' }, x.what)), body,
+    REDO ? h('div', { class: 'row' }, h('button', { disabled: c.busy, onclick: () => { if (confirm(`${REDO[0]}?\n\n${REDO[1]}`)) act(() => api('POST', `camps/${c.id}/redo`, { stage: k }), 'Done. Press the training button at the top to run it.') } }, '↻ ' + REDO[0]), h('span', { class: 'small muted' }, c.busy ? 'Pause the training first.' : REDO[1])) : null)
+}
+
+// ---------------------------------------------------------------- Agents
+async function openAgent(name) { ui.tab = 'agents'; ui.agent = name; ui.agentData = null; setHash(); render(); window.scrollTo({ top: 0 }); await loadAgent(); render() }
+async function loadAgent() {
+  const r = ui.agent
+  if (!r || !camp) return
+  const st = camp.roles?.[r] ?? {}
+  const ids = [...new Set(['base', ...(st.rounds ?? []).flatMap(k => k.candidates.map(x => x.id)), ...(st.pending?.cands ?? []), st.best?.id].filter(Boolean))]
+  const [tasks, details, ...cs] = await Promise.all([api('GET', `camps/${camp.id}/tasks/${r}`), api('GET', `camps/${camp.id}/details/${r}`), ...ids.map(k => api('GET', `camps/${camp.id}/candidates/${r}/${k}`).catch(() => null))])
+  if (ui.agent !== r) return
+  ui.agentData = { tasks, details, cands: Object.fromEntries(ids.map((k, i) => [k, cs[i]]).filter(([, v]) => v)) }
+}
+
+function agentsTab(c, m) {
+  if (ui.agent) return agentDetail(c, m)
+  const ph = (label, cls, text) => h('div', { class: 'ph ' + cls }, h('b', null, label), h('span', null, text))
+  return [h('p', { class: 'muted' }, `${plural(m.all, 'agent')}, trained ${m.S.parallelAgents ?? 1} at a time. Each goes through four steps. Click an agent to see everything about it.`),
+    h('div', { class: 'grid' }, m.agents.map(g => {
+      const v = g.x.verify
+      return h('button', { class: 'card agent', onclick: () => openAgent(g.name) },
+        h('div', { class: 'row between' }, h('h3', null, g.name), g.now ? h('span', { class: 'chip info live' }, 'working') : v ? h('span', { class: 'chip ' + (v.passed ? 'good' : 'bad') }, v.passed ? 'Passed' : 'Not passed') : null),
+        h('span', { class: 'small muted' }, g.role?.description ?? ''),
+        h('span', { class: 'small' }, g.works.map(w => `${w.as} step ${w.n}`).join(' · ')),
+        h('div', { class: 'phases' },
+          ph('Tasks', g.tasksDone ? 'done' : g.written ? 'now' : '', `${g.written}/${g.need}`),
+          ph('First score', g.x.baseline ? 'done' : g.tasksDone && g.now ? 'now' : '', g.x.baseline ? pc(g.x.baseline.dev) : '–'),
+          ph('Coaching', g.coached ? 'done' : g.x.baseline && (g.rounds.length || g.x.pending) ? 'now' : '', g.coached ? (g.kept ? `${pc(g.x.best?.dev)}, ${g.kept} kept` : `${pc(g.x.best?.dev)}`) : g.x.pending ? `round ${g.x.pending.n}` : '–'),
+          ph('Final exam', v ? (v.passed ? 'done' : 'bad') : '', v ? pc(v.score) : '–')))
+    }))]
+}
+
+const taskView = (x, set) => h('details', null, h('summary', null, h('span', { class: 'tag' }, set), ' ', x.title, x.stage ? h('span', { class: 'muted small' }, ` · step "${x.stage}"`) : null),
+  h('pre', null, x.input),
+  h('div', { class: 'small' }, h('b', null, 'How it is marked: '), h('ul', { class: 'plain' }, x.rubric.map(r => h('li', null, `${r.criterion}${r.weight !== 1 ? ` (counts ×${r.weight})` : ''}`)))),
+  x.checks.length ? h('div', { class: 'small' }, h('b', null, 'Automatic checks: '), x.checks.map(k => `${k.type} ${k.path ?? ''} ${k.value}${k.must ? ' (required)' : ''}`).join(' · ')) : null,
+  x.fixtures.length ? h('div', { class: 'small muted' }, 'Files given to the agent: ' + x.fixtures.map(f => f.path).join(', ')) : null)
+
+const trialView = x => h('details', null,
+  h('summary', null, h('b', { class: 'num' }, pc(x.score)), ' ', h('span', { class: 'tag' }, SET[x.split] ?? x.split), ' ', h('span', { class: 'tag' }, ver(x.cand)), ' ', x.title, x.error ? h('span', { class: 'chip bad', style: 'margin-left:6px' }, 'run failed') : null),
+  x.error ? h('div', { class: 'note err' }, x.error) : null,
+  x.criteria.length ? h('table', null, h('tbody', null, x.criteria.map(k => h('tr', null, h('td', { class: 'num', style: 'white-space:nowrap' }, h('b', null, `${k.score}/10`)), h('td', null, k.criterion), h('td', { class: 'small muted' }, k.reason))))) : null,
+  x.problems.length ? h('div', { class: 'small' }, h('b', null, 'What the judge found wrong'), h('ul', { class: 'plain' }, x.problems.map(q => h('li', null, q)))) : null,
+  x.checks.length ? h('div', { class: 'small' }, h('b', null, 'Automatic checks: '), x.checks.map(k => `${k.ok ? '✓' : '✗'} ${k.type} ${k.path ?? k.value}`).join(' · ')) : null,
+  x.answer ? h('div', { class: 'small' }, h('b', null, 'The agent\'s answer (beginning)'), h('pre', null, x.answer)) : null,
+  h('div', { class: 'small muted' }, `${x.seconds ?? '–'} seconds · ${x.turns ?? '–'} turns · ${when(x.ts)}`, x.folder ? h('div', { class: 'mono' }, 'Files: ' + x.folder) : null))
+
+/** What a change did to the agent, compared with the version it was made from. */
+function changesOf(cand, parent) {
+  if (!parent) return []
+  const a = parent.def, b = cand.def, out = []
+  const list = v => (Array.isArray(v) ? v : [String(v)])
+  if (a.model !== b.model || (a.provider ?? '') !== (b.provider ?? '')) out.push(`Model: ${a.model} → ${b.model}`)
+  if ((a.effort ?? '') !== (b.effort ?? '')) out.push(`Thinking effort: ${a.effort ?? 'default'} → ${b.effort ?? 'default'}`)
+  if ((a.maxTurns ?? '') !== (b.maxTurns ?? '')) out.push(`Turn limit: ${a.maxTurns ?? 'none'} → ${b.maxTurns ?? 'none'}`)
+  for (const [k, label] of [['skills', 'Skills'], ['tools', 'Tools'], ['mcp', 'Tool servers']]) {
+    const plus = list(b[k] ?? []).filter(v => !list(a[k] ?? []).includes(v)), minus = list(a[k] ?? []).filter(v => !list(b[k] ?? []).includes(v))
+    if (plus.length) out.push(`${label} added: ${plus.join(', ')}`)
+    if (minus.length) out.push(`${label} removed: ${minus.join(', ')}`)
+  }
+  if (a.memory?.mode !== b.memory?.mode) out.push(`Memory: ${a.memory?.mode} → ${b.memory?.mode}`)
+  if (a.memory?.injectChars !== b.memory?.injectChars) out.push(`Memory shown to the agent: ${a.memory?.injectChars} → ${b.memory?.injectChars} characters`)
+  for (const l of (cand.lessons ?? []).filter(l => !(parent.lessons ?? []).some(k => k.title === l.title))) out.push(`New lesson in memory, "${l.title}": ${l.content}`)
+  if ((a.role ?? '') !== (b.role ?? '')) out.push(h('details', null, h('summary', null, 'Instructions rewritten. Show the new text'), h('pre', null, b.role)))
+  return out
+}
+
+function agentDetail(c, m) {
+  const r = ui.agent, g = m.agents.find(a => a.name === r), D = ui.agentData
+  const back = h('button', { class: 'ghost', style: 'align-self:flex-start', onclick: () => { ui.agent = null; ui.agentData = null; setHash(); render() } }, '← All agents')
+  if (!g) return [back, h('p', { class: 'muted' }, 'This agent is not part of the current workflow.')]
+  if (!D) return [back, h('div', { class: 'card' }, h('h2', null, r), h('p', { class: 'muted' }, 'Loading…'))]
+  const S = m.S, x = g.x, v = x.verify
+  const base = D.cands.base, bestId = x.best?.id ?? 'base', best = D.cands[bestId] ?? base
+  const tasks = [...D.tasks.train.map(t => ({ ...t, split: 'train' })), ...D.tasks.dev.map(t => ({ ...t, split: 'dev' }))]
+  const score = (cand, split, task) => { const rows = D.details.filter(t => t.cand === cand && t.split === split && (!task || t.task === task)); return rows.length ? rows.reduce((a, t) => a + t.score, 0) / rows.length : null }
+  const card = (n, title, state, ...kids) => h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h2', null, `${n}. ${title}`), state), kids)
+  const chip = (cls, t) => h('span', { class: 'chip ' + cls }, t)
+  const none = t => h('p', { class: 'muted' }, t)
+
+  // how the agent is set up: at the start and now
+  const cfg = d => [['Model', `${d.model}${d.effort ? `, ${d.effort} effort` : ''}${d.provider && d.provider !== 'claude-code' ? ` (${d.provider})` : ''}`], ['Tools', Array.isArray(d.tools) ? d.tools.join(', ') : 'all'], ['Tool servers', (d.mcp ?? []).join(', ') || 'none'], ['Skills', (d.skills ?? []).join(', ') || 'none'], ['Memory', d.memory?.mode === 'none' ? 'off' : d.memory?.mode], ['Turn limit', d.maxTurns ?? 'none'], ['Runs in', d.execution?.mode === 'sandbox' ? 'a sandbox (can write and run files)' : 'read-only mode']]
+  const setup = base ? h('div', { class: 'scroll' }, h('table', null,
+    h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'At the start'), h('th', null, bestId === 'base' ? 'Now' : `Now (${ver(bestId)})`))),
+    h('tbody', null, cfg(base.def).map(([k, val], i) => { const now = cfg(best.def)[i][1]; return h('tr', null, h('td', { class: 'muted' }, k), h('td', null, String(val)), h('td', null, String(now) === String(val) ? h('span', { class: 'muted' }, 'same') : h('b', null, String(now)))) }),
+      h('tr', null, h('td', { class: 'muted' }, 'Lessons in memory'), h('td', null, (base.lessons ?? []).length || 'none'), h('td', null, (best.lessons ?? []).length ? h('ul', { class: 'plain' }, best.lessons.map(l => h('li', null, h('b', null, l.title + ': '), l.content))) : h('span', { class: 'muted' }, 'none'))),
+      h('tr', null, h('td', { class: 'muted' }, 'Instructions'), h('td', null, h('details', null, h('summary', null, 'Show'), h('pre', null, base.def.role))), h('td', null, best.def.role === base.def.role ? h('span', { class: 'muted' }, 'same') : h('details', null, h('summary', null, 'Show (rewritten)'), h('pre', null, best.def.role))))))) : none('The agent is set up when training reaches it.')
+
+  const round = (n, diagnosis, ids, info, promoted, dev, accepted, running) => h('div', { class: 'box' },
+    h('div', { class: 'row between' }, h('h3', null, n === 0 ? 'Skill and tool trial' : `Round ${n}`), running ? chip('info live', 'Running') : chip(accepted ? 'good' : '', accepted ? `Kept ${ver(promoted)}` : 'Nothing kept')),
+    diagnosis ? h('p', null, h('b', null, n === 0 ? 'What was done: ' : 'What the coach saw: '), diagnosis) : null,
+    ids.length ? ids.map(id => { const k = D.cands[id], meta2 = info.find(z => z.id === id), ch = k ? changesOf(k, D.cands[k.parent]) : []; const before = score(k?.parent ?? 'base', 'train'), need = (score(k?.parent ?? 'base', 'dev') ?? 0) + S.minGain
+      return h('div', { class: 'col', style: 'gap:6px; border-top:1px solid var(--line); padding-top:10px' },
+        h('div', { class: 'row' }, h('b', null, ver(id)), h('span', { class: 'tag' }, `changes the ${k?.lever ?? meta2?.lever ?? '?'}`), promoted === id ? chip(accepted ? 'good' : 'warn', accepted ? 'kept' : 'tried on the check tasks, not kept') : null),
+        h('p', { class: 'small' }, h('b', null, 'Idea: '), k?.why ?? meta2?.why ?? ''),
+        ch.length ? h('ul', { class: 'plain small' }, ch.map(z => h('li', null, z))) : null,
+        h('p', { class: 'small num' }, `Practice: ${pc(meta2?.train ?? score(id, 'train'))} (before: ${pc(before)})`, promoted === id ? ` · Check: ${pc(dev ?? score(id, 'dev'))} (needed ${pc(need)} to be kept)` : running ? '' : ' · not the best of the round, so not tried on the check tasks'))
+    }) : none('The coach proposed no usable change.'))
+
+  const cols = [...new Set(D.details.map(t => t.cand))]
+  return [
+    back,
+    h('div', { class: 'card' },
+      h('div', { class: 'row between' }, h('h1', { style: 'font-size:20px' }, r), g.now ? chip('info live', 'working now') : v ? chip(v.passed ? 'good' : 'bad', v.passed ? 'Passed the final exam' : 'Did not pass') : chip('', 'In training')),
+      h('p', null, g.role?.description ?? '', h('span', { class: 'muted' }, g.role?.base ? ` A copy of your agent ${g.role.base}.` : ' A new agent.')),
+      h('p', { class: 'small' }, h('b', null, 'In the workflow: '), g.works.map(w => `${w.as} step ${w.n} (${w.title})`).join(' · ')),
+      h('div', { class: 'phases' },
+        h('div', { class: 'ph ' + (g.tasksDone ? 'done' : '') }, h('b', null, '1 Tasks'), h('span', null, `${g.written} of ${g.need}`)),
+        h('div', { class: 'ph ' + (x.baseline ? 'done' : '') }, h('b', null, '2 First score'), h('span', null, pc(x.baseline?.dev))),
+        h('div', { class: 'ph ' + (g.coached ? 'done' : '') }, h('b', null, '3 After coaching'), h('span', null, g.coached ? pc(x.best?.dev) : '–')),
+        h('div', { class: 'ph ' + (v ? (v.passed ? 'done' : 'bad') : '') }, h('b', null, '4 Final exam'), h('span', null, pc(v?.score))))),
+    card(1, 'Its tasks', chip(g.tasksDone ? 'good' : '', `${D.tasks.train.length} practice · ${D.tasks.dev.length} check · ${D.tasks.sealed} final exam`),
+      tasks.length ? tasks.map(t => taskView(t, SET[t.split])) : none('Not written yet.'),
+      h('p', { class: 'small muted' }, `The ${D.tasks.sealed || S.dataset.holdout} final-exam tasks are not shown here, so they stay a fair test.`)),
+    card(2, 'First score, before any coaching', x.baseline ? chip('good', `Practice ${pc(x.baseline.train)} · Check ${pc(x.baseline.dev)}`) : chip('', 'not measured yet'),
+      tasks.some(t => score('base', t.split, t.id) != null) ? h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'Task'), h('th', null, 'Set'), h('th', { class: 'r' }, 'Score'))), h('tbody', null, tasks.map(t => h('tr', null, h('td', null, t.title), h('td', null, SET[t.split]), h('td', { class: 'r num' }, h('b', null, pc(score('base', t.split, t.id)))))))))
+        : none('The agent does each practice and check task as it is today, and a judge marks the work against the task\'s rubric.')),
+    card(3, 'Coaching', chip(g.coached ? 'good' : x.pending ? 'info live' : '', g.coached ? `${plural(g.rounds.length, 'round')}, ${plural(g.kept, 'change')} kept` : x.pending ? `round ${x.pending.n} running` : 'not started'),
+      (x.rounds ?? []).map(k => round(k.n, k.diagnosis, k.candidates.map(z => z.id), k.candidates, k.promoted, k.dev, k.accepted, false)),
+      x.pending ? round(x.pending.n, x.pending.diagnosis, x.pending.cands, [], null, null, false, true) : null,
+      !g.rounds.length && !x.pending ? none(x.baseline && x.baseline.dev >= S.target ? `No coaching was needed: the first score already reaches the target of ${pc(S.target)}.` : `In each round a coach reads where the agent lost points on the practice tasks and proposes ${S.candidates} changes. Each is tried on the practice tasks. The best one is tried on the check tasks, and kept only if the agent scores at least ${pc(S.minGain)} higher there.`) : null),
+    card(4, 'Final exam', v ? chip(v.passed ? 'good' : 'bad', `${pc(v.score)} · ${v.passed ? 'passed' : 'not passed'}`) : chip('', 'not taken yet'),
+      v ? [h('ul', { class: 'plain' }, h('li', null, `Pass mark: ${pc(S.criteria.minScore)}. Score: ${pc(v.score)}.`), v.trained != null ? h('li', null, `Coached version ${pc(v.trained)}, original ${pc(v.original)}. Kept: ${ver(v.chosen).toLowerCase()}.`) : null, h('li', null, `Change from the check tasks to the final exam: ${v.gap > 0 ? 'down ' + pc(v.gap) : 'no drop'} (a drop of more than ${pc(S.criteria.maxGap)} fails).`)), v.reasons.length ? h('div', { class: 'note' + (v.passed ? '' : ' err') }, v.reasons.join(' ')) : null]
+        : none(`The final version does tasks it has never seen. It passes at ${pc(S.criteria.minScore)} or more.`)),
+    card(5, 'How the agent is set up', null, setup),
+    card(6, `Every marked task (${D.details.length})`, null,
+      tasks.length && cols.length ? h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'Task'), cols.map(k => h('th', { class: 'r' }, ver(k))))), h('tbody', null, tasks.map(t => h('tr', null, h('td', null, h('span', { class: 'tag' }, SET[t.split]), ' ', t.title), cols.map(k => h('td', { class: 'r num' }, pc(score(k, t.split, t.id))))))))) : null,
+      D.details.length ? D.details.slice().sort((a, b) => (a.ts < b.ts ? 1 : -1)).map(trialView) : none('Nothing has been marked yet.')),
+    h('div', { class: 'card' }, h('h2', null, 'Do it again'), h('div', { class: 'row' },
+      h('button', { disabled: c.busy, onclick: () => { if (confirm(`Train ${r} again?\n\nIts scores, coaching and final exam are cleared; its tasks are kept. The team is trained again afterwards.`)) act(() => api('POST', `camps/${c.id}/reset`, { what: r }), 'Cleared. Press the training button at the top.') } }, '↻ Train this agent again'),
+      h('button', { disabled: c.busy, onclick: () => { if (confirm(`Write new tasks for ${r} and train it again?\n\nIts tasks, scores, coaching and final exam are all cleared.`)) act(() => api('POST', `camps/${c.id}/reset`, { what: r, datasets: true }), 'Cleared. Press the training button at the top.') } }, '↻ New tasks and train again'),
+      c.busy ? h('span', { class: 'small muted' }, 'Pause the training first.') : null)),
+  ]
+}
+
+// ---------------------------------------------------------------- Workflow
+/** One agent on one workflow step: who it is, its team, its skills, and how it scores on this step. */
+function person(c, stage, r, label) {
+  const role = c.workflow.roles.find(x => x.name === r) ?? {}
+  const x = c.roles?.[r] ?? {}
+  const team = c.workflow.teams.filter(t => t.members.includes(r)).map(t => t.name)
+  const trial = (x.rounds ?? []).find(q => q.kind === 'skills')
+  const kept = trial?.accepted ? (trial.candidates.find(z => z.id === trial.promoted)?.skills ?? []) : []
+  const skills = [...new Set([...(role.skills ?? []), ...(x.kit?.skills ?? [])])]
+  const p = steps?.find(q => q.id === stage.id)?.people.find(q => q.role === r)
+  const sc = p?.scores
+  const usable = c.approvedVersion === c.workflowVersion
+  return h('div', { class: 'box', style: 'padding:10px; gap:6px' },
+    h('div', { class: 'row' }, h('span', { class: 'small muted' }, label), usable ? h('button', { class: 'ghost', style: 'font-weight:650', onclick: () => openAgent(r) }, r) : h('b', null, r),
+      h('span', { class: 'tag' }, role.kind === 'builder' ? 'builds and runs files' : 'researches and writes'),
+      team.map(t => h('span', { class: 'chip info' }, 'team ' + t)),
+      x.verify ? h('span', { class: 'chip ' + (x.verify.passed ? 'good' : 'bad') }, x.verify.passed ? 'Passed' : 'Not passed') : null),
+    h('div', { class: 'small' }, role.description ?? '', role.base ? h('span', { class: 'muted' }, ` · starts from your agent ${role.base}`) : null),
+    h('div', { class: 'small' }, h('b', null, 'Skills: '), skills.length ? skills.map(n => h('span', { class: 'tag', style: 'margin-right:4px' }, n + (kept.includes(n) ? ' ✓ kept' : trial && (x.kit?.skills ?? []).includes(n) ? ' · tried, not kept' : (x.kit?.skills ?? []).includes(n) ? ' · to be tried' : ''))) : h('span', { class: 'muted' }, x.kit ? 'none beyond what the agent already has' : 'chosen when training starts')),
+    h('div', { class: 'small num' }, h('b', null, 'Score on this step: '), sc && (sc.baselineDev != null || sc.bestDev != null) ? `${pc(sc.baselineDev)} at first → ${pc(sc.bestDev)} after coaching → ${pc(sc.sealed)} in the final exam` : h('span', { class: 'muted' }, 'not scored yet'),
+      p ? h('span', { class: 'muted' }, ` · tasks: ${p.counts.train} practice, ${p.counts.dev} check, ${p.counts.holdout} final exam`) : null))
+}
+
+function workflowTab(c) {
+  const wf = c.workflow
+  if (!wf) return [h('div', { class: 'card' }, h('p', { class: 'muted' }, c.busy ? 'The architect is writing the first workflow. This takes a few minutes.' : 'There is no workflow yet. Press "Propose a workflow" at the top.'))]
+  const approved = c.approvedVersion === c.workflowVersion
+  return [
+    h('div', { class: 'card' },
+      h('div', { class: 'row between' }, h('h2', null, 'Want something different?'), h('span', { class: 'chip ' + (approved ? 'good' : 'warn') }, approved ? `Version ${c.workflowVersion}, approved` : `Version ${c.workflowVersion}, waits for your approval`)),
+      h('p', { class: 'muted' }, 'Tell the architect in your own words. You get a new version to approve. Agents whose job does not change keep their training.'),
+      h('textarea', { id: 'feedback', placeholder: 'For example: add a playtest step after the demos · merge the two demand steps · add a sound designer', oninput: () => { dirty = true } }),
+      h('div', { class: 'row' },
+        h('button', { class: 'primary', style: 'font-size:15px; padding:8px 16px', disabled: c.busy, onclick: () => { const t = $('feedback').value.trim(); if (t) act(() => api('POST', `camps/${c.id}/revise`, { feedback: t }), 'The architect is changing the workflow. This takes a few minutes.') } }, 'Change the workflow'),
+        h('button', { class: 'ghost', onclick: async () => { ui.versions = ui.versions ? null : await api('GET', `camps/${c.id}/workflow`); render() } }, ui.versions ? 'Hide earlier versions' : 'Earlier versions'),
+        h('button', { class: 'ghost', onclick: () => { ui.edit = !ui.edit; dirty = false; render() } }, ui.edit ? 'Close the editor' : 'Edit it by hand')),
+      ui.versions ? h('div', { class: 'scroll' }, h('table', null, h('tbody', null, ui.versions.slice().reverse().map(v => h('tr', null, h('td', null, h('b', null, 'Version ' + v.version)), h('td', { class: 'small muted' }, when(v.ts)), h('td', null, `${v.by}: ${v.note}`, v.changes ? h('ul', { class: 'plain small muted' }, v.changes.map(z => h('li', null, z))) : null), h('td', null, v.version !== c.workflowVersion ? h('button', { disabled: c.busy, onclick: () => { ui.versions = null; act(() => api('POST', `camps/${c.id}/restore`, { version: v.version }), `Version ${v.version} is back as a new version. Approve it to use it.`) } }, 'Go back to this') : h('span', { class: 'muted' }, 'current'))))))) : null,
+      ui.edit ? [h('textarea', { class: 'code', id: 'wfjson', spellcheck: 'false', value: JSON.stringify(wf, null, 2), oninput: () => { dirty = true } }), h('div', { class: 'row' }, h('button', { disabled: c.busy, onclick: () => { let w; try { w = JSON.parse($('wfjson').value) } catch (e) { message = { text: 'The text is not valid JSON: ' + e.message, tone: 'err' }; return render() } ui.edit = false; act(() => api('PUT', `camps/${c.id}/workflow`, { workflow: w }), 'Saved as a new version. Approve it to use it.') } }, 'Save as a new version'))] : null),
+    h('div', { class: 'card' },
+      h('h2', null, `The workflow: ${plural(wf.stages.length, 'step')}, ${plural(wf.roles.length, 'agent')}, ${plural(wf.teams.length, 'team')}`),
+      c.published ? h('p', { class: 'small' }, h('b', null, 'Published as the workflow: '), c.published.orchestration, ' (run it from Workflows in Agent Forge)') : h('p', { class: 'small muted' }, `When published, this becomes the workflow "${c.settings.publish.workflowName || c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 34) + '-workflow'}" in Agent Forge, with these agents and teams.`),
+      h('p', null, wf.summary),
+      wf.rationale ? h('details', null, h('summary', null, 'Why this workflow, and what else was considered'), h('p', { class: 'small' }, wf.rationale), h('ul', { class: 'plain small' }, wf.alternatives.map(a => h('li', null, a)))) : null,
+      h('ol', { class: 'flow' }, wf.stages.map(s => h('li', { class: s.kind === 'decision' ? 'decision' : null },
+        h('div', { class: 'row' }, h('b', null, s.title), s.kind === 'decision' ? h('span', { class: 'chip warn' }, 'Go or stop decision') : null, s.group ? h('span', { class: 'chip info' }, 'runs side by side: ' + s.group) : null),
+        [[s.role, 'Done by'], ...(s.reviewer ? [[s.reviewer, `Checked by (${s.reviewRounds} round${s.reviewRounds === 1 ? '' : 's'})`]] : [])].map(([r, label]) => person(c, s, r, label)),
+        h('span', null, s.purpose),
+        h('details', null, h('summary', { class: 'small' }, 'What it delivers and when it is accepted'), h('p', { class: 'small' }, h('b', null, 'Delivers: '), s.deliverable), s.inputs.length ? h('p', { class: 'small' }, h('b', null, 'Reads the results of: '), s.inputs.join(', ')) : null, h('ul', { class: 'plain small' }, s.acceptance.map(a => h('li', null, a)))))))),
+    h('div', { class: 'card' }, h('h2', null, 'Teams'),
+      wf.teams.length ? h('div', { class: 'grid' }, wf.teams.map(t => h('div', { class: 'box' }, h('b', null, t.name), t.description ? h('span', { class: 'small muted' }, t.description) : null, h('div', { class: 'row' }, t.members.map(n => h('span', { class: 'tag' }, n)))))) : h('p', { class: 'muted' }, 'No teams in this workflow.')),
+  ]
+}
+
+// ---------------------------------------------------------------- Results
+function resultsTab(c, m) {
+  const seg = h('div', { class: 'seg' }, [['agents', 'By agent'], ['steps', 'By workflow step']].map(([k, t]) => h('button', { 'aria-pressed': ui.results === k ? 'true' : 'false', onclick: async () => { ui.results = k; ui.step = null; if (k === 'steps') steps = await api('GET', `camps/${c.id}/steps`).catch(() => null); render() } }, t)))
+  const passed = m.count(g => g.x.verify?.passed), examined = m.count(g => g.x.verify)
+  const head = h('div', { class: 'row between' }, h('h2', null, examined ? `${passed} of ${m.all} agents passed the final exam` : 'No agent has taken its final exam yet'), seg)
+  if (ui.results === 'steps') return [h('div', { class: 'card' }, head, stepsView(c))]
+  const row = g => { const v = g.x.verify; return h('tr', { class: 'click', onclick: () => openAgent(g.name) },
+    h('td', null, h('b', null, g.name), h('div', { class: 'small muted' }, g.works.map(w => `step ${w.n}`).join(', '))),
+    h('td', { class: 'r num' }, pc(g.x.baseline?.dev)), h('td', { class: 'r num' }, g.coached ? h('b', null, pc(g.x.best?.dev)) : '–'),
+    h('td', { class: 'small' }, g.kept ? g.rounds.filter(q => q.accepted).map(q => q.candidates.find(z => z.id === q.promoted)?.lever).join(', ') : g.coached ? 'nothing needed changing' : '–'),
+    h('td', { class: 'r num' }, v ? h('b', null, pc(v.score)) : '–'),
+    h('td', null, v ? h('span', { class: 'chip ' + (v.passed ? 'good' : 'bad') }, v.passed ? 'Passed' : 'Not passed') : h('span', { class: 'muted small' }, agentLine(g)), v?.reasons?.length ? h('div', { class: 'small muted' }, v.reasons.join(' ')) : null)) }
+  const t = c.team ?? {}
+  return [h('div', { class: 'card' }, head,
+    h('p', { class: 'small muted' }, `The pass mark is ${pc(m.S.criteria.minScore)} on the final exam. Click an agent for everything behind its numbers.`),
+    h('div', { class: 'scroll' }, h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Agent'), h('th', { class: 'r' }, 'First score'), h('th', { class: 'r' }, 'After coaching'), h('th', null, 'What was changed'), h('th', { class: 'r' }, 'Final exam'), h('th', null, 'Result'))),
+      h('tbody', null, m.agents.map(row),
+        m.team ? h('tr', null, h('td', null, h('b', null, 'The whole team'), h('div', { class: 'small muted' }, 'runs the complete workflow')), h('td', { class: 'r num' }, pc(t.baseline?.dev)), h('td', { class: 'r num' }, t.best ? h('b', null, pc(t.best.dev)) : '–'), h('td', { class: 'small' }, t.best && t.best.id !== 'base' ? 'hand-offs and reviews tuned' : t.baseline ? 'workflow as approved' : '–'), h('td', { class: 'r num' }, t.verify ? h('b', null, pc(t.verify.score)) : '–'), h('td', null, t.verify ? h('span', { class: 'chip ' + (t.verify.passed ? 'good' : 'bad') }, t.verify.passed ? 'Passed' : 'Not passed') : h('span', { class: 'muted small' }, 'after the agents'), t.verify?.reasons?.length ? h('div', { class: 'small muted' }, t.verify.reasons.join(' ')) : null)) : null))))]
+}
+
+function stepsView(c) {
+  if (!steps) return h('p', { class: 'muted' }, 'Loading…')
+  return h('ol', { class: 'flow' }, steps.map(s => h('li', { class: s.kind === 'decision' ? 'decision' : null },
+    h('div', { class: 'row' }, h('b', null, s.title), s.kind === 'decision' ? h('span', { class: 'chip warn' }, 'Go or stop decision') : null),
+    s.people.map(p => { const sc = p.scores
+      return h('div', { class: 'col', style: 'gap:6px; border-top:1px solid var(--line); padding-top:8px' },
+        h('div', { class: 'row' }, h('button', { class: 'ghost', onclick: () => openAgent(p.role) }, p.role), h('span', { class: 'tag' }, p.as === 'owner' ? 'does this step' : 'checks this step'),
+          p.verdict ? h('span', { class: 'chip ' + (p.verdict.passed ? 'good' : 'bad') }, p.verdict.passed ? 'Agent passed' : 'Agent did not pass') : null),
+        h('div', { class: 'small num' }, `Tasks for this step: ${p.counts.train} practice, ${p.counts.dev} check, ${p.counts.holdout} final exam${p.shared ? ' (shared with this agent\'s other steps)' : ''}`),
+        h('div', { class: 'small num' }, 'Score on this step: ', h('b', null, `${pc(sc.baselineDev)} at first → ${pc(sc.bestDev)} after coaching → ${pc(sc.sealed)} in the final exam`)),
+        p.done.length ? h('details', { ontoggle: async e => { const box = e.target.querySelector('.trials'); if (!e.target.open || !box || box.dataset.loaded) return; box.dataset.loaded = '1'; const rows = await api('GET', `camps/${c.id}/details/${p.role}?stage=${encodeURIComponent(s.id)}`).catch(() => []); box.replaceChildren(...(rows.length ? rows.map(trialView) : [h('p', { class: 'muted small' }, 'Nothing marked yet.')])) } },
+          h('summary', { class: 'small' }, 'What was done, and every marked task of this step'), h('ul', { class: 'plain small' }, p.done.map(d => h('li', null, d))), h('div', { class: 'col trials', style: 'gap:6px' }, h('p', { class: 'muted small' }, 'Loading…'))) : h('span', { class: 'small muted' }, 'Nothing done yet for this step.')) }))))
+}
+
+// ---------------------------------------------------------------- Settings
+function settingsTab(c) {
+  const S = c.settings
+  const key = (prov, mod) => `${prov || 'claude-code'}|${mod}`
+  const opts = (meta?.providers ?? []).flatMap(p => p.models.map(mo => ({ v: key(p.id, mo), label: `${p.free ? 'Free' : p.label}: ${mo}${p.ready ? '' : ' (not set up)'}`, ready: p.ready })))
+  const d = S.staff.default ?? {}
+  const of = o => key(o?.provider ?? d.provider, o?.model ?? d.model)
+  const pick = (id, label, help, cur) => { const all = opts.some(o => o.v === cur) ? opts : [{ v: cur, label: cur.replace('|', ': ') + ' (current)', ready: true }, ...opts]; return h('label', { class: 'f' }, h('b', null, label), help, h('select', { id, onchange: () => { dirty = true } }, all.map(o => h('option', { value: o.v, selected: o.v === cur, disabled: !o.ready }, o.label)))) }
+  const read = id => { const [provider, ...mo] = $(id).value.split('|'); return { provider, model: mo.join('|') } }
+  const num = (id, label, help, val, attrs = {}) => h('label', { class: 'f' }, h('b', null, label), help, h('input', { id, type: 'number', value: val, oninput: () => { dirty = true }, ...attrs }))
+  const n = id => Number($(id).value)
+  return [
+    h('div', { class: 'card' }, h('h2', null, 'Models'), h('p', { class: 'muted' }, 'Which model does which job in this camp. After publishing you can change any agent\'s model on the Agents page of Agent Forge.'),
+      h('div', { class: 'row', style: 'align-items:flex-start' },
+        pick('m-train', 'Agents train on', 'every agent runs its tasks on this model and is published with it', key(S.trainee.provider, S.trainee.model)),
+        pick('m-staff', 'Camp staff', 'the architect, the task writer and the coach', of(d))),
+      h('div', { class: 'row', style: 'align-items:flex-start' },
+        pick('m-judge', 'Judge', 'marks every task; best on a stronger, different model', of(S.staff.judge)),
+        pick('m-sealer', 'Final-exam writer', 'writes the tasks nobody else sees', of(S.staff.sealer))),
+      h('div', { class: 'row' }, h('button', { disabled: c.busy, onclick: () => { const t = read('m-train'), st = read('m-staff'), j = read('m-judge'), se = read('m-sealer'); act(() => api('PUT', `camps/${c.id}/settings`, { trainee: { backend: 'claude-code', provider: t.provider, model: t.model, effort: S.trainee.effort ?? 'high', override: true }, staff: { default: { backend: 'claude-code', provider: st.provider, model: st.model, effort: d.effort ?? 'medium' }, judge: { provider: j.provider, model: j.model }, sealer: { provider: se.provider, model: se.model } }, allowedModels: meta.providers.find(p => p.id === t.provider)?.models ?? [t.model] }), 'Models saved. Agents that have no first score yet use them straight away; train an agent again to move one that already has scores.') } }, 'Save models'))),
+    h('div', { class: 'card' }, h('h2', null, 'How much training'),
+      h('div', { class: 'row', style: 'align-items:flex-start' },
+        num('s-train', 'Practice tasks', 'per agent', S.dataset.train, { min: 2, max: 60 }), num('s-dev', 'Check tasks', 'per agent', S.dataset.dev, { min: 2, max: 60 }), num('s-hold', 'Final-exam tasks', 'per agent', S.dataset.holdout, { min: 2, max: 60 })),
+      h('div', { class: 'row', style: 'align-items:flex-start' },
+        num('s-rounds', 'Coaching rounds', 'at most, per agent', S.rounds, { min: 0, max: 20 }), num('s-cands', 'Changes per round', 'the coach tries this many', S.candidates, { min: 1, max: 6 }), num('s-pass', 'Pass mark', 'percent in the final exam', Math.round(S.criteria.minScore * 100), { min: 0, max: 100 })),
+      h('div', { class: 'row', style: 'align-items:flex-start' },
+        num('s-agents', 'Agents at once', 'trained side by side', S.parallelAgents ?? 4, { min: 1, max: 32 }), num('s-calls', 'Model calls at once', 'more is faster, until the model slows you down', S.parallelCalls ?? 8, { min: 1, max: 48 }), num('s-budget', 'Budget in dollars', 'training pauses when the estimate reaches it', S.budgetUsd, { min: 0, step: 1 })),
+      h('label', { class: 'row small' }, h('input', { id: 's-team', type: 'checkbox', style: 'width:auto', ...(S.team.enabled ? { checked: true } : {}), onchange: () => { dirty = true } }), 'Also train the whole team on small end-to-end goals'),
+      h('div', { class: 'row' }, h('button', { onclick: () => act(() => api('PUT', `camps/${c.id}/settings`, { dataset: { train: n('s-train'), dev: n('s-dev'), holdout: n('s-hold') }, rounds: n('s-rounds'), candidates: n('s-cands'), criteria: { minScore: n('s-pass') / 100 }, parallelAgents: n('s-agents'), parallelCalls: n('s-calls'), budgetUsd: n('s-budget'), team: { enabled: $('s-team').checked } }), 'Saved. Changes to parallel work apply the next time training starts.') }, 'Save'),
+        h('span', { class: 'small muted' }, 'More tasks and rounds mean better training and more model calls.'))),
+    h('details', { ontoggle: e => { ui.advanced = e.target.open }, ...(ui.advanced ? { open: true } : {}) }, h('summary', null, 'All settings (advanced)'),
+      h('textarea', { class: 'code', id: 'settings', spellcheck: 'false', value: JSON.stringify(S, null, 2), oninput: () => { dirty = true } }),
+      h('div', { class: 'row' }, h('button', { onclick: () => { let v; try { v = JSON.parse($('settings').value) } catch (e) { message = { text: 'The text is not valid JSON: ' + e.message, tone: 'err' }; return render() } act(() => api('PUT', `camps/${c.id}/settings`, v), 'Settings saved.') } }, 'Save all settings'))),
+    h('div', { class: 'card' }, h('h2', null, 'Start over'),
+      h('div', { class: 'row' }, h('button', { class: 'danger', disabled: c.busy, onclick: () => { if (confirm('Start this camp fresh?\n\nKept: the goal, the settings and the approved workflow.\nCleared: all tasks, scores, coaching rounds, final-exam results, the scout\'s result, the spend counter and the log.\n\nPublished agents are not touched.')) { ui.agent = null; ui.agentData = null; act(() => api('POST', `camps/${c.id}/fresh`, {}), 'The camp is fresh. Press "Start training".') } } }, '↻ Start this camp fresh'),
+        h('span', { class: 'small muted' }, 'Keeps the goal, settings and workflow. Clears tasks, scores and coaching.')),
+      h('div', { class: 'row' }, h('button', { class: 'danger', disabled: c.busy, onclick: () => { if (confirm('Delete this camp with all its tasks and results?\n\nPublished agents stay in Agent Forge.')) act(async () => { await api('DELETE', `camps/${c.id}`); current = null; camp = null; setHash() }) } }, 'Delete this camp'),
+        h('span', { class: 'small muted' }, c.busy ? 'Pause the training first.' : 'Removes the camp. Published agents stay.'))),
+  ]
+}
+
+// ---------------------------------------------------------------- page
+function render() {
+  const pick = $('pick')
+  pick.replaceChildren(...(camps.length ? camps.map(k => h('option', { value: k.id, selected: k.id === current }, `${k.name} · ${k.busy ? 'working' : (STATUS[k.status]?.[0] ?? k.status)}`)) : [h('option', { value: '' }, 'No camps yet')]))
+  const main = $('main')
+  const c = camp
+  if (!c) return main.replaceChildren(h('div', { class: 'card' }, h('h2', null, camps.length ? 'Choose a camp above' : 'No training camp yet'), h('p', { class: 'muted' }, 'A training camp takes one goal, proposes a workflow and the agents for it, trains each agent and the team on generated tasks, tests them on tasks they have never seen, and lets you publish the ones that pass.'), message ? h('div', { class: 'note ' + message.tone }, message.text) : null, h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => $('newDlg').showModal() }, '+ New camp'))))
+  const usable = !!c.workflow && c.approvedVersion === c.workflowVersion
+  const m = c.workflow ? model(c) : null
+  const tabs = [['overview', 'Overview'], ['agents', `Agents${m ? ' (' + m.all + ')' : ''}`], ['workflow', 'Workflow'], ['results', 'Results'], ['settings', 'Settings']]
+  if (!usable && !['workflow', 'settings'].includes(ui.tab)) ui.tab = 'workflow'
+  ui.tab ??= 'overview'
+  const body = ui.tab === 'overview' ? overviewTab(c, m) : ui.tab === 'agents' ? agentsTab(c, m) : ui.tab === 'results' ? resultsTab(c, m) : ui.tab === 'settings' ? settingsTab(c) : workflowTab(c)
+  main.replaceChildren(hero(c, usable ? m : null),
+    h('div', { class: 'tabs', role: 'tablist' }, tabs.map(([k, t]) => h('button', { role: 'tab', 'aria-selected': ui.tab === k ? 'true' : 'false', disabled: !usable && !['workflow', 'settings'].includes(k), title: !usable && !['workflow', 'settings'].includes(k) ? 'Approve the workflow first' : null, onclick: () => { ui.tab = k; if (k !== 'agents') { ui.agent = null; ui.agentData = null; setHash() } dirty = false; render() } }, t))),
+    ...[body].flat().filter(Boolean))
+}
+
+async function refresh(force) {
+  try {
+    meta ??= await api('GET', 'meta')
+    camps = (await api('GET', 'camps')).camps
+    if (!current && camps.length) { current = camps[0].id; setHash() }
+    if (current && !camps.some(k => k.id === current)) { current = camps[0]?.id ?? null; camp = null; setHash() }
+    if (current) {
+      camp = await api('GET', `camps/${current}`)
+      if (camp.workflow && camp.busy) {
+        const live = wanted(camp).filter(r => { const x = camp.roles[r] ?? {}; return !x.baseline && (camp.sets[r]?.holdout ?? 0) > 0 }).slice(0, 8)
+        active = Object.fromEntries(await Promise.all(live.map(async r => [r, await api('GET', `camps/${current}/trials/${r}`).catch(() => [])])))
+      } else active = {}
+      if ((ui.tab === 'results' && ui.results === 'steps') || ui.tab === 'workflow' || !steps) steps = await api('GET', `camps/${current}/steps`).catch(() => null)
+      if (ui.agent && (force || !reading())) await loadAgent()
+    } else camp = null
+  } catch (e) { message = { text: e.message, tone: 'err' } }
+  if (force || (!dirty && !reading())) render()
+}
+
+$('pick').addEventListener('change', e => { current = e.target.value || null; camp = null; steps = null; message = null; Object.assign(ui, { tab: null, stage: null, agent: null, agentData: null, step: null, edit: false, versions: null }); dirty = false; setHash(); refresh(true) })
+$('newBtn').addEventListener('click', () => $('newDlg').showModal())
+$('create').addEventListener('click', async () => {
+  $('createErr').textContent = ''
+  try {
+    const c = await api('POST', 'camps', { goal: $('goal').value, name: $('name').value, hint: $('hint').value })
+    await api('POST', `camps/${c.id}/propose`, {})
+    $('goal').value = ''; $('name').value = ''; $('hint').value = ''
+    $('newDlg').close()
+    current = c.id; camp = null; Object.assign(ui, { tab: 'workflow', agent: null, agentData: null }); setHash()
+    message = { text: 'The architect is proposing a workflow. This takes a few minutes; the page updates by itself.', tone: 'ok' }
+    refresh(true)
+  } catch (e) { $('createErr').textContent = e.message }
+})
+refresh(true)
+setInterval(() => { if (!document.hidden) refresh(false) }, 5000)
+</script>
+</body>
+</html>

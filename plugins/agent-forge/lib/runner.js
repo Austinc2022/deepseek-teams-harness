@@ -30,8 +30,10 @@ import { filesSummary } from './agent-files.js'
 import { McpLibrary } from './mcp.js'
 import { runCli, CLI_BACKENDS } from './cli-backends.js'
 import { deepMerge, normalizeAgent } from './registry.js'
-import { providerEnv } from './providers.js'
+import { providerEnv, providerOf, isFree, freeGateway } from './providers.js'
 import { resolveExecution, prepareRemote } from './targets.js'
+import { learningTools } from './learning.js'
+import { builtToolsFor } from './tools.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const PERMISSION_MODE = { allow: 'bypassPermissions', acceptEdits: 'acceptEdits', auto: 'auto', plan: 'plan', deny: 'dontAsk' }
@@ -62,11 +64,13 @@ export function resolveCwd(registry, def, cwd) {
 }
 
 /** A one-shot, tool-less Claude call (e.g. summaries). Returns the structured output with a schema, else the text. */
-export async function quickQuery({ prompt, system, schema, model = 'haiku', signal }) {
+export async function quickQuery({ prompt, system, schema, model = 'haiku', provider, signal }) {
   const abort = new AbortController()
   if (signal) signal.addEventListener('abort', () => abort.abort(), { once: true })
   const env = { ...cleanEnv(), CLAUDE_AGENT_SDK_CLIENT_APP: 'agent-forge/0.1.0' }
   delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL
+  // background summaries use the free models when their gateway is up, else the subscription
+  if (provider ?? (freeGateway() ? 'free' : null)) Object.assign(env, providerEnv({ name: 'quick-query', provider: provider ?? 'free' }))
   const options = {
     model, cwd: os.tmpdir(), abortController: abort, env, tools: [], persistSession: false, maxTurns: 3,
     systemPrompt: system ?? 'You summarize multi-agent project activity accurately and concisely.',
@@ -208,6 +212,7 @@ function systemAppend(def, mem, p, cwd) {
   if (mem.context) parts.push(mem.context)
   if (mem.toolDefs.length) parts.push('Memory is for what the next run of you cannot see for itself: the state of the work, tested rules, decisions and traps. Read it first and test it; it can be wrong or out of date.')
   if (p.know?.context) parts.push(p.know.context)
+  if (def.selfLearning !== false && (def.backend ?? 'claude-code') === 'claude-code') parts.push(`# Getting better at your job\nWhen you work out a way of doing your kind of work that you would want to follow again, write it down with the learn_skill tool before you finish: the steps, what to check, the mistakes to avoid. It is reviewed automatically and, if kept, your later runs have it. One good procedure is worth more than several thin ones. You can also give yourself tools: build_tool makes a small tool of your own from code you write (for a check, measurement or conversion you keep doing by hand), and install_tool adds a tool server from npm or from this installation's library when your work needs a capability you do not have. Both are tested and reviewed automatically, and what is kept is there in your later runs.${p.folders ? ` Reusable files you make (templates, checklists, helper scripts) belong in ${p.folders.files}, where your later runs find them.` : ''}`)
   return parts.join('\n\n')
 }
 
@@ -270,7 +275,8 @@ async function runClaudeCode(p, mem, cwd, write) {
   if (def.effort) options.effort = def.effort
   if (def.maxTurns) options.maxTurns = def.maxTurns
   if (def.maxBudgetUsd) options.maxBudgetUsd = Number(def.maxBudgetUsd)
-  if (def.fallbackModel) options.fallbackModel = def.fallbackModel
+  // a Claude fallback model means nothing on another provider (every Claude name maps to that provider's default)
+  if (def.fallbackModel && providerOf(def) === 'claude-code') options.fallbackModel = def.fallbackModel
   const extraDirs = [p.folders?.home, p.folders?.project, ...(p.folders?.extra ?? []), ...(def.additionalDirectories ?? [])].filter(d => d && d !== cwd)
   for (const d of extraDirs) fs.mkdirSync(d, { recursive: true })
   if (extraDirs.length) options.additionalDirectories = [...new Set(extraDirs)]
@@ -283,6 +289,20 @@ async function runClaudeCode(p, mem, cwd, write) {
   if (p.know?.toolDefs.length) {
     options.mcpServers.forge_knowledge = toolsMcp('forge_knowledge', p.know.toolDefs, (n, a) => p.know.handle(n, a))
     options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_knowledge']
+  }
+  // self-learning: the agent can write a procedure down as a skill for its later runs (see learning.js)
+  if (def.selfLearning !== false) {
+    const lt = learningTools(registry, def, { cwd })
+    options.mcpServers.forge_learning = toolsMcp('forge_learning', lt.toolDefs, lt.handle)
+    options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_learning']
+  }
+  // tools the agent built for itself (ownTools in its file); every call runs sandboxed (see tools.js)
+  if (def.ownTools?.length) {
+    const bt = builtToolsFor(registry, def, { cwd })
+    if (bt.toolDefs.length) {
+      options.mcpServers.forge_tools = toolsMcp('forge_tools', bt.toolDefs, bt.handle)
+      options.allowedTools = [...(options.allowedTools ?? []), 'mcp__forge_tools']
+    }
   }
   // extra in-process tool servers from the caller (e.g. the chat supervisor's worker tools)
   for (const [name, server] of Object.entries(p.extraMcp ?? {})) {
@@ -373,7 +393,7 @@ async function runClaudeCode(p, mem, cwd, write) {
     text: ok ? (result.result || text) : undefined,
     structured: result.structured_output,
     error: ok ? undefined : (result.errors?.join('; ') || result.result || result.subtype),
-    costUsd: result.total_cost_usd,
+    costUsd: isFree(def) ? 0 : result.total_cost_usd,
     turns: result.num_turns,
     sessionId,
   }
