@@ -335,10 +335,13 @@ export class Camps {
         const file = ctx.dir('candidates', r.name, 'base.json')
         const def = initialDef(this.registry, S, r)
         const old = readJson(file)
-        // a role that has not been scored yet follows the current settings (for example a newly chosen model)
-        if (old && (old.kept || ctx.camp.roles[r.name].baseline || hash(old.def) === hash(def))) continue
-        if (old) this.store.dropTrials(id, r.name)
-        ctx.store.saveCandidate(id, r.name, { id: 'base', parent: null, lever: 'base', why: 'the starting configuration: the existing agent as it is, or the architect\'s first draft', def, lessons: [], ts: now() })
+        // The starting point is fixed once it exists. It is made again only when the owner changes the camp's trainee
+        // model before the role has a first score. It must not follow the live agent it was copied from: that agent
+        // keeps learning skills while the camp runs, and every such change used to throw away the role's finished trials.
+        const from = hash(S.trainee ?? {})
+        if (old && (old.kept || ctx.camp.roles[r.name].baseline || old.from === undefined || old.from === from)) { if (old.from === undefined) ctx.store.saveCandidate(id, r.name, { ...old, from }); continue }
+        if (old) { this.store.dropTrials(id, r.name); ctx.log(`${r.name}: the trainee model changed before its first score, so it starts again from the new one`) }
+        ctx.store.saveCandidate(id, r.name, { id: 'base', parent: null, lever: 'base', from, why: 'the starting configuration: the existing agent as it is, or the architect\'s first draft', def, lessons: [], ts: now() })
       }
 
       ctx.api.phase('Datasets')

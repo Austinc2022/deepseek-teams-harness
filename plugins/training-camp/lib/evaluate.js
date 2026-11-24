@@ -261,7 +261,8 @@ export async function roleTrial(ctx, role, cand, task, split, n) {
   if (hit) return hit
   const def = isolate(ctx, cand)
   const work = workDir(ctx, role, cand, task, n)
-  const builder = Array.isArray(def.tools) && def.tools.includes('Write')
+  // a builder writes and runs files: by its role's kind, or by its tools ("default" is every tool)
+  const builder = ctx.camp.workflow?.roles.find(r => r.name === role)?.kind === 'builder' || def.tools === 'default' || (Array.isArray(def.tools) && (def.tools.includes('Write') || def.tools.includes('Bash')))
   const prompt = `${task.input}\n\n---\n${builder ? `Work in the current directory (${work}); every file you create belongs there. Finish with a short report: what you built, how to run it, and what you verified.` : 'Give your complete result in your final message; that message is what gets used.'}`
   const t0 = Date.now()
   // a builder writes, runs and fixes code: it gets three times the analyst's time. The clock starts when the run does.
