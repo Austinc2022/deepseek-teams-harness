@@ -36,6 +36,7 @@ import { Repair, REPAIR_TOOLS } from './repair.js'
 import { Advisory, ADVICE_TOOL } from './advisory.js'
 import { GroupLink, HQ_TOOL } from './group-link.js'
 import { MemoryKeeper } from './dream.js'
+import { runJob, isJob } from './jobs.js'
 import { withMemory } from '../../agent-forge/lib/memctx.js'
 import { withTarget, Targets } from '../../agent-forge/lib/targets.js'
 import { purposeSlug } from '../../agent-forge/lib/memory.js'
@@ -358,7 +359,7 @@ export class SuperAgent {
     const due = this.store.read().schedules.filter(x => x.status === 'active' && x.at <= t)
     if (!due.length) return
     const owner = ref => { const s = this.store.read(); return ref.startsWith('sa:') && s.agents.some(a => `sa:${a.id}` === ref) ? ref.slice(3) : s.agents.find(a => !a.parent)?.id ?? 'ceo' }
-    for (const x of due) this.trigger({ key: `sched:${x.id}:${x.at}`, source: 'owner', kind: 'scheduled', to: owner(x.ref), text: `Scheduled by the owner for "${x.name ?? x.ref}" (set ${x.createdAt?.slice(0, 16)}):\n${this.ownerText(x.ref, x.name ?? x.ref, x.text)}` })
+    for (const x of due) this.trigger({ key: `sched:${x.id}:${x.at}`, source: 'owner', kind: 'scheduled', to: owner(x.ref), text: `Scheduled by the owner for "${x.name ?? x.ref}" (set ${x.createdAt?.slice(0, 16)}):\n${this.ownerText(x.ref, x.name ?? x.ref, x.text)}${x.job ? `\n\nResult of the check "${x.job}", run just now:\n${runJob(x.job)}` : ''}` })
     this.store.update(s => {
       for (const x of due) {
         const y = s.schedules.find(z => z.id === x.id)
@@ -377,7 +378,7 @@ export class SuperAgent {
     if (c.type === 'schedule-add') {
       const at = new Date(c.at)
       if (Number.isNaN(at.getTime()) || !str(c.text, 1500).trim()) return
-      this.store.update(s => { if (s.schedules.filter(x => x.status === 'active').length < 60) s.schedules.push({ id: newId('s'), ref: String(c.ref), name: str(c.name, 120), text: str(c.text, 1500).trim(), at: at.toISOString(), everyMin: c.everyMin ? Number(c.everyMin) : null, status: 'active', createdAt: now(), runs: 0 }) })
+      this.store.update(s => { if (s.schedules.filter(x => x.status === 'active').length < 60) s.schedules.push({ id: newId('s'), ref: String(c.ref), name: str(c.name, 120), text: str(c.text, 1500).trim(), at: at.toISOString(), everyMin: c.everyMin ? Number(c.everyMin) : null, ...(isJob(c.job) ? { job: c.job } : {}), status: 'active', createdAt: now(), runs: 0 }) })
     } else if (c.type === 'schedule-cancel') {
       this.store.update(s => { const x = s.schedules.find(y => y.id === c.id); if (x) x.status = 'cancelled' })
     } else if (c.type === 'say') {

@@ -13,4 +13,7 @@ if [ ! -s "$TOKEN_FILE" ]; then
 fi
 export CLAUDE_BRIDGE_TOKEN="$(cat "$TOKEN_FILE")"
 export AGENT_FORGE_HOME="${AGENT_FORGE_HOME:-$ROOT/forge}"
+# Before the Web UI starts (the plugin is not running yet, so its settings file is safe to write): keep the
+# OpenRouter provider on OpenRouter's current free models only. Never blocks the start.
+if [ "$1" = "web" ]; then node "$ROOT/scripts/openrouter-free-refresh.mjs" --apply --quiet || true; fi
 exec "$ROOT/node_modules/.bin/dsh" "$@"
