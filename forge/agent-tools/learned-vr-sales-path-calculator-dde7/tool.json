@@ -1,0 +1,50 @@
+{
+  "id": "learned-vr-sales-path-calculator-dde7",
+  "name": "vr_sales_path_calculator",
+  "description": "Calculate an honest, assumption-transparent path from price + conversion to $10M net revenue for a Quest VR title. Takes price, estimated reviews (or buyers), Meta commission rate, Quest MAU, and returns copies needed, % of MAU, review factor implied, and a reality flag. Used to ground each game's Commercial Block in math, not optimism.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "price_usd": {
+        "type": "number",
+        "description": "Game price in USD (e.g. 14.99)"
+      },
+      "target_net_usd": {
+        "type": "number",
+        "default": 10000000,
+        "description": "Net revenue target after store cut (default $10M)"
+      },
+      "commission_rate": {
+        "type": "number",
+        "default": 0.3,
+        "description": "Meta store commission (0.30 Horizon Store/App Lab, 0.15 in-headset web)"
+      },
+      "quest_mau": {
+        "type": "number",
+        "default": 18000000,
+        "description": "Quest monthly active users"
+      },
+      "review_multiplier": {
+        "type": "number",
+        "default": 110,
+        "description": "Curran Games Agency review-to-buyer factor (75 niche / 110 median / 250 casual)"
+      },
+      "estimated_reviews": {
+        "type": "number",
+        "description": "Expected public review count for this title (if known)"
+      }
+    },
+    "required": [
+      "price_usd"
+    ]
+  },
+  "example": {
+    "price_usd": 14.99,
+    "commission_rate": 0.3,
+    "quest_mau": 18000000,
+    "review_multiplier": 110,
+    "estimated_reviews": 5000
+  },
+  "source": "learned:vr-head-business",
+  "ts": "2026-11-24T09:17:47.091Z"
+}
