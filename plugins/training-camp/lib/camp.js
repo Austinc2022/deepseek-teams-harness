@@ -226,8 +226,12 @@ export class Camps {
     return this.store.write(camp)
   }
 
-  updateSettings(id, patch) {
-    return this.store.update(id, c => { c.settings = cleanSettings(deepMerge(c.settings, patch ?? {})) }).settings
+  /** `by`: 'owner' (the page, the CLI) or who else changed it. How many agents and calls the owner chose is remembered as the speed to return to. */
+  updateSettings(id, patch, { by = 'owner' } = {}) {
+    return this.store.update(id, c => {
+      c.settings = cleanSettings(deepMerge(c.settings, patch ?? {}))
+      if (by === 'owner' && (patch?.parallelAgents != null || patch?.parallelCalls != null)) c.protect = { ...(c.protect ?? {}), parallel: { agents: c.settings.parallelAgents, calls: c.settings.parallelCalls } }
+    }).settings
   }
 
   remove(id) {

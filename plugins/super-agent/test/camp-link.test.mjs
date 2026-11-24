@@ -155,8 +155,14 @@ test('code fixes what needs no judgement: it slows a camp the provider keeps lim
   const w = world({ status: 'paused', settings: { parallelAgents: 4, parallelCalls: 8 }, pause: { reason: '429 quota', ts: ago(61) } })
   w.state.sourceState.camps = { c1: { resumes: 2, calls: 0 } }
   await w.look()
-  assert.deepEqual(w.calls, ['set:{"parallelAgents":1,"parallelCalls":2}', 'train'])
-  assert.match(w.triggers[0].text, /code lowered it to 1 agent and 2 calls at a time \(it was 4 and 8\)/)
+  assert.deepEqual(w.calls, ['set:{"parallelAgents":2,"parallelCalls":4}', 'train'])
+  assert.match(w.triggers[0].text, /code halved it to 2 agent\(s\) and 4 calls at a time \(it was 4 and 8\)[\s\S]*trained side by side/)
+  // calls get through again: back toward the speed the owner chose
+  w.c.protect = { parallel: { agents: 28, calls: 28 } }
+  w.c.spend.calls = 90
+  await w.look()
+  assert.equal(w.calls.at(-1), 'set:{"parallelAgents":4,"parallelCalls":8}')
+  assert.match(w.c.log.at(-1).msg, /back up to 4 agents and 8 calls[\s\S]*your setting is 28 and 28/)
   // a run that makes no model call for an hour is stopped by code, and resumed on the next looks
   const s = world({ status: 'training' })
   s.setBusy(true)

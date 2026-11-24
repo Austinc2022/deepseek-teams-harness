@@ -50,7 +50,7 @@ export const CAMP_TOOLS = [
   tool('camp_train', 'Start or resume training. Finished work is never repeated.', { id: S }),
   tool('camp_pause', 'Pause a camp on purpose. It stays paused until you or the owner resume it.', { id: S, reason: S }),
   tool('camp_redo', 'Run one part of a camp again: "scout" (find skills), "datasets" (write the tasks again), "rounds" (coach every role again from its first score), or "verify" (the final exams).', { id: S, part: { type: 'string', enum: ['scout', 'datasets', 'rounds', 'verify'] } }),
-  tool('camp_set', `Change how a camp trains: ${Object.keys(SETTABLE).join(', ')}. You can train more thoroughly (more rounds, candidates, tasks) and you can train slower (fewer agents and calls at once) when the provider keeps limiting. You cannot go below the owner's depth (${Object.entries(FLOOR).map(([k, v]) => `${k} ${v}`).join(', ')}): quality is not traded for quota. Budget, call limit and models are the owner's.`, { id: S, key: { type: 'string', enum: Object.keys(SETTABLE) }, value: { type: 'number' } }),
+  tool('camp_set', `Change how a camp trains: ${Object.keys(SETTABLE).join(', ')}. You can train more thoroughly (more rounds, candidates, tasks). The owner wants the agents trained side by side: code already halves the speed when the provider keeps limiting and raises it again afterwards, so lower parallelAgents or parallelCalls yourself only for a reason code cannot see. You cannot go below the owner's depth (${Object.entries(FLOOR).map(([k, v]) => `${k} ${v}`).join(', ')}): quality is not traded for quota. Budget, call limit and models are the owner's.`, { id: S, key: { type: 'string', enum: Object.keys(SETTABLE) }, value: { type: 'number' } }),
   tool('camp_publish', 'Publish a camp\'s trained agents, teams and workflow into the organisation. A camp that passed is published automatically; use this with force to publish what passed when some roles did not.', { id: S, force: { type: 'boolean' } }, ['id']),
   tool('camp_rollback', 'Undo a camp\'s last publish: the agents, teams and workflow go back to what they were.', { id: S }),
   tool('camp_retrain', 'Send an agent that a training camp trained back to training, because its real work keeps falling short. It starts from the agent as it is now; give examples of the real work it got wrong, which become its new practice tasks. The current agent keeps working meanwhile and is replaced only if the retrained one passes its final exam and scores higher. Use it when coaching (a skill, a change of instructions) did not fix a repeated gap.', { agent: { type: 'string', description: 'the agent name' }, why: { type: 'string', description: 'what it keeps getting wrong, concretely' }, examples: { type: 'array', description: 'up to 6 pieces of real work it got wrong', items: { type: 'object', properties: { task: { type: 'string', description: 'the task exactly as it was given, complete and self-contained' }, wrong: { type: 'string', description: 'what was wrong with the result' } }, required: ['task', 'wrong'] } } }, ['agent', 'why']),
@@ -194,7 +194,7 @@ export class CampLink {
         const floor = cs.get(id).protect?.floor?.[key] ?? FLOOR[key]
         if (floor != null && v < floor) throw new Error(`${key} cannot go below ${floor}. ${QUALITY_RULE}`)
         const [k1, k2] = key.split('.')
-        cs.updateSettings(id, k2 ? { [k1]: { [k2]: v } } : { [k1]: v })
+        cs.updateSettings(id, k2 ? { [k1]: { [k2]: v } } : { [k1]: v }, { by: me.id })
         mark(id, `set ${key} = ${v}`)
         return `${key} is now ${v}. It applies to work that has not run yet.`
       }
@@ -385,6 +385,14 @@ export class CampLink {
         if ((st.stalls ?? 0) + 1 >= 2) this.#tell(id, `stalled-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" stopped making model calls twice and was restarted by code each time. Read camp_status and the last log lines. If the provider is refusing calls, train fewer things at once (camp_set); if the harness hangs, have it fixed (repair_harness, with what you see).`)
       }
       if ((st.resumes || st.stalls) && calls - (st.resumeCalls ?? 0) >= 25) this.#save(id, { resumes: 0, stalls: 0, sameError: 0 })
+      // the provider lets calls through again: go back toward the speed the owner chose (it applies from the next run)
+      const want = c.protect?.parallel, S = c.settings ?? {}
+      if (want && calls - (st.resumeCalls ?? 0) >= 60 && (S.parallelAgents < want.agents || S.parallelCalls < want.calls) && Date.now() - new Date(st.spedAt ?? 0).getTime() > 30 * MIN) {
+        const next = { parallelAgents: Math.min(want.agents, Math.max(S.parallelAgents * 2, 2)), parallelCalls: Math.min(want.calls, Math.max(S.parallelCalls * 2, 4)) }
+        cs.updateSettings(id, next, { by: 'code' })
+        cs.store.update(id, x => { x.log.push({ ts: now(), msg: `the provider lets calls through again: back up to ${next.parallelAgents} agents and ${next.parallelCalls} calls at a time from the next run (your setting is ${want.agents} and ${want.calls})` }) })
+        this.#save(id, { spedAt: now() })
+      }
       return
     }
 
@@ -403,9 +411,11 @@ export class CampLink {
     const S = c.settings ?? {}
     if (n >= 2 && TRANSIENT_LIMIT.test(reason) && ((S.parallelAgents ?? 1) > 1 || (S.parallelCalls ?? 1) > 2)) {
       const was = `${S.parallelAgents} and ${S.parallelCalls}`
-      cs.updateSettings(id, { parallelAgents: 1, parallelCalls: 2 })
-      cs.store.update(id, x => { x.log.push({ ts: now(), msg: `the provider keeps limiting: lowered automatically to 1 agent and 2 calls at a time (was ${was})` }) })
-      this.#tell(id, `slowed-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" kept hitting the provider's limit, so code lowered it to 1 agent and 2 calls at a time (it was ${was}) and resumed it. Nothing for you to do unless you want it faster: that needs a model with more quota, which is the owner's setting.`)
+      // half as many at a time, each time the limit comes straight back; it climbs back when calls get through
+      const less = { parallelAgents: Math.max(1, Math.floor((S.parallelAgents ?? 1) / 2)), parallelCalls: Math.max(2, Math.floor((S.parallelCalls ?? 2) / 2)) }
+      cs.updateSettings(id, less, { by: 'code' })
+      cs.store.update(id, x => { x.log.push({ ts: now(), msg: `the provider keeps limiting: lowered automatically to ${less.parallelAgents} agent(s) and ${less.parallelCalls} calls at a time (was ${was}); it goes back up when calls get through` }) })
+      this.#tell(id, `slowed-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" kept hitting the provider's limit, so code halved it to ${less.parallelAgents} agent(s) and ${less.parallelCalls} calls at a time (it was ${was}) and resumed it; code raises it again when calls get through. Do not lower it further yourself: the owner wants the agents trained side by side. If the limit keeps coming back, tell the owner that the models' quota is what holds the camp back (reply_owner).`)
     }
     // the same error again and again is not the provider: it needs a fix, not another try
     const sameError = !TRANSIENT_LIMIT.test(reason) && !/restart|stopped|process that ran/.test(reason) && clip(reason, 120) === clip(st.lastReason, 120) ? (st.sameError ?? 0) + 1 : 0
