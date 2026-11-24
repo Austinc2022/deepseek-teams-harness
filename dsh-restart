@@ -1,0 +1,28 @@
+#!/bin/sh
+# Restart the harness without losing work in flight.
+#   ./dsh-restart            let running training-camp trials finish (up to 50 minutes), then restart
+#   ./dsh-restart --now      restart at once (running trials are lost and run again)
+#   ./dsh-restart --wait 20  wait at most 20 minutes
+# Camps are resumed by the leaders' loop a few minutes after the start. Output goes to forge/super-agent/harness.out.log.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT" || exit 1
+PORT="${DSH_PORT:-3080}"
+WAIT=50
+[ "$1" = "--now" ] && WAIT=0
+[ "$1" = "--wait" ] && WAIT="${2:-50}"
+busy() { node -e "
+const fs=require('fs'),p='$ROOT/forge/camps';let n=0
+try{for(const d of fs.readdirSync(p)){try{const c=JSON.parse(fs.readFileSync(p+'/'+d+'/camp.json','utf8'));if(c.active){try{process.kill(c.active.pid,0);n++;console.log(c.id)}catch{}}}catch{}}}catch{}
+process.exit(n?0:1)"; }
+if [ "$WAIT" -gt 0 ] && busy >/dev/null; then
+  for id in $(busy); do ./camp-cli drain "$id" >/dev/null 2>&1; echo "camp $id: finishing the trials that are running"; done
+  i=0
+  while busy >/dev/null && [ "$i" -lt $((WAIT * 6)) ]; do sleep 10; i=$((i + 1)); [ $((i % 30)) -eq 0 ] && echo "still finishing ($((i / 6)) of $WAIT minutes)"; done
+fi
+PID="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1)"
+if [ -n "$PID" ]; then kill "$PID"; i=0; while kill -0 "$PID" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done; fi
+mkdir -p "$ROOT/forge/super-agent"
+nohup ./dsh web --no-open >> "$ROOT/forge/super-agent/harness.out.log" 2>&1 &
+i=0
+while ! lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && [ "$i" -lt 90 ]; do sleep 1; i=$((i + 1)); done
+if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "the harness is up on port $PORT"; else echo "the harness did not start: see forge/super-agent/harness.out.log"; exit 1; fi

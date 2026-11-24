@@ -28,7 +28,7 @@ import { initialDef, scoutSkills, equipRoles, installScouted, trainRole, verifyR
 export const DEFAULTS = {
   budgetUsd: 20,            // the camp pauses when its estimated spend reaches this
   maxCalls: 1200,           // and when it has made this many model calls (a trial is two: the agent and the judge)
-  trialMinutes: 15,
+  trialMinutes: 15,         // an analyst's time for one task; a builder gets three times this
   parallelAgents: 4,        // how many agents are trained at the same time
   parallelCalls: 8,         // how many model calls the camp makes at the same time
   dataset: { train: 5, dev: 4, holdout: 4 },
@@ -319,7 +319,7 @@ export class Camps {
     if (!c0.workflow || c0.approvedVersion !== c0.workflowVersion) throw new Error('approve the workflow first')
     if (Array.isArray(roles)) this.updateSettings(id, { roles })
     return this.#start(id, 'train', async ctx => {
-      this.store.update(id, c => { c.status = 'training'; delete c.pause; delete c.pauseBy })
+      this.store.update(id, c => { c.status = 'training'; delete c.pause; delete c.pauseBy; delete c.drain })
       const wf = ctx.camp.workflow
       const S = ctx.settings
       const want = S.roles.length ? wf.roles.filter(r => S.roles.includes(r.name)) : wf.roles
@@ -394,6 +394,14 @@ export class Camps {
       fs.writeFileSync(ctx.dir('report.md'), `# Training camp report\n\n\`\`\`\n${report}\n\`\`\`\n`)
       return report
     })
+  }
+
+  /** Finish what is running and start nothing new: the camp pauses by itself within one trial's time. For restarts. */
+  drain(id) {
+    const c = this.store.read(id)
+    if (!this.#busy(c)) return { ok: false, note: 'nothing is running' }
+    this.store.update(id, x => { x.drain = now(); x.log.push({ ts: now(), msg: 'draining: running work finishes, nothing new starts' }) })
+    return { ok: true }
   }
 
   /** Stop the running phase. Training resumes from the trial cache with `train`. */

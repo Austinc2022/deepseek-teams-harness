@@ -49,6 +49,7 @@ export async function handle(cs, method, p, body, query) {
     if (action === 'approve') { const a = cs.approve(id); return { kept: a.kept, reset: a.reset } }
     if (action === 'train') return started(cs.train(id, Array.isArray(b.roles) ? { roles: b.roles } : {}))
     if (action === 'cancel') return cs.cancel(id)
+    if (action === 'drain') return cs.drain(id)
     if (action === 'publish') return cs.publish(id, { force: b.force === true })
     if (action === 'rollback') return cs.rollback(id)
     if (action === 'reset') { cs.reset(id, String(b.what ?? 'all'), { datasets: b.datasets === true }); return { ok: true } }

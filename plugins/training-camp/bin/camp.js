@@ -95,6 +95,7 @@ async function main() {
     case 'change': await follow(need(id, 'the camp id'), cs.revise(id, need(pos[1], 'what to change'))); break
     case 'approve': { const r = cs.approve(need(id, 'the camp id')); console.log(`approved workflow v${r.camp.workflowVersion}${r.kept.length ? `; kept the training of ${r.kept.join(', ')}` : ''}${r.reset.length ? `; to train: ${r.reset.join(', ')}` : ''}`); break }
     case 'train': await follow(need(id, 'the camp id'), cs.train(id, flag('roles') ? { roles: String(flag('roles')).split(',') } : {})); break
+    case 'drain': console.log(JSON.stringify(cs.drain(need(id, 'the camp id')))); break
     case 'stop': console.log(JSON.stringify(cs.cancel(need(id, 'the camp id')))); break
     case 'trials': console.log(cs.trials(need(id, 'the camp id'), need(pos[1], 'the role')).map(t => `${t.split.padEnd(7)} ${t.cand.padEnd(12)} ${String(t.score).padEnd(5)} ${t.costUsd != null ? `$${t.costUsd.toFixed(3)}` : '     '} ${t.title}${t.error ? `  [${t.error}]` : ''}${t.problems[0] ? `\n        ${t.problems[0]}` : ''}`).join('\n') || 'no trials yet'); break
     case 'skills': console.log((cs.store.read(need(id, 'the camp id')).scout?.skills ?? []).map((s, i) => `${i}  ${s.status.padEnd(9)} ${s.source}\n     ${s.why}`).join('\n') || 'the scout has not run or found nothing'); break

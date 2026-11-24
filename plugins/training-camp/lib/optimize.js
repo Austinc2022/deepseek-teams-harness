@@ -68,6 +68,8 @@ export function initialDef(registry, settings, role, kit) {
   d.description = role.description || d.description
   d.skills = [...new Set([...(d.skills ?? []), ...(role.skills ?? []), ...(kit?.skills ?? [])])].filter(s => installed.has(s)).slice(0, 16)
   d.tags = [...new Set([...(d.tags ?? []), 'training-camp'])]
+  // room to finish: a web-searching analyst passes 40 turns on an ordinary task, a builder that tests passes 120
+  d.maxTurns = Math.max(Number(d.maxTurns) || 0, role.kind === 'builder' ? 200 : 100)
   return normalizeAgent(withCommunitySearch(d, registry.d.mcp))
 }
 

@@ -274,7 +274,7 @@ async function runClaudeCode(p, mem, cwd, write) {
   }
   if (def.effort) options.effort = def.effort
   if (def.maxTurns) options.maxTurns = def.maxTurns
-  if (def.maxBudgetUsd) options.maxBudgetUsd = Number(def.maxBudgetUsd)
+  if (def.maxBudgetUsd && providerOf(def) === 'claude-code') options.maxBudgetUsd = Number(def.maxBudgetUsd)
   // a Claude fallback model means nothing on another provider (every Claude name maps to that provider's default)
   if (def.fallbackModel && providerOf(def) === 'claude-code') options.fallbackModel = def.fallbackModel
   const extraDirs = [p.folders?.home, p.folders?.project, ...(p.folders?.extra ?? []), ...(def.additionalDirectories ?? [])].filter(d => d && d !== cwd)

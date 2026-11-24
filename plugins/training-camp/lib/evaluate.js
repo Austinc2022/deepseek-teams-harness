@@ -73,6 +73,8 @@ export function makeCtx({ store, registry, id, api, hooks = {} }) {
       const c = store.read(id)
       if (c.spend.usd >= c.settings.budgetUsd) throw new Paused(`the camp's budget of $${c.settings.budgetUsd} is spent (raise settings.budgetUsd to continue)`)
       if (c.spend.calls >= c.settings.maxCalls) throw new Paused(`the camp reached its limit of ${c.settings.maxCalls} model calls (raise settings.maxCalls to continue)`)
+      // draining: work that runs finishes and is judged; nothing new starts
+      if (c.drain && !String(opts.label ?? '').startsWith('judge:')) throw new Paused('stopping for a restart: the work that was running finished first')
       let res
       for (let attempt = 0; ; attempt++) {
         res = await api.agent(name, prompt, { ...opts, full: true })
@@ -116,6 +118,8 @@ export function isolate(ctx, cand) {
   d.memory = { ...(d.memory ?? {}), mode: mode === 'markdown' || mode === 'hybrid' ? 'markdown' : 'none', scope: 'agent', namespace: `camp-${ctx.id}-${hash(`${d.name}:${cand.id}`, 12)}` }
   delete d.project
   d.folders = []
+  // a trial is measured on the task alone: no company knowledge store, no transcripts of other work
+  d.knowledge = false
   // in a trial, a skill the agent writes for itself is only proposed; the camp reviews it and tries it, measured
   if (d.selfLearning !== false) d.selfLearning = { proposalsDir: ctx.dir('proposals', d.name) }
   d.permissionRules = { allow: d.permissionRules?.allow ?? [], deny: [...(d.permissionRules?.deny ?? []), ...deny.flatMap(x => [`Read(/${x})`, `Read(/${x}/**)`])] }
@@ -260,7 +264,8 @@ export async function roleTrial(ctx, role, cand, task, split, n) {
   const builder = Array.isArray(def.tools) && def.tools.includes('Write')
   const prompt = `${task.input}\n\n---\n${builder ? `Work in the current directory (${work}); every file you create belongs there. Finish with a short report: what you built, how to run it, and what you verified.` : 'Give your complete result in your final message; that message is what gets used.'}`
   const t0 = Date.now()
-  const res = await ctx.agent(def.name, prompt, { def, cwd: work, label: `${role}:${cand.id}:${task.id}`, signal: AbortSignal.timeout(ctx.settings.trialMinutes * 60_000) })
+  // a builder writes, runs and fixes code: it gets three times the analyst's time. The clock starts when the run does.
+  const res = await ctx.agent(def.name, prompt, { def, cwd: work, label: `${role}:${cand.id}:${task.id}`, timeoutMs: ctx.settings.trialMinutes * 60_000 * (builder ? 3 : 1) })
   const output = res.ok ? (res.text ?? JSON.stringify(res.structured ?? '')) : ''
   const checks = runChecks(task, output, work)
   const j = res.ok ? await judge(ctx, { title: `It is the work of the agent "${role}".`, task, output, work, label: `judge:${role}:${task.id}` }) : { score: 0, scores: [], problems: [`the run failed: ${clip(res.error, 300)}`] }

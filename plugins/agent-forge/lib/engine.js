@@ -155,12 +155,14 @@ export class Engine {
       await sem.acquire()
       try {
         if (abort.signal.aborted || opts.signal?.aborted) { entry.status = 'cancelled'; return null }
+        // opts.timeoutMs counts from here: time spent waiting for a free slot is not the agent's
+        const signals = [abort.signal, ...(opts.signal ? [opts.signal] : []), ...(Number(opts.timeoutMs) > 0 ? [AbortSignal.timeout(Number(opts.timeoutMs))] : [])]
         entry.status = 'running'
         entry.startedAt = new Date().toISOString()
         persist()
         const res = await runAgent({
           def, registry, prompt, schema: opts.schema, cwd: opts.cwd ?? defaultCwd, team: opts.team ?? state.team,
-          runId: state.id, label, signal: opts.signal ? AbortSignal.any([abort.signal, opts.signal]) : abort.signal, transcriptFile: path.join(dir, file),
+          runId: state.id, label, signal: signals.length > 1 ? AbortSignal.any(signals) : abort.signal, transcriptFile: path.join(dir, file),
           ...(opts.contextNote ? { contextNote: opts.contextNote } : {}),
           ...(opts.purpose ? { purpose: opts.purpose } : {}),
           ...(opts.fresh ? { fresh: true } : {}),
