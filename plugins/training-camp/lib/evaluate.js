@@ -7,18 +7,26 @@
  *     never leaks into the next and nothing reaches the live agent's memory
  *   - no project folder and no extra folders; reading the camp's datasets, sealed set and candidates is denied
  *
+ *   - settings.trial can switch off the web and the self-learning tools for the trials of a camp
+ *
  * Score of a trial, 0 to 1: the judge's weighted rubric score, combined with the task's deterministic checks.
- * A failed check marked `must` caps the score at 0.4.
+ * Only one check can cap the score (at 0.4): a builder's deliverable file, marked `must`, that does not exist.
+ * A read-only agent answers in its message, so a file check of its task is read against that message.
  *
  * A trial that fails because of the infrastructure (subscription limit, missing key, network) does not count as
  * a bad score: it pauses the camp, and the camp resumes from the trial cache.
+ *
+ * A run that ends with nothing to grade (it ran out of time, the answer was cut off at the output limit, the
+ * provider refused the request) is run once more. If that fails too, a builder is graded on the files it left;
+ * otherwise the trial is recorded as void and left out of the mean. A set that is mostly void is an error of the
+ * role: it is counted and its void trials are run again on the camp's next run.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { normalizeAgent } from '../../agent-forge/lib/registry.js'
 import { openMemory, memoryDir } from '../../agent-forge/lib/memory.js'
-import { withCommunitySearch } from '../../agent-forge/lib/mcp.js'
+import { withCommunitySearch, SEARCH_SERVER } from '../../agent-forge/lib/mcp.js'
 import { clip, hash, mean, now, round } from './store.js'
 import { runWorkflow, workflowReport, structured } from './runflow.js'
 
@@ -120,8 +128,16 @@ export function isolate(ctx, cand) {
   d.folders = []
   // a trial is measured on the task alone: no company knowledge store, no transcripts of other work
   d.knowledge = false
-  // in a trial, a skill the agent writes for itself is only proposed; the camp reviews it and tries it, measured
-  if (d.selfLearning !== false) d.selfLearning = { proposalsDir: ctx.dir('proposals', d.name) }
+  const T = ctx.settings.trial ?? {}
+  // settings.trial.selfLearning: a skill the agent writes for itself in a trial is only proposed; the camp reviews
+  // it and tries it, measured. settings.trial.selfLearning = false takes the tools away.
+  if (T.selfLearning !== false) { if (d.selfLearning !== false) d.selfLearning = { proposalsDir: ctx.dir('proposals', d.name) } } else d.selfLearning = false
+  // settings.trial.web = false: no web search or fetch in a trial; the task has to carry its material
+  if (T.web === false) {
+    const WEB = ['WebSearch', 'WebFetch']
+    if (Array.isArray(d.tools)) d.tools = d.tools.filter(t => !WEB.includes(t)); else d.disallowedTools = [...new Set([...(d.disallowedTools ?? []), ...WEB])]
+    d.mcp = (d.mcp ?? []).filter(m => m !== SEARCH_SERVER)
+  }
   d.permissionRules = { allow: d.permissionRules?.allow ?? [], deny: [...(d.permissionRules?.deny ?? []), ...deny.flatMap(x => [`Read(/${x})`, `Read(/${x}/**)`])] }
   if (d.execution?.mode === 'sandbox') d.execution = { ...d.execution, denyRead: [...(d.execution.denyRead ?? [path.join(os.homedir(), '.ssh'), path.join(os.homedir(), '.aws')]), ...deny] }
   const def = normalizeAgent(d)
@@ -152,12 +168,21 @@ const inside = (root, rel) => {
 const readSmall = f => { try { return fs.statSync(f).size <= 2e6 ? fs.readFileSync(f, 'utf8') : '' } catch { return null } }
 const rx = v => { try { return new RegExp(String(v).slice(0, 300), 'i') } catch { return null } }
 
-/** Deterministic checks of a task against the final answer and the files in the trial folder. */
-export function runChecks(task, text, work) {
+/**
+ * Deterministic checks of a task against the final answer and the files in the trial folder.
+ * A read-only agent (builder: false) cannot write files: its message is its deliverable, so a file check of its
+ * task is read against the message when the file is not there.
+ */
+export function runChecks(task, text, work, { builder = true } = {}) {
   return (task.checks ?? []).map(c => {
     const v = String(c.value ?? '')
-    const file = c.path ? inside(work, c.path) : null
-    const body = file ? readSmall(file) : null
+    // task writers often name the file of a file-exists check in its value; a file check that names no file at all
+    // cannot be checked, and is left out
+    const rel = c.path || (c.type === 'file-exists' ? v : '')
+    if (String(c.type).startsWith('file-') && !rel) return null
+    const file = rel ? inside(work, rel) : null
+    let body = file ? readSmall(file) : null
+    if (body === null && !builder && rel && text.trim()) body = text
     let ok = false
     switch (c.type) {
       case 'contains': ok = !!v && text.toLowerCase().includes(v.toLowerCase()); break
@@ -170,7 +195,7 @@ export function runChecks(task, text, work) {
       case 'file-regex': ok = body != null && !!rx(v)?.test(body.slice(0, 200000)); break
       default: return null
     }
-    return { type: c.type, value: v.slice(0, 80), ...(c.path ? { path: c.path } : {}), must: c.must === true, ok }
+    return { type: c.type, value: v.slice(0, 80), ...(rel ? { path: rel } : {}), must: c.must === true, ok }
   }).filter(Boolean)
 }
 
@@ -200,11 +225,13 @@ const JUDGE = {
   required: ['scores', 'problems'],
 }
 
-async function judge(ctx, { title, task, output, work, label, context }) {
+async function judge(ctx, { title, task, output, work, label, context, files: withFiles = true }) {
   const def = ctx.staff('judge')
   def.permissionRules = { allow: [], deny: denied(ctx).flatMap(x => [`Read(/${x})`, `Read(/${x}/**)`]) }
+  // work that is only a message is graded in one answer: the judge gets no tools, so it does not go looking
+  if (!withFiles) { def.tools = []; def.maxTurns = 4 }
   const rubric = task.rubric?.length ? task.rubric : [{ criterion: 'The work fully and correctly does what the task asks', weight: 1 }]
-  const files = listFiles(work)
+  const files = withFiles ? listFiles(work) : []
   const prompt = [
     `Grade this work. ${title}`,
     context ? `# What the work is for\n${context}` : '',
@@ -213,9 +240,14 @@ async function judge(ctx, { title, task, output, work, label, context }) {
     `# The agent's final answer\n${output ? clip(output, 24000) : '(the agent gave no answer)'}`,
     files.length ? `# Files the agent left in ${work} (read them; they are part of the work)\n${files.join('\n')}` : '',
     'Return one score per rubric criterion, in the rubric\'s order. A 7 means good professional work with small gaps; 9 or 10 is rare.',
+    withFiles ? '' : 'Everything to grade is above. You have no tools in this task and need none: answer directly with the JSON object.',
   ].filter(Boolean).join('\n\n')
-  const res = await ctx.agent(def.name, prompt, { def, schema: JUDGE, label, cwd: work })
-  const v = res.ok ? structured(res) : null
+  let res, v
+  // an answer cut off at the output limit, or one that is not the JSON asked for, is asked for once more
+  for (let attempt = 1; attempt <= 2 && !v?.scores?.length; attempt++) {
+    res = await ctx.agent(def.name, prompt, { def, schema: JUDGE, label, cwd: work })
+    v = res.ok ? structured(res) : null
+  }
   if (!v?.scores?.length) throw new Paused(`the judge gave no usable score (${res.error ?? 'not valid JSON'}); nothing was recorded for this trial`)
   let sum = 0, weight = 0
   rubric.forEach((r, i) => {
@@ -226,9 +258,14 @@ async function judge(ctx, { title, task, output, work, label, context }) {
   return { score: round(sum / weight / 10), scores: v.scores.slice(0, 10).map(s => ({ criterion: clip(s.criterion, 160), score: s.score, reason: clip(s.reason, 400) })), problems: (v.problems ?? []).slice(0, 8).map(p => clip(p, 400)) }
 }
 
-function combine(j, checks) {
+/**
+ * The judge's score and the checks, as one number. Only a missing deliverable caps it: a builder's file, marked
+ * `must`, that does not exist. Every other failed check costs its share of the checks' quarter and no more: a text
+ * pattern written before any answer existed is too brittle to overrule the judge.
+ */
+export function combine(j, checks, { builder = true } = {}) {
   let score = checks.length ? 0.75 * j.score + 0.25 * (checks.filter(c => c.ok).length / checks.length) : j.score
-  if (checks.some(c => c.must && !c.ok)) score = Math.min(score, 0.4)
+  if (builder && checks.some(c => c.must && !c.ok && c.type === 'file-exists')) score = Math.min(score, 0.4)
   return round(score)
 }
 
@@ -247,7 +284,15 @@ function workDir(ctx, key, cand, task, n) {
   return work
 }
 
-const cached = (ctx, key) => ctx.store.trials(ctx.id).find(t => t.key === key)
+// a void trial (nothing to grade) is not an answer: it is run again
+const cached = (ctx, key) => ctx.store.trials(ctx.id).findLast(t => t.key === key && !t.void)
+
+/** A builder: by its role's kind, or by its tools ("default" is every tool). */
+export const isBuilder = (camp, role, def) => camp.workflow?.roles.find(r => r.name === role)?.kind === 'builder' || def.tools === 'default' || (Array.isArray(def.tools) && (def.tools.includes('Write') || def.tools.includes('Bash')))
+
+// some providers answer a request they will not serve with this sentence, as if it were the agent's answer
+const REFUSED = /^\s*The request was rejected because it was considered high risk/i
+const usable = res => !!res?.ok && !REFUSED.test(String(res.text ?? ''))
 
 function record(ctx, row) {
   ctx.store.appendTrial(ctx.id, { ...row, ts: now() })
@@ -260,17 +305,31 @@ export async function roleTrial(ctx, role, cand, task, split, n) {
   const hit = cached(ctx, key)
   if (hit) return hit
   const def = isolate(ctx, cand)
-  const work = workDir(ctx, role, cand, task, n)
-  // a builder writes and runs files: by its role's kind, or by its tools ("default" is every tool)
-  const builder = ctx.camp.workflow?.roles.find(r => r.name === role)?.kind === 'builder' || def.tools === 'default' || (Array.isArray(def.tools) && (def.tools.includes('Write') || def.tools.includes('Bash')))
-  const prompt = `${task.input}\n\n---\n${builder ? `Work in the current directory (${work}); every file you create belongs there. Finish with a short report: what you built, how to run it, and what you verified.` : 'Give your complete result in your final message; that message is what gets used.'}`
+  const builder = isBuilder(ctx.camp, role, def)
   const t0 = Date.now()
-  // a builder writes, runs and fixes code: it gets three times the analyst's time. The clock starts when the run does.
-  const res = await ctx.agent(def.name, prompt, { def, cwd: work, label: `${role}:${cand.id}:${task.id}`, timeoutMs: ctx.settings.trialMinutes * 60_000 * (builder ? 3 : 1) })
-  const output = res.ok ? (res.text ?? JSON.stringify(res.structured ?? '')) : ''
-  const checks = runChecks(task, output, work)
-  const j = res.ok ? await judge(ctx, { title: `It is the work of the agent "${role}".`, task, output, work, label: `judge:${role}:${task.id}` }) : { score: 0, scores: [], problems: [`the run failed: ${clip(res.error, 300)}`] }
-  return record(ctx, { key, role, cand: cand.id, task: task.id, stage: task.stage ?? null, split, n, score: res.ok ? combine(j, checks) : 0, judge: j, checks, ok: res.ok, error: res.ok ? null : clip(res.error, 300), costUsd: res.costUsd ?? null, turns: res.turns ?? null, ms: Date.now() - t0, excerpt: clip(output, 1500), work: path.relative(ctx.dir(), work) })
+  let work, res
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    work = workDir(ctx, role, cand, task, n)
+    const prompt = `${task.input}\n\n---\n${builder ? `Work in the current directory (${work}); every file you create belongs there. Finish with a short report: what you built, how to run it, and what you verified.` : 'Give your complete result in your final message; that message is what gets used. You cannot write files: where the task names a file to deliver, its content is your final message.'}`
+    // a builder writes, runs and fixes code: it gets three times the analyst's time. The clock starts when the run does.
+    res = await ctx.agent(def.name, prompt, { def, cwd: work, label: `${role}:${cand.id}:${task.id}`, timeoutMs: ctx.settings.trialMinutes * 60_000 * (builder ? 3 : 1) })
+    if (usable(res)) break
+  }
+  const good = usable(res)
+  const error = good ? null : clip(res.ok ? 'the provider refused the request' : res.error, 300)
+  const row = { key, role, cand: cand.id, task: task.id, stage: task.stage ?? null, split, n, ok: good, error, costUsd: res.costUsd ?? null, turns: res.turns ?? null, work: path.relative(ctx.dir(), work) }
+  const output = good ? (res.text ?? JSON.stringify(res.structured ?? '')) : ''
+  // a builder that did not finish is graded on what it left, when it left more than it was given
+  const given = new Set((task.fixtures ?? []).map(f => path.normalize(String(f.path))))
+  const left = good || !builder ? [] : listFiles(work).filter(f => !given.has(path.normalize(f.replace(/ \(\d+ bytes\)$/, ''))))
+  if (!good && !left.length) {
+    ctx.log(`${role}: a run of ${cand.id} on "${clip(task.title ?? task.id, 60)}" gave nothing to grade twice (${clip(error, 120)}); it is left out of the score`)
+    return record(ctx, { ...row, void: true, score: 0, judge: { score: 0, scores: [], problems: [`nothing to grade: ${error}`] }, checks: [], ms: Date.now() - t0, excerpt: '' })
+  }
+  const said = good ? output : `(The agent did not finish and gave no final report: ${error}. Grade the files it left.)`
+  const checks = runChecks(task, output, work, { builder })
+  const j = await judge(ctx, { title: `It is the work of the agent "${role}".`, task, output: said, work, label: `judge:${role}:${task.id}`, files: builder })
+  return record(ctx, { ...row, ...(good ? {} : { partial: true }), score: combine(j, checks, { builder }), judge: j, checks, ms: Date.now() - t0, excerpt: clip(output, 1500) })
 }
 
 /** One trial of the whole workflow (a team candidate: the workflow plus one definition per role) on one small goal. */
@@ -299,7 +358,10 @@ export async function evalSet(ctx, key, cand, tasks, split, trials = 1) {
   const done = await Promise.allSettled(jobs.map(j => j()))
   const bad = done.find(d => d.status === 'rejected')
   if (bad) throw bad.reason
-  const rows = done.map(d => d.value)
+  const all = done.map(d => d.value)
+  // void trials (nothing to grade) are left out; a set that is mostly void measured nothing
+  const rows = all.filter(r => !r.void)
+  if (rows.length * 2 < all.length) throw new Error(`${all.length - rows.length} of ${all.length} runs of ${cand.id} gave nothing to grade (${clip(all.find(r => r.void)?.error, 160)})`)
   const costs = rows.map(r => r.costUsd).filter(c => c != null)
   return { score: round(mean(rows.map(r => r.score))), passRate: round(rows.filter(r => r.score >= ctx.settings.criteria.minScore).length / rows.length, 2), costUsd: costs.length ? round(mean(costs), 4) : null, n: rows.length, rows }
 }

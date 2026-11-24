@@ -372,7 +372,7 @@ function stageDetail(c, m, x) {
       h('h3', null, 'Skills given to each agent'),
       m.agents.some(g => g.x.kit) ? table(['Agent', 'Skills and tools chosen to try', 'Why'], m.agents.map(g => { const kit = g.x.kit; return h('tr', null, h('td', null, name(g)), h('td', { class: 'small' }, kit ? (kit.skills.length ? kit.skills.map(n => h('span', { class: 'tag', style: 'margin-right:4px' }, [].concat(kit.created ?? []).includes(n) ? n + ' (newly written)' : n), (kit.mcp ?? []).map(n => h('span', { class: 'tag', style: 'margin-right:4px' }, 'tool server: ' + n))) : (kit.mcp ?? []).length ? kit.mcp.map(n => h('span', { class: 'tag' }, 'tool server: ' + n)) : 'none added') : wait('not chosen yet')), h('td', { class: 'small muted' }, kit?.why ?? '')) }))
         : h('p', { class: 'muted small' }, 'Each agent gets what its role needs: as many installed skills as its work calls for, new skills written for the parts nothing covers, and the tool servers it needs.'),
-      h('p', { class: 'small muted' }, 'Being chosen is not being kept: after its first score, each agent tries every chosen skill alone on its practice tasks, the ones that help are combined, and the best mix is kept only if it also does better on the check tasks. Open an agent and look at "Skill trial" under Coaching.'),
+      h('p', { class: 'small muted' }, 'Being chosen is not being kept: after its first score, each agent tries the skills chosen for it together on its practice tasks, and keeps them only if it also does better on the check tasks. An agent that is already at the target skips this. Open an agent and look at "Skill trial" under Coaching.'),
       log(/skill scout/i)]
   } else if (k === 'sets') {
     const cell = (g, key) => { const n = g.sets[key], w = S.dataset[key]; return h('td', null, h('span', { class: 'chip ' + (n >= w ? 'good' : n ? 'info' : '') }, `${Math.min(n, w)} of ${w}`)) }
@@ -449,7 +449,7 @@ const taskView = (x, set) => h('details', null, h('summary', null, h('span', { c
   x.fixtures.length ? h('div', { class: 'small muted' }, 'Files given to the agent: ' + x.fixtures.map(f => f.path).join(', ')) : null)
 
 const trialView = x => h('details', null,
-  h('summary', null, h('b', { class: 'num' }, pc(x.score)), ' ', h('span', { class: 'tag' }, SET[x.split] ?? x.split), ' ', h('span', { class: 'tag' }, ver(x.cand)), ' ', x.title, x.error ? h('span', { class: 'chip bad', style: 'margin-left:6px' }, 'run failed') : null),
+  h('summary', null, h('b', { class: 'num' }, x.void ? '–' : pc(x.score)), ' ', h('span', { class: 'tag' }, SET[x.split] ?? x.split), ' ', h('span', { class: 'tag' }, ver(x.cand)), ' ', x.title, x.error ? h('span', { class: 'chip bad', style: 'margin-left:6px' }, x.void ? 'nothing to grade: not counted' : x.partial ? 'did not finish: graded on what it left' : 'run failed') : null),
   x.error ? h('div', { class: 'note err' }, x.error) : null,
   x.criteria.length ? h('table', null, h('tbody', null, x.criteria.map(k => h('tr', null, h('td', { class: 'num', style: 'white-space:nowrap' }, h('b', null, `${k.score}/10`)), h('td', null, k.criterion), h('td', { class: 'small muted' }, k.reason))))) : null,
   x.problems.length ? h('div', { class: 'small' }, h('b', null, 'What the judge found wrong'), h('ul', { class: 'plain' }, x.problems.map(q => h('li', null, q)))) : null,

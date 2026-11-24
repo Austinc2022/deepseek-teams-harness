@@ -37,6 +37,9 @@ export const DEFAULTS = {
   minGain: 0.02,            // a candidate must beat the current best on dev by this much
   criteria: { minScore: 0.7, maxGap: 0.2, noise: 0.02 },
   verify: { trials: 1 },
+  // what a trainee may use inside a trial besides its own tools: the web, and writing itself skills and tools
+  // (the camp reviews those and tries them, measured). Both on; switch one off per camp when it costs more than it gives
+  trial: { web: true, selfLearning: true },
   team: { enabled: true, dev: 2, holdout: 2, rounds: 1, candidates: 1 },
   roles: [],                // train only these roles; empty = all
   // Free models by default. On the Claude subscription use e.g. allowedModels haiku/sonnet/opus, trainee sonnet,
@@ -63,6 +66,7 @@ function cleanSettings(s) {
     target: num(m.target, 0, 1, D.target), minGain: num(m.minGain, 0, 1, D.minGain),
     criteria: { minScore: num(m.criteria?.minScore, 0, 1, 0.7), maxGap: num(m.criteria?.maxGap, 0, 1, 0.2), noise: num(m.criteria?.noise, 0, 0.5, 0.02) },
     verify: { trials: int(m.verify?.trials, 1, 5, 1) },
+    trial: { web: m.trial?.web !== false, selfLearning: m.trial?.selfLearning !== false },
     team: { enabled: m.team?.enabled !== false, dev: int(m.team?.dev, 1, 20, 2), holdout: int(m.team?.holdout, 1, 20, 2), rounds: int(m.team?.rounds, 0, 10, 1), candidates: int(m.team?.candidates, 1, 3, 1) },
     roles: strs(m.roles, []), allowedModels: strs(m.allowedModels, D.allowedModels),
     trainee: m.trainee && typeof m.trainee === 'object' ? m.trainee : D.trainee,
@@ -127,7 +131,7 @@ export class Camps {
   trials(id, role) {
     const titles = {}
     for (const s of ['train', 'dev']) for (const t of this.store.tasks(id, role, s)) titles[t.id] = t.title
-    return this.store.trials(id).filter(t => t.role === role).map(t => ({ cand: t.cand, task: t.task, title: t.split === 'holdout' ? '(sealed)' : titles[t.task] ?? t.task, split: t.split, n: t.n, score: t.score, ok: t.ok, error: t.error, costUsd: t.costUsd, turns: t.turns, ms: t.ms, problems: t.split === 'holdout' ? [] : t.judge?.problems ?? [], ts: t.ts }))
+    return this.store.trials(id).filter(t => t.role === role).map(t => ({ cand: t.cand, task: t.task, title: t.split === 'holdout' ? '(sealed)' : titles[t.task] ?? t.task, split: t.split, n: t.n, score: t.score, ok: t.ok, ...(t.void ? { void: true } : {}), ...(t.partial ? { partial: true } : {}), error: t.error, costUsd: t.costUsd, turns: t.turns, ms: t.ms, problems: t.split === 'holdout' ? [] : t.judge?.problems ?? [], ts: t.ts }))
   }
 
   candidate(id, role, cid) { return this.store.candidate(id, role, cid) }
@@ -139,7 +143,7 @@ export class Camps {
   steps(id) {
     const c = this.store.read(id)
     if (!c.workflow) return []
-    const trials = this.store.trials(id)
+    const trials = this.store.trials(id).filter(t => !t.void)
     const avg = rows => (rows.length ? round(mean(rows.map(r => r.score)), 2) : null)
     const out = c.workflow.stages.map(s => {
       const people = [{ role: s.role, as: 'owner' }, ...(s.reviewer ? [{ role: s.reviewer, as: 'reviewer' }] : [])].map(p => {
@@ -187,7 +191,7 @@ export class Camps {
     for (const k of ['train', 'dev']) for (const t of this.store.tasks(id, role, k)) titles[t.id] = t.title
     return this.store.trials(id).filter(t => t.role === role && (!stage || !many || !t.stage || t.stage === stage)).map(t => {
       const sealed = t.split === 'holdout'
-      return { cand: t.cand, task: t.task, title: sealed ? '(sealed task)' : titles[t.task] ?? t.task, split: t.split, n: t.n, score: t.score, ok: t.ok, error: t.error, costUsd: t.costUsd, turns: t.turns, seconds: t.ms ? Math.round(t.ms / 1000) : null, ts: t.ts,
+      return { cand: t.cand, task: t.task, title: sealed ? '(sealed task)' : titles[t.task] ?? t.task, split: t.split, n: t.n, score: t.score, ok: t.ok, ...(t.void ? { void: true } : {}), ...(t.partial ? { partial: true } : {}), error: t.error, costUsd: t.costUsd, turns: t.turns, seconds: t.ms ? Math.round(t.ms / 1000) : null, ts: t.ts,
         checks: t.checks ?? [], criteria: t.judge?.scores ?? [], problems: sealed ? [] : t.judge?.problems ?? [], answer: sealed ? '' : t.excerpt ?? '', folder: t.work ? path.join(this.store.dir(id), t.work) : null }
     })
   }

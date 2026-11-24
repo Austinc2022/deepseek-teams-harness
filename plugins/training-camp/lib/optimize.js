@@ -394,7 +394,7 @@ const PROPOSALS = {
 
 function failures(ctx, key, candId, split, max = 4) {
   const tasks = Object.fromEntries(ctx.store.tasks(ctx.id, key, split).map(t => [t.id, t]))
-  return ctx.store.trials(ctx.id).filter(t => t.role === key && t.cand === candId && t.split === split && tasks[t.task]).sort((a, b) => a.score - b.score).slice(0, max).map(t => [
+  return ctx.store.trials(ctx.id).filter(t => t.role === key && t.cand === candId && t.split === split && tasks[t.task] && !t.void).sort((a, b) => a.score - b.score).slice(0, max).map(t => [
     `### Task "${tasks[t.task].title}" scored ${t.score}`,
     `Task: ${clip(tasks[t.task].input, 1200)}`,
     t.error ? `Run error: ${t.error}` : '',
@@ -502,46 +502,53 @@ export async function trainRole(ctx, role) {
     ctx.log(`${name}: baseline train ${a.score}, dev ${b.score}`)
   }
 
-  // Skill trial: each skill chosen for this role is tried alone on the practice tasks; the ones that help are
-  // combined; the best variant is kept only if it also wins on the check tasks.
+  // Skill trial: everything chosen for this role (its skills, tool servers and own tools) is tried together, as
+  // one variant, on the practice tasks; it is kept only if it also wins on the check tasks. Trying each skill
+  // alone cost up to twelve times the practice set per role and kept nothing. The coach can still add or remove
+  // single skills in its rounds. A role that is already at the target skips the trial.
   // skills the agent wrote for itself while it did its first tasks: reviewed here, then tried like any other skill
   const tried = st().rounds.some(r => r.kind === 'skills')
-  const own = tried ? [] : await ownSkills(ctx, role)
-  const made = tried ? { tools: [], mcp: [] } : await ownTools(ctx, role)
-  const kit = { skills: [...(st().kit?.skills ?? []), ...own], mcp: [...(st().kit?.mcp ?? []), ...made.mcp], tools: made.tools }
-  if ((kit.skills.length || kit.mcp.length || kit.tools.length) && !tried) {
+  const atTarget = st().best.dev >= S.target
+  const own = tried || atTarget ? [] : await ownSkills(ctx, role)
+  const made = tried || atTarget ? { tools: [], mcp: [] } : await ownTools(ctx, role)
+  const kit = { skills: [...(st().kit?.skills ?? []), ...own], mcp: [...(st().kit?.mcp ?? []), ...made.mcp], tools: [...(st().kit?.tools ?? []), ...made.tools] }
+  if ((kit.skills.length || kit.mcp.length || kit.tools.length) && !tried && !atTarget) {
     ctx.api.phase?.(`Skill and tool trial: ${name}`)
     const cur = st()
     const base = ctx.store.candidate(ctx.id, name, 'base')
     const installed = new Set(listSkills(ctx.registry.d.skills).map(x => x.name))
-    const adds = [
-      ...(kit.skills ?? []).filter(x => installed.has(x) && !base.def.skills.includes(x)).map(x => ({ skills: [x], mcp: [], tools: [] })),
-      ...(kit.mcp ?? []).filter(x => !base.def.mcp.includes(x) && fs.existsSync(path.join(ctx.registry.d.mcp, `${x}.yaml`))).map(x => ({ skills: [], mcp: [x], tools: [] })),
-      ...kit.tools.map(x => ({ skills: [], mcp: [], tools: [x] })),
-    ].slice(0, 12)
-    const label = a => [...a.skills, ...a.mcp.map(x => `tool server ${x}`), ...(a.tools ?? []).map(x => `own tool ${x}`)].join(' + ')
-    const mk = (id, a, why) => ctx.store.saveCandidate(ctx.id, name, { id, parent: 'base', lever: a.skills.length ? 'skills' : 'tools', why, def: normalizeAgent({ ...base.def, skills: [...new Set([...base.def.skills, ...a.skills])].slice(0, 24), mcp: [...new Set([...base.def.mcp, ...a.mcp])], ...(a.tools.length || base.def.ownTools?.length ? { ownTools: [...new Set([...(base.def.ownTools ?? []), ...a.tools])] } : {}) }), lessons: [], ts: now() })
-    const scored = []
-    const run = async (c, a) => { const e = await evalSet(ctx, name, c, train, 'train'); scored.push({ id: c.id, lever: c.lever, why: c.why, skills: a.skills, mcp: a.mcp, tools: a.tools, train: e.score, costUsd: e.costUsd }); ctx.log(`${name} trial: ${label(a)} practice ${e.score} against ${cur.best.train}`) }
-    const one = async (a, i) => run(mk(`s1${'abcdefghijkl'[i]}-${hash(a, 4)}`, a, `adds ${a.skills.length ? (own.includes(a.skills[0]) ? 'a skill the agent wrote for itself:' : 'the skill') : a.tools.length ? 'a tool the agent built for itself:' : made.mcp.includes(a.mcp[0]) ? 'a tool server the agent asked for:' : 'the tool server'} ${a.skills[0] ?? a.tools[0] ?? a.mcp[0]}`), a)
-    const done = await Promise.allSettled(adds.map(one))
-    const bad = done.find(d => d.status === 'rejected')
-    if (bad) throw bad.reason
-    const good = scored.filter(x => x.train > cur.best.train + S.criteria.noise)
-    const mix = { skills: good.flatMap(x => x.skills), mcp: good.flatMap(x => x.mcp), tools: good.flatMap(x => x.tools ?? []) }
-    if (good.length > 1) await run(mk(`s1m-${hash(mix, 4)}`, mix, `combines what helped: ${label(mix)}`), mix)
-    const top = [...scored].sort((a, b) => b.train - a.train)[0]
-    let devScore = null, accepted = false
-    if (top && top.train > cur.best.train + S.criteria.noise) {
-      const e = await evalSet(ctx, name, ctx.store.candidate(ctx.id, name, top.id), dev, 'dev')
-      devScore = e.score
-      accepted = e.score - cur.best.dev >= S.minGain
-      ctx.log(`${name} trial: ${label(top)} check ${e.score} against ${cur.best.dev}: ${accepted ? 'kept' : 'not kept'}`)
+    const mix = {
+      skills: [...new Set(kit.skills)].filter(x => installed.has(x) && !base.def.skills.includes(x)).slice(0, 12),
+      mcp: [...new Set(kit.mcp)].filter(x => !base.def.mcp.includes(x) && fs.existsSync(path.join(ctx.registry.d.mcp, `${x}.yaml`))),
+      tools: [...new Set(kit.tools)].filter(x => !(base.def.ownTools ?? []).includes(x)),
     }
-    // what the trial measured goes to the company's skill records, so its own trials do not repeat it
-    try { for (const x of scored.filter(x => x.skills.length === 1 && !x.mcp.length && !(x.tools ?? []).length)) ctx.hooks?.skillResult?.({ camp: ctx.id, role: name, skill: x.skills[0], gain: round(x.train - cur.best.train, 3), kept: accepted && top.skills.includes(x.skills[0]) }) } catch {}
+    const adds = mix.skills.length + mix.mcp.length + mix.tools.length
+    const label = a => [...a.skills, ...a.mcp.map(x => `tool server ${x}`), ...(a.tools ?? []).map(x => `own tool ${x}`)].join(' + ')
+    const why = a => [
+      a.skills.filter(x => !own.includes(x)).length || a.mcp.filter(x => !made.mcp.includes(x)).length ? `adds what was chosen for this role: ${[...a.skills.filter(x => !own.includes(x)), ...a.mcp.filter(x => !made.mcp.includes(x)).map(x => `tool server ${x}`)].join(', ')}` : '',
+      a.skills.some(x => own.includes(x)) ? `adds a skill the agent wrote for itself: ${a.skills.filter(x => own.includes(x)).join(', ')}` : '',
+      a.tools.length ? `adds a tool the agent built for itself: ${a.tools.join(', ')}` : '',
+      a.mcp.some(x => made.mcp.includes(x)) ? `adds a tool server the agent asked for: ${a.mcp.filter(x => made.mcp.includes(x)).join(', ')}` : '',
+    ].filter(Boolean).join('; ')
+    const scored = []
+    let devScore = null, accepted = false, top = null
+    if (adds) {
+      const c = ctx.store.saveCandidate(ctx.id, name, { id: `s1k-${hash(mix, 4)}`, parent: 'base', lever: mix.skills.length ? 'skills' : 'tools', why: why(mix), def: normalizeAgent({ ...base.def, skills: [...new Set([...base.def.skills, ...mix.skills])].slice(0, 24), mcp: [...new Set([...base.def.mcp, ...mix.mcp])], ...(mix.tools.length || base.def.ownTools?.length ? { ownTools: [...new Set([...(base.def.ownTools ?? []), ...mix.tools])] } : {}) }), lessons: [], ts: now() })
+      const e = await evalSet(ctx, name, c, train, 'train')
+      top = { id: c.id, lever: c.lever, why: c.why, skills: mix.skills, mcp: mix.mcp, tools: mix.tools, train: e.score, costUsd: e.costUsd }
+      scored.push(top)
+      ctx.log(`${name} trial: ${label(mix)} practice ${e.score} against ${cur.best.train}`)
+      if (top.train > cur.best.train + S.criteria.noise) {
+        const d = await evalSet(ctx, name, c, dev, 'dev')
+        devScore = d.score
+        accepted = d.score - cur.best.dev >= S.minGain
+        ctx.log(`${name} trial: ${label(mix)} check ${d.score} against ${cur.best.dev}: ${accepted ? 'kept' : 'not kept'}`)
+      }
+      // a single skill measured alone goes to the company's skill records, so its own trials do not repeat it
+      try { if (mix.skills.length === 1 && !mix.mcp.length && !mix.tools.length) ctx.hooks?.skillResult?.({ camp: ctx.id, role: name, skill: mix.skills[0], gain: round(top.train - cur.best.train, 3), kept: accepted }) } catch {}
+    }
     set(r => {
-      r.rounds.push({ n: 0, kind: 'skills', diagnosis: adds.length ? `Each skill and tool server chosen for this role was tried alone on the practice tasks${good.length > 1 ? ', and the ones that helped were then combined' : ''}. ${good.length ? `Helped: ${good.map(label).join(', ')}.` : 'None raised the score, so the agent keeps what it had.'}` : 'What was chosen for this role was already part of the agent.', candidates: scored, promoted: devScore == null ? null : top.id, dev: devScore, accepted })
+      r.rounds.push({ n: 0, kind: 'skills', diagnosis: adds ? `The skills and tools chosen for this role were tried together on the practice tasks. ${top.train > cur.best.train + S.criteria.noise ? `They raised the practice score (${top.train} against ${cur.best.train})${accepted ? ' and held on the check tasks.' : ', but not the check score, so the agent keeps what it had.'}` : 'They did not raise the score, so the agent keeps what it had.'}` : 'What was chosen for this role was already part of the agent.', candidates: scored, promoted: devScore == null ? null : top.id, dev: devScore, accepted })
       if (accepted) r.best = { id: top.id, train: top.train, dev: devScore, costUsd: top.costUsd }
     })
   }

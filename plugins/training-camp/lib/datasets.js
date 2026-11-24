@@ -72,7 +72,10 @@ function clean(rows, split, taken, stageIds = []) {
       ...(stageIds.includes(String(t.stage)) ? { stage: String(t.stage) } : stageIds.length === 1 ? { stage: stageIds[0] } : {}),
       fixtures: (Array.isArray(t.fixtures) ? t.fixtures : []).filter(f => f?.path && !String(f.path).includes('..') && !path.isAbsolute(String(f.path))).slice(0, 8).map(f => ({ path: String(f.path).slice(0, 200), content: String(f.content ?? '').slice(0, 12000) })),
       rubric: (Array.isArray(t.rubric) ? t.rubric : []).filter(r => r?.criterion).slice(0, 6).map(r => ({ criterion: String(r.criterion).slice(0, 500), weight: Number(r.weight) > 0 ? Number(r.weight) : 1 })),
-      checks: (Array.isArray(t.checks) ? t.checks : []).filter(c => CHECK_TYPES.includes(c?.type)).slice(0, 8).map(c => ({ type: c.type, value: String(c.value ?? '').slice(0, 300), ...(c.path ? { path: String(c.path).slice(0, 200) } : {}), must: c.must === true })),
+      checks: (Array.isArray(t.checks) ? t.checks : []).filter(c => CHECK_TYPES.includes(c?.type)).slice(0, 8)
+        // a file-exists check often comes with its file in "value"; a file check that names no file cannot be checked
+        .map(c => (c.type === 'file-exists' && !c.path && c.value ? { ...c, path: c.value, value: '' } : c)).filter(c => !String(c.type).startsWith('file-') || c.path)
+        .map(c => ({ type: c.type, value: String(c.value ?? '').slice(0, 300), ...(c.path ? { path: String(c.path).slice(0, 200) } : {}), must: c.must === true })),
     })
   }
   return out
@@ -88,7 +91,7 @@ function rolePrompt(ctx, wf, role, n, split, taken, examples, only) {
     reviews.length ? `Stages it reviews (it must find the defects in another agent's result against the acceptance criteria):\n${reviews.map(s => `- [stage id: ${s.id}] ${s.title}: ${s.acceptance.join('; ')}`).join('\n')}` : '',
     role.kind === 'builder'
       ? 'The agent is a builder: it works in an empty folder (plus your fixture files), writes and runs files there, and has no internet beyond package registries. Keep each task small enough to build and verify in about ten minutes. Use file-exists, file-contains and file-regex checks for what must exist.'
-      : 'The agent is read-only: it researches, judges and writes, and answers in its final message. Put the material it needs in the task or in fixture files; it may also search the web.',
+      : `The agent is read-only: it judges and writes, and answers in its final message. It cannot write files, so ask for the result in its answer and use only checks on the answer (contains, regex, min-chars), never file checks. ${ctx.settings.trial?.web !== false ? 'Put the material it needs in the task or in fixture files; it may also search the web.' : 'It has no web access: put every fact and source it needs in the task or in fixture files.'}`,
     examples.length ? `Real tasks this agent received in past runs (match their form and level of detail, do not copy them):\n${examples.map((e, i) => `--- example ${i + 1} ---\n${e}`).join('\n')}` : '',
     `Rules:
 - Each task stands on its own: the agent sees only the task text and the fixture files.
@@ -97,7 +100,7 @@ function rolePrompt(ctx, wf, role, n, split, taken, examples, only) {
 - Cover every stage above, including the reviews. For a stage that reads earlier stages, include a realistic earlier result in the task (some good, some flawed).
 - Vary the subject, the difficulty and the trap. Do not make every task about the team's exact goal: use neighbouring products, markets and situations, so the agent learns the job and not one case. Include cases where the right answer is "no" or "not enough evidence".
 - The rubric must separate good work from plausible-looking weak work: name the evidence, the numbers, the decisions or the behaviour that must be there.
-- Checks are optional and must hold for every correct answer. Mark a check "must" only when failing it means the work is unusable.`,
+- Checks are optional and must hold for every correct answer, however it is worded: prefer a number or a name that must appear over a pattern of phrasing. Mark a check "must" only for a file a builder has to deliver.`,
     taken.size ? `These titles exist already. Write different tasks, on different subjects:\n${[...taken].map(t => `- ${t}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n')
 }

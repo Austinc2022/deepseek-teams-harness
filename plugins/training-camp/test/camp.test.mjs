@@ -13,7 +13,7 @@ import path from 'node:path'
 import YAML from 'yaml'
 import { Registry } from '../../agent-forge/lib/registry.js'
 import { Camps } from '../lib/camp.js'
-import { runChecks } from '../lib/evaluate.js'
+import { runChecks, combine } from '../lib/evaluate.js'
 import { normalizeWorkflow } from '../lib/workflow.js'
 
 const WORKFLOW = {
@@ -260,8 +260,45 @@ test('checks and workflow validation', () => {
   fs.writeFileSync(path.join(work, 'index.html'), '<html><canvas></canvas></html>')
   const task = { checks: [{ type: 'contains', value: 'Demo' }, { type: 'file-exists', path: 'index.html', must: true }, { type: 'file-contains', path: 'index.html', value: '<canvas' }, { type: 'file-exists', path: '../../etc/passwd' }, { type: 'regex', value: '(' }, { type: 'bogus' }] }
   assert.deepEqual(runChecks(task, 'a demo', work).map(c => c.ok), [true, true, true, false, false])
+  // a read-only agent answers in its message: a file check of its task is read against the message
+  const memo = { checks: [{ type: 'file-exists', path: 'memo.md', must: true }, { type: 'file-contains', path: 'memo.md', value: 'verdict' }, { type: 'regex', value: 'stop|go', must: true }] }
+  assert.deepEqual(runChecks(memo, 'Verdict: revise', work, { builder: false }).map(c => c.ok), [true, true, false])
+  assert.deepEqual(runChecks(memo, 'Verdict: revise', work).map(c => c.ok), [false, false, false], 'a builder has to write the file')
+  // only a builder's missing deliverable caps the score; a failed text pattern costs its share and no more
+  assert.equal(combine({ score: 0.9 }, runChecks(memo, 'Verdict: revise', work, { builder: false }), { builder: false }), 0.842)
+  assert.equal(combine({ score: 0.9 }, runChecks(memo, 'Verdict: revise', work)), 0.4)
   assert.throws(() => normalizeWorkflow({ stages: [{ id: 'a', title: 'A', role: 'nobody' }], roles: [{ name: 'x', kind: 'analyst', role: 'r' }] }), /not in the list of roles/)
   assert.throws(() => normalizeWorkflow({ stages: [], roles: [{ name: 'x' }] }), /at least one stage/)
+})
+
+test('settings.trial can take the web and self-learning out of trials; a judge without tools for a message; a run with nothing to grade is run again and then left out', async () => {
+  const seen = { trainee: [], judge: [], runs: {}, labels: [] }
+  const { cs } = setup({ fail: (name, _p, opts) => {
+    const l = String(opts.label)
+    if (name === 'camp-judge') { if (l.startsWith('judge:')) seen.judge.push(opts.def); return false }
+    if (name.startsWith('camp-')) return false
+    seen.trainee.push(opts.def)
+    if (!/^demand-analyst:base:t-/.test(l)) return false
+    if (!seen.labels.includes(l)) seen.labels.push(l)
+    const n = seen.runs[l] = (seen.runs[l] ?? 0) + 1
+    // the analyst's first practice task fails once; its second fails twice
+    return l === seen.labels[0] ? n === 1 : l === seen.labels[1] ? n <= 2 : false
+  }, failWith: 'Claude Code process aborted by user' })
+  const camp = cs.create({ goal: 'Build a VR app people pay for every day', settings: { dataset: { train: 4, dev: 2, holdout: 2 }, team: { enabled: false }, rounds: 0, scout: { assign: false }, trial: { web: false, selfLearning: false } } })
+  await run(cs.propose(camp.id))
+  cs.approve(camp.id)
+  await run(cs.train(camp.id))
+  for (const d of seen.trainee) {
+    assert.equal(d.selfLearning, false, 'no self-learning tools in a trial')
+    assert.ok(!(Array.isArray(d.tools) ? d.tools : []).some(t => /^Web/.test(t)) && !d.mcp.includes('websearch'), 'no web in a trial')
+  }
+  const rows = cs.trials(camp.id, 'demand-analyst').filter(t => t.cand === 'base' && t.split === 'train')
+  assert.equal(rows.filter(t => t.void).length, 1, 'the run that failed twice is void')
+  assert.equal(rows.filter(t => !t.void && t.ok).length, 3, 'a run that failed once was run again and scored')
+  const st = cs.get(camp.id).roles['demand-analyst']
+  assert.ok(st.baseline.train > 0.5, 'a void run is left out of the mean, not counted as 0')
+  assert.ok(seen.judge.some(d => d.tools.length === 0), 'a message is graded without tools')
+  assert.ok(seen.judge.some(d => d.tools.includes('Read')), 'a builder\'s files are read by the judge')
 })
 
 test('a camp whose process died shows as paused and resumes', async () => {
@@ -379,8 +416,8 @@ test('each agent gets a skill for its role before its first score', async () => 
   assert.deepEqual(cs.candidate(camp.id, 'demand-analyst', 'base').def.skills, [], 'the first score is measured without it')
   const trial = c.roles['demand-analyst'].rounds[0]
   assert.equal(trial.kind, 'skills')
-  assert.equal(trial.candidates.length, 2, 'each skill is tried alone')
-  assert.deepEqual(trial.candidates.map(x => x.skills[0]).sort(), [...kit.created].sort())
+  assert.equal(trial.candidates.length, 1, 'the skills chosen for a role are tried together, as one variant')
+  assert.deepEqual([...trial.candidates[0].skills].sort(), [...kit.created].sort())
   assert.equal(trial.accepted, false)
   assert.equal(c.roles['demand-analyst'].best.id, 'base')
 })
