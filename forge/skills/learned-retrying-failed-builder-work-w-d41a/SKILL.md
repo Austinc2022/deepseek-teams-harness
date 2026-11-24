@@ -1,0 +1,6 @@
+---
+name: learned-retrying-failed-builder-work-w-d41a
+description: A builder ticket died on a transient infra error (model chain 502/429) and you need the work re-done today
+---
+
+1. Check the ticket's actual state before retrying: if it has 0 turns it is queued, not failed — let it run; a new ticket is pure duplication. 2. Count open duplicates first: if the same brief already has a pair of dead tickets (e.g. one plain + one "(retry)"), do NOT open a third. 3. Ticket workers on free model chains die in bursts; agent asks (ask_team/ask_agent) survive the same outage better — re-dispatch the work as an ask with the full self-contained brief (file:line change table, acceptance criteria). 4. Route the eventual file-writing through one builder ticket that opens when the spec dependency is done (plan_items ticket field), not through parallel tickets. 5. When the failure cause is access (network allowlist), verify whether it is truly on the critical path: cached binaries and host-side recipes often bypass it (e.g. cached chrome-headless-shell renders when Playwright downloads are blocked) — remove the false dependency rather than escalating to the owner. 6. Never re-ask the owner a held question; report unexecuted owner decisions to the COO as execution gaps instead.
