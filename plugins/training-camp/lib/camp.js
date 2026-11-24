@@ -109,7 +109,9 @@ export class Camps {
     if (last) {
       try {
         const st = this.engine.getRun(last)
-        run = { id: st.id, what: st.orchestration, status: busy ? 'running' : st.status === 'running' ? 'interrupted' : st.status, phase: st.phase, costUsd: st.costUsd, startedAt: st.startedAt, endedAt: st.endedAt, error: st.error ? String(st.error).split('\n')[0] : null, log: (st.log ?? []).slice(-10), running: (st.agents ?? []).filter(a => a.status === 'running').map(a => ({ label: a.label, model: a.model, lastTool: a.lastTool })), agents: (st.agents ?? []).length }
+        run = { id: st.id, what: st.orchestration, status: busy ? 'running' : st.status === 'running' ? 'interrupted' : st.status, phase: st.phase, costUsd: st.costUsd, startedAt: st.startedAt, endedAt: st.endedAt, error: st.error ? String(st.error).split('\n')[0] : null, log: (st.log ?? []).slice(-10), running: (st.agents ?? []).filter(a => a.status === 'running').map(a => ({ label: a.label, model: a.model, lastTool: a.lastTool })), agents: (st.agents ?? []).length,
+          // everything that runs or waits for a free slot right now, for the agent pages
+          live: (st.agents ?? []).filter(a => a.status === 'running' || a.status === 'queued').map(a => ({ label: a.label, status: a.status, startedAt: a.startedAt, lastTool: a.lastTool, tools: a.tools })) }
       } catch {}
     }
     const sets = {}

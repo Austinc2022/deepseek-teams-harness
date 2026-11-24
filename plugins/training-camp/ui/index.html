@@ -509,6 +509,32 @@ function agentDetail(c, m) {
         h('p', { class: 'small num' }, `Practice: ${pc(meta2?.train ?? score(id, 'train'))} (before: ${pc(before)})`, promoted === id ? ` · Check: ${pc(dev ?? score(id, 'dev'))} (needed ${pc(need)} to be kept)` : running ? '' : ' · not the best of the round, so not tried on the check tasks'))
     }) : none('The coach proposed no usable change.'))
 
+  // what this agent is doing right now: the runs of this camp that carry its name
+  const titleOf = id => tasks.find(t => t.id === id)?.title
+  const mine = (c.run?.live ?? (c.run?.running ?? []).map(a => ({ ...a, status: 'running' }))).map(a => {
+    const p = String(a.label ?? '').split(':')
+    if (p[0] === r) return { ...a, what: `${titleOf(p[2]) ? (tasks.find(t => t.id === p[2]).split === 'dev' ? 'Check task' : 'Practice task') : 'Final exam task'}: ${titleOf(p[2]) ?? '(sealed)'}`, who: `${r} is doing it as ${ver(p[1])}`, cand: p[1] }
+    if (p[0] === 'judge' && p[1] === r) return { ...a, what: `Marking: ${titleOf(p[2]) ?? 'a final exam task'}`, who: 'the judge' }
+    if (p[0] === 'coach' && p.includes(r)) return { ...a, what: p[1] === 'skills' ? 'Choosing skills and tools for it' : 'Reading where it lost points and proposing changes', who: 'the coach' }
+    if (p.slice(1).includes(r)) return { ...a, what: p[0] === 'scout' ? 'Looking for skills on GitHub for it' : /examiner|sealer|tasks/.test(p[0]) ? 'Writing its tasks' : `${p[0]} for it`, who: `the ${p[0]}` }
+    return null
+  }).filter(Boolean)
+  const mins = ts => { const s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000)); return s < 90 ? `${s} seconds` : `${Math.round(s / 60)} minutes` }
+  const running = mine.filter(a => a.status === 'running'), waiting = mine.filter(a => a.status !== 'running')
+  // how far the step it is in has got: scored tasks of the version being measured
+  const step = (() => {
+    const cand = running.find(a => a.cand)?.cand ?? waiting.find(a => a.cand)?.cand ?? (x.baseline ? null : 'base')
+    if (!cand || !tasks.length) return null
+    const done = new Set(D.details.filter(t => t.cand === cand && t.split !== 'holdout').map(t => t.task)).size
+    return { cand, done, all: tasks.length, name: !x.baseline ? 'First score' : cand === 'base' ? 'Measuring the original' : `Measuring ${ver(cand)}` }
+  })()
+  const nowCard = h('div', { class: 'card' },
+    h('div', { class: 'row between' }, h('h2', null, 'Right now'), running.length ? chip('info live', `${running.length} running`) : waiting.length ? chip('', 'waiting for a free slot') : chip('', c.busy ? 'not its turn' : 'not running')),
+    step ? h('div', null, h('div', { class: 'row between small' }, h('b', null, `${step.name}: ${step.done} of ${step.all} practice and check tasks marked`), h('span', { class: 'muted' }, step.done < step.all && running.length ? 'a task is marked when the agent has finished it and the judge has scored it' : '')), h('div', { class: 'meter' }, h('i', { style: `width:${Math.round(100 * step.done / step.all)}%` }))) : null,
+    running.length ? h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, ['What', 'Who', 'Running for', 'Last thing it did'].map(t => h('th', null, t)))), h('tbody', null, running.map(a => h('tr', null, h('td', null, a.what), h('td', { class: 'small' }, a.who), h('td', { class: 'num small' }, a.startedAt ? mins(a.startedAt) : '–'), h('td', { class: 'small muted' }, a.lastTool ? `${a.tools ? `step ${a.tools}: ` : ''}${String(a.lastTool).replace(/\/Users\/\S*\/(work|agent-homes)\/\S*?\/(?=[^/\s]+(\s|$))/g, '…/')}` : 'thinking')))))) : null,
+    waiting.length ? h('p', { class: 'small muted' }, `${plural(waiting.length, 'more task')} of this agent wait for a free slot (${m.S.parallelCalls ?? '?'} model calls run at once): ${waiting.slice(0, 4).map(a => a.what).join('; ')}${waiting.length > 4 ? '…' : ''}`) : null,
+    !mine.length ? h('p', { class: 'muted' }, !c.busy ? (c.status === 'paused' ? 'Training is paused, so nothing runs. Resume it at the top of the page.' : 'The camp is not training now.') : v ? 'This agent has finished its final exam. The camp is working on other agents.' : `Nothing of this agent runs at this moment. The camp trains ${m.S.parallelAgents ?? 1} agents at once and is working on others; this one continues when a slot is free.`) : null)
+
   const cols = [...new Set(D.details.map(t => t.cand))]
   return [
     back,
@@ -521,6 +547,7 @@ function agentDetail(c, m) {
         h('div', { class: 'ph ' + (x.baseline ? 'done' : '') }, h('b', null, '2 First score'), h('span', null, pc(x.baseline?.dev))),
         h('div', { class: 'ph ' + (g.coached ? 'done' : '') }, h('b', null, '3 After coaching'), h('span', null, g.coached ? pc(x.best?.dev) : '–')),
         h('div', { class: 'ph ' + (v ? (v.passed ? 'done' : 'bad') : '') }, h('b', null, '4 Final exam'), h('span', null, pc(v?.score))))),
+    nowCard,
     card(1, 'Its tasks', chip(g.tasksDone ? 'good' : '', `${D.tasks.train.length} practice · ${D.tasks.dev.length} check · ${D.tasks.sealed} final exam`),
       tasks.length ? tasks.map(t => taskView(t, SET[t.split])) : none('Not written yet.'),
       h('p', { class: 'small muted' }, `The ${D.tasks.sealed || S.dataset.holdout} final-exam tasks are not shown here, so they stay a fair test.`)),
