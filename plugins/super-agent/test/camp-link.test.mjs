@@ -34,7 +34,8 @@ function world(camp) {
     report: () => `Camp ${c.id}: ${c.status}`,
     create: ({ goal, name }) => { Object.assign(c, { goal, name: name ?? 'new', status: 'draft', workflow: null }); calls.push('create'); return c },
     propose: () => { calls.push('propose'); return { done: Promise.resolve().then(() => { c.workflow = { summary: 's', stages: [{ title: 'One' }], roles: [{ name: 'tc-a' }], teams: [] }; c.status = 'workflow' }) } },
-    revise: () => { calls.push('revise'); return { done: Promise.resolve() } },
+    revise: () => { calls.push('revise'); return { done: Promise.resolve().then(() => { if (c.reviseTo) { c.versions = { ...(c.versions ?? {}), [c.workflowVersion]: c.workflow }; c.workflow = c.reviseTo; c.workflowVersion++; c.status = 'workflow' } }) } },
+    restoreWorkflow: (_id, v) => { calls.push(`restore:${v}`); c.workflow = c.versions[v]; c.workflowVersion++; c.status = 'workflow' },
     approve: () => { calls.push('approve'); c.status = 'approved'; c.approvedVersion = c.workflowVersion },
     train: () => { calls.push('train'); c.status = 'training'; delete c.pause; busy = true; return { done: new Promise(() => {}) } },
     cancel: (_id, o) => { calls.push(`cancel:${o.by}`); busy = false; c.status = 'paused'; c.pause = { reason: 'you paused it', ts: ago(0), ...(o.by ? { by: o.by } : {}) }; return { ok: true } },
@@ -136,8 +137,14 @@ test('a camp that passed is published by code and the COO is told; one that did 
 
 test('camp_set changes only how much is trained, within bounds', async () => {
   const w = world()
-  assert.match(await w.link.act(coo, 'camp_set', { id: 'c1', key: 'dataset.train', value: 3 }), /now 3/)
-  assert.deepEqual(w.calls, ['set:{"dataset":{"train":3}}'])
+  assert.match(await w.link.act(coo, 'camp_set', { id: 'c1', key: 'dataset.train', value: 8 }), /now 8/)
+  assert.deepEqual(w.calls, ['set:{"dataset":{"train":8}}'])
+  // quality first: a leader can train more or slower, never less than the owner's depth
+  await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'dataset.train', value: 3 }), /cannot go below 5[\s\S]*quality first/)
+  await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'rounds', value: 1 }), /cannot go below 2/)
+  assert.match(await w.link.act(coo, 'camp_set', { id: 'c1', key: 'parallelAgents', value: 1 }), /now 1/)
+  w.c.protect = { floor: { rounds: 3 } }
+  await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'rounds', value: 2 }), /cannot go below 3/)
   await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'budgetUsd', value: 500 }), /you can set/)
   await assert.rejects(w.link.act(coo, 'camp_set', { id: 'c1', key: 'parallelAgents', value: 50 }), /between 1 and 8/)
   assert.ok(CAMP_TOOLS.every(t => t.inputSchema.type === 'object'))
@@ -187,4 +194,23 @@ test('staffing\'s last rung opens a small camp for a lasting role, or names the 
   const b = await w.link.openFor(coo, need)
   assert.deepEqual([b.existing, b.id], [true, 'c1'], 'asked again while it trains: the same camp')
   assert.deepEqual(w.calls, ['create', 'propose'])
+})
+
+test('a leader\'s workflow change that removes roles is undone; one that adds roles stands', async () => {
+  const w = world({ status: 'approved' })
+  const full = w.c.workflow
+  w.c.reviseTo = { ...full, roles: [{ name: 'tc-a' }] }
+  assert.match(await w.link.act(coo, 'camp_change', { id: 'c1', request: 'cut to the core roles so it fits the quota' }), /architect is revising/)
+  await new Promise(r => setTimeout(r, 5))
+  assert.deepEqual(w.calls, ['revise', 'restore:1', 'approve'])
+  assert.deepEqual(w.c.workflow.roles.map(r => r.name), ['tc-a', 'tc-b'], 'every role is back')
+  assert.equal(w.triggers.length, 1)
+  assert.match(w.triggers[0].text, /removed 1 role \(tc-b\), so code undid it[\s\S]*quality first/)
+  // adding a role is a normal proposal to approve
+  const n = world({ status: 'approved' })
+  n.c.reviseTo = { ...n.c.workflow, roles: [...n.c.workflow.roles, { name: 'tc-c' }] }
+  await n.link.act(coo, 'camp_change', { id: 'c1', request: 'add a playtest analyst' })
+  await new Promise(r => setTimeout(r, 5))
+  assert.deepEqual(n.calls, ['revise'])
+  assert.match(n.triggers[0].text, /proposed workflow, version 2: 2 stages, 3 roles/)
 })

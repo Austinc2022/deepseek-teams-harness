@@ -34,6 +34,10 @@ const MIN = 60_000
 const WAITS = [2, 10, 20, 40, 60] // minutes before each automatic resume
 const TRANSIENT_LIMIT = /429|quota|rate.?limit|usage limit|overloaded|exhausted|cooldown|too many requests|busy|50[023]\b/i
 const HARD_LIMIT = /budget|call limit|model calls|maxCalls|limit of \d+ calls/i
+// The owner's standing rule: quality first. A leader may train more, or slower, never less: it cannot take a camp
+// below these depths (or below camp.protect.floor when the owner set one), and it cannot drop roles from a workflow.
+export const FLOOR = { rounds: 2, candidates: 2, 'dataset.train': 5, 'dataset.dev': 4, 'dataset.holdout': 4 }
+const QUALITY_RULE = 'The owner\'s rule for training is quality first: never cut roles, coaching rounds, candidates or task sets to fit a quota or a call limit. When a provider limits the camp, train fewer things at once (parallelAgents, parallelCalls) and let it take longer; when a limit of the camp itself blocks it, or the models are too weak, tell the owner what you need (reply_owner).'
 const SETTABLE = { rounds: [0, 6], candidates: [1, 4], parallelAgents: [1, 8], parallelCalls: [1, 16], 'dataset.train': [2, 12], 'dataset.dev': [2, 10], 'dataset.holdout': [2, 10] }
 
 export const CAMP_TOOLS = [
@@ -41,12 +45,12 @@ export const CAMP_TOOLS = [
   tool('camp_new', 'Open a training camp for a goal: use it when the goal needs a workforce the organisation does not have, or when the existing agents are not good enough at it. An architect proposes the workflow (stages, roles, teams); the proposal reaches you as an event, and nothing trains until you approve it.', { goal: { type: 'string', description: 'the goal the trained team must be able to reach, in plain words' }, name: { type: 'string', description: 'short name' }, idea: { type: 'string', description: 'optional: stages or roles you already have in mind' } }, ['goal']),
   tool('camp_status', 'One camp: status, why it is paused, and the scoreboard of every role (first score, best score, final exam, passed or not).', { id: S }),
   tool('camp_workflow', 'The proposed or approved workflow of a camp: stages, roles, teams.', { id: S }),
-  tool('camp_change', 'Ask for a change to a camp\'s workflow in your own words (add, drop or merge stages and roles). The new version reaches you as an event; approve it then.', { id: S, request: S }),
+  tool('camp_change', 'Ask for a change to a camp\'s workflow in your own words: add stages or roles, reorder, sharpen what a role or a stage delivers. A change that removes a role is undone by code (the owner wants the full team trained), unless you opened the camp yourself and it has never been approved. The new version reaches you as an event; approve it then.', { id: S, request: S }),
   tool('camp_approve', 'Approve the current workflow of a camp and start training. You approve; the owner is not asked. Roles whose definition did not change keep their training.', { id: S }),
   tool('camp_train', 'Start or resume training. Finished work is never repeated.', { id: S }),
   tool('camp_pause', 'Pause a camp on purpose. It stays paused until you or the owner resume it.', { id: S, reason: S }),
   tool('camp_redo', 'Run one part of a camp again: "scout" (find skills), "datasets" (write the tasks again), "rounds" (coach every role again from its first score), or "verify" (the final exams).', { id: S, part: { type: 'string', enum: ['scout', 'datasets', 'rounds', 'verify'] } }),
-  tool('camp_set', `Change how much a camp trains: ${Object.keys(SETTABLE).join(', ')}. Use it to train more thoroughly, or lighter when the model provider keeps limiting. Budget and models are the owner's.`, { id: S, key: { type: 'string', enum: Object.keys(SETTABLE) }, value: { type: 'number' } }),
+  tool('camp_set', `Change how a camp trains: ${Object.keys(SETTABLE).join(', ')}. You can train more thoroughly (more rounds, candidates, tasks) and you can train slower (fewer agents and calls at once) when the provider keeps limiting. You cannot go below the owner's depth (${Object.entries(FLOOR).map(([k, v]) => `${k} ${v}`).join(', ')}): quality is not traded for quota. Budget, call limit and models are the owner's.`, { id: S, key: { type: 'string', enum: Object.keys(SETTABLE) }, value: { type: 'number' } }),
   tool('camp_publish', 'Publish a camp\'s trained agents, teams and workflow into the organisation. A camp that passed is published automatically; use this with force to publish what passed when some roles did not.', { id: S, force: { type: 'boolean' } }, ['id']),
   tool('camp_rollback', 'Undo a camp\'s last publish: the agents, teams and workflow go back to what they were.', { id: S }),
   tool('camp_retrain', 'Send an agent that a training camp trained back to training, because its real work keeps falling short. It starts from the agent as it is now; give examples of the real work it got wrong, which become its new practice tasks. The current agent keeps working meanwhile and is replaced only if the retrained one passes its final exam and scores higher. Use it when coaching (a skill, a change of instructions) did not fix a repeated gap.', { agent: { type: 'string', description: 'the agent name' }, why: { type: 'string', description: 'what it keeps getting wrong, concretely' }, examples: { type: 'array', description: 'up to 6 pieces of real work it got wrong', items: { type: 'object', properties: { task: { type: 'string', description: 'the task exactly as it was given, complete and self-contained' }, wrong: { type: 'string', description: 'what was wrong with the result' } }, required: ['task', 'wrong'] } } }, ['agent', 'why']),
@@ -154,6 +158,8 @@ export class CampLink {
       case 'camp_change': {
         const id = String(a.id)
         mark(id, `asked for a workflow change: ${clip(a.request, 300)}`)
+        const before = cs.get(id)
+        this.#save(id, { rolesBefore: (before.workflow?.roles ?? []).map(r => r.name), versionBefore: before.workflowVersion })
         follow(id, 'revise', cs.revise(id, str(a.request, 4000)))
         return 'The architect is revising the workflow. The new version will reach you as an event.'
       }
@@ -185,6 +191,8 @@ export class CampLink {
         if (!lim) throw new Error(`you can set: ${Object.keys(SETTABLE).join(', ')}`)
         const v = Math.round(Number(a.value))
         if (!(v >= lim[0] && v <= lim[1])) throw new Error(`${key} must be between ${lim[0]} and ${lim[1]}`)
+        const floor = cs.get(id).protect?.floor?.[key] ?? FLOOR[key]
+        if (floor != null && v < floor) throw new Error(`${key} cannot go below ${floor}. ${QUALITY_RULE}`)
         const [k1, k2] = key.split('.')
         cs.updateSettings(id, k2 ? { [k1]: { [k2]: v } } : { [k1]: v })
         mark(id, `set ${key} = ${v}`)
@@ -292,8 +300,27 @@ export class CampLink {
   /** After a proposal or a revision finished. */
   #after(id, what) {
     const c = this.given.get(id)
+    if (what === 'revise' && this.#keepRoles(c)) return
     if (!c.workflow) return this.#tell(id, `${what}-empty-${c.runs.length}`, `Camp ${id} "${c.name}": the architect did not produce a workflow (${clip(c.log.at(-1)?.msg, 300)}). Try camp_change with a simpler request, or open a camp with a narrower goal.`)
     this.#tellWorkflow(c)
+  }
+
+  /**
+   * A revision that removed roles from a camp the owner opened, or from one that was approved before, is undone:
+   * the earlier version is restored. Returns true when it did that.
+   */
+  #keepRoles(c) {
+    const st = this.#state(c.id)
+    const lost = (st.rolesBefore ?? []).filter(n => !c.workflow?.roles.some(r => r.name === n))
+    const free = c.by && c.approvedVersion == null && c.protect?.keepRoles !== true
+    if (!lost.length || free || c.protect?.keepRoles === false || c.workflowVersion === st.versionBefore) return false
+    this.given.restoreWorkflow(c.id, st.versionBefore)
+    this.given.store.update(c.id, x => { x.log.push({ ts: now(), msg: `a workflow change removed ${lost.length} role${lost.length === 1 ? '' : 's'} (${lost.slice(0, 8).join(', ')}): undone, version ${st.versionBefore} restored` }) })
+    const back = this.given.get(c.id)
+    // the restored version is what was approved before: approving it again keeps every role's training
+    try { if (st.versionBefore === c.approvedVersion || c.approvedVersion != null) this.given.approve(c.id) } catch {}
+    this.#tell(c.id, `kept-roles-${c.workflowVersion}`, `Your change to camp ${c.id} "${c.name}" removed ${lost.length} role${lost.length === 1 ? '' : 's'} (${lost.slice(0, 10).join(', ')}), so code undid it: the workflow is back to version ${st.versionBefore} with all ${back.workflow.roles.length} roles${back.approvedVersion === back.workflowVersion ? ', approved as before' : ''}. ${QUALITY_RULE}`)
+    return true
   }
 
   #tellWorkflow(c) {
@@ -365,7 +392,7 @@ export class CampLink {
     const reason = String(c.pause.reason ?? '')
     if (c.pause.by) return // paused on purpose
     if (HARD_LIMIT.test(reason) && !TRANSIENT_LIMIT.test(reason)) {
-      return this.#tell(id, `limit-${c.pause.ts}`, `Camp ${id} "${c.name}" paused at its own limit: ${clip(reason, 300)}\nTraining so far is kept. The budget and the call limit are the owner's settings: tell the owner what is trained, what is left and what you recommend (reply_owner), or make the rest cheaper (camp_set) and resume (camp_train).`)
+      return this.#tell(id, `limit-${c.pause.ts}`, `Camp ${id} "${c.name}" paused at its own limit: ${clip(reason, 300)}\nTraining so far is kept. The budget and the call limit are the owner's settings: tell the owner what is trained, what is left and what you recommend (reply_owner), and ask for the limit to be raised. Do not make the rest cheaper by cutting roles, rounds or tasks.`)
     }
     if (hold) return // the company's budget hold stops new model work
     // a quota, a busy provider, a restart or an error: resume, waiting longer each time it comes back without progress
@@ -386,7 +413,7 @@ export class CampLink {
     cs.train(id)
     this.#save(id, { resumes: n + 1, resumeCalls: calls, lastReason: clip(reason, 300), sameError })
     if (sameError === 2) this.#tell(id, `same-error-${hashOf(reason)}`, `Camp ${id} "${c.name}" has stopped three times on the same error, and resuming does not get past it:\n${clip(reason, 600)}\nRun ${c.runs.at(-1)?.id ?? '-'}. Decide what it is. A fault in one stage or role: run that part again (camp_redo) or make the role a clearer job (camp_change). A fault in the harness itself (an exception, a broken tool, a bad file): have it fixed with repair_harness, giving this error text and the run id; code resumes the camp after the fix. Code keeps retrying meanwhile.`)
-    if (n + 1 === 4) this.#tell(id, `keeps-pausing-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" has paused and been resumed ${n + 1} times with almost no progress. The last reason: ${clip(reason, 300)}\nCode keeps retrying every hour. If the provider's limit is the cause, train fewer things at once (camp_set parallelAgents 1, parallelCalls 2) or smaller task sets; if a stage fails every time, run it again (camp_redo) or change the workflow (camp_change).`)
+    if (n + 1 === 4) this.#tell(id, `keeps-pausing-${new Date().toISOString().slice(0, 10)}`, `Camp ${id} "${c.name}" has paused and been resumed ${n + 1} times with almost no progress. The last reason: ${clip(reason, 300)}\nCode keeps retrying every hour. If the provider's limit is the cause, train fewer things at once (camp_set parallelAgents 1, parallelCalls 2) and let it take longer, and tell the owner that the models' quota is what holds the camp back (reply_owner); do not cut roles or training depth. If a stage fails every time, run it again (camp_redo) or change the workflow (camp_change).`)
   }
 
   // ---------------- for the leaders' prompt and the dashboard
@@ -396,7 +423,7 @@ export class CampLink {
     if (!cs) return ''
     let rows = []
     try { rows = cs.list() } catch { return '' }
-    const how = 'A training camp trains a set of agents and their team for one goal and publishes the ones that pass their final exam. Open one (camp_new) when a goal needs a workforce you do not have or the agents you have keep falling short; approve its workflow yourself; code resumes and publishes it. Do not poll a camp: events tell you when it needs you. An agent a camp trained that keeps falling short in real work goes back with camp_retrain (with the work it got wrong); the trained workflow of a published camp runs with run_workflow.'
+    const how = QUALITY_RULE + ' A training camp trains a set of agents and their team for one goal and publishes the ones that pass their final exam. Open one (camp_new) when a goal needs a workforce you do not have or the agents you have keep falling short; approve its workflow yourself; code resumes and publishes it. Do not poll a camp: events tell you when it needs you. An agent a camp trained that keeps falling short in real work goes back with camp_retrain (with the work it got wrong); the trained workflow of a published camp runs with run_workflow.'
     if (!rows.length) return `# Training camps\n(none) ${how}`
     const wfOf = id => { try { return cs.get(id).published?.orchestration } catch { return null } }
     return `# Training camps\n${rows.slice(-8).map(c => `- ${c.id} "${c.name}" [${c.status}${c.busy ? ', working' : ''}] ${c.spend.calls} model calls${wfOf(c.id) ? `; published workflow "${wfOf(c.id)}" (run_workflow)` : ''}; goal: ${clip(c.goal, 140)}`).join('\n')}\n${how}`

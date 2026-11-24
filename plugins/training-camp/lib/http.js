@@ -1,3 +1,5 @@
+import path from 'node:path'
+import fs from 'node:fs'
 /**
  * Training camp API, used by the DSH mount (index.js). handle() returns a JSON value, or undefined for "not found".
  */
@@ -6,6 +8,10 @@ import { availableProviders } from '../../agent-forge/lib/providers.js'
 
 const ID = '(c[a-f0-9]{8})'
 const KEY = '([a-z_][a-z0-9_-]{0,63})'
+
+function watched(cs) {
+  try { const l = JSON.parse(fs.readFileSync(path.join(cs.registry.home, 'super-agent', 'loop.lock'), 'utf8')); return Date.now() - new Date(l.ts).getTime() < 120_000 } catch { return false }
+}
 
 export const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'self'"
 
@@ -30,7 +36,8 @@ export async function handle(cs, method, p, body, query) {
     if (method === 'POST') return cs.create(await body())
   }
   if ((r = p.match(new RegExp(`^/api/camps/${ID}$`)))) {
-    if (method === 'GET') return cs.get(r[1])
+    // watched: the leaders' loop is running, so a camp paused by a limit or a restart is resumed without anyone asking
+    if (method === 'GET') return { ...cs.get(r[1]), watched: watched(cs) }
     if (method === 'DELETE') return cs.remove(r[1])
   }
   if ((r = p.match(new RegExp(`^/api/camps/${ID}/(propose|revise|approve|train|cancel|publish|rollback|reset|restore|redo|fresh)$`))) && method === 'POST') {

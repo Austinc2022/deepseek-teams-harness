@@ -450,6 +450,8 @@ The training camp is connected to the leaders (`plugins/super-agent/lib/camp-lin
 | The same error stops the camp three times | Keeps retrying | The COO is told to run that part again, change the workflow, or have the harness fixed (`repair_harness`) |
 | The COO's own turn on a camp event fails | The event goes to the CEO | — |
 
+**Quality first.** A leader can train a camp more thoroughly or slower, never less: `camp_set` refuses to go below 2 coaching rounds, 2 candidates and 5 / 4 / 4 tasks (or `protect.floor` in the camp's `camp.json`), and a `camp_change` that removes a role from a camp you opened, or from one that was approved before, is undone by code. When a provider limits a camp it takes longer; it is not made smaller.
+
 **Staffing.** `staff` has a last rung, **train**: with `lasting: true`, when nothing existing fits a lasting, central role, a small training camp is opened for it (or the camp that already trains for it is named), and a stopgap agent is created now when a name and role are given. Department heads cannot open camps.
 
 **One skill pipeline.** With a company, a camp no longer has its own: the company's Skill Scout does the camp's searches; a found skill is installed through the company's auditor, name and daily limit (text only, so a skill that ships scripts is rejected and nothing waits for you); the coach is shown the skills the company's own trials kept for similar work; and every skill a camp measures goes into the company's records, so a skill a camp found unhelpful for an agent is not put on trial for it again for 30 days. Without a company the camp scouts and reviews by itself as before.

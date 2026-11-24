@@ -154,7 +154,11 @@ function h(tag, attrs, ...kids) {
   return el
 }
 async function api(method, path, body) {
-  const r = await fetch('api/' + path, { method, headers: { 'x-camp-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  let r
+  // the browser's own words for an unreachable server ("Failed to fetch") say nothing: name what happened
+  try { r = await fetch('api/' + path, { method, headers: { 'x-camp-request': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }) }
+  catch { const e = new Error('The harness did not answer. It may be restarting.'); e.offline = true; throw e }
+  if (r.status === 401 || r.status === 403) { const e = new Error('Your session with the harness has ended. Reload this page from the harness sidebar.'); e.session = true; throw e }
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(j.error || r.statusText)
   return j
@@ -177,13 +181,14 @@ let camps = [], camp = null, meta = null, steps = null
 let active = {}       // { agent: trials } for agents being measured right now
 let dirty = false     // the owner is typing: do not redraw under them
 let message = null    // { text, tone }
+let offline = null    // why the last refresh did not reach the harness; cleared by the next one that does
 const ui = { tab: query.get('tab'), stage: query.get('stage'), agent: hash?.[2] ?? null, agentData: null, results: query.get('results') ?? 'agents', step: null, stepData: null, edit: false, versions: null, advanced: false }
 if (ui.agent) ui.tab = 'agents'
 
 const setHash = () => history.replaceState(null, '', current ? `#${current}${ui.agent ? '@' + ui.agent : ''}` : location.pathname)
 async function act(fn, done) {
   message = null
-  try { const r = await fn(); if (done) message = { text: typeof done === 'function' ? done(r) : done, tone: 'ok' } } catch (e) { message = { text: e.message, tone: 'err' } }
+  try { const r = await fn(); if (done) message = { text: typeof done === 'function' ? done(r) : done, tone: 'ok' } } catch (e) { message = { text: e.offline ? `${e.message} Nothing was changed; try again in a moment.` : e.message, tone: 'err' } }
   dirty = false
   await refresh(true)
 }
@@ -271,8 +276,14 @@ function hero(c, m) {
   } else if (c.status === 'training' || c.status === 'paused') {
     const why = c.pause?.reason ?? 'the harness stopped while training ran'
     say = /you paused/.test(why) || why === 'cancelled' ? 'You paused the training.' : 'Training has paused.'
-    sub = h('div', { class: 'note' + (/^error/.test(why) ? ' err' : '') }, /you paused|cancelled/.test(why) ? 'Finished tasks, scores and rounds are kept.' : `Why: ${why.replace(/^error: /, '')}`)
-    btn = [train('Resume training')]
+    const manual = /you paused|cancelled/.test(why) && (c.pause?.by || !c.watched)
+    const limit = /budget|call limit|model calls/i.test(why) && !/429|quota|rate.?limit|usage limit/i.test(why)
+    const auto = c.watched && !c.pause?.by && !limit
+    say = manual ? (c.pause?.by && c.pause.by !== 'owner' ? `Paused by ${c.pause.by}.` : 'You paused the training.') : auto ? 'Training is paused and will resume by itself.' : 'Training has paused.'
+    sub = h('div', { class: 'note' + (/^error/.test(why) ? ' err' : '') },
+      manual ? 'Finished tasks, scores and rounds are kept. It stays paused until you resume it.' : h('span', null, h('b', null, 'Why: '), why.replace(/^error: /, '').replace(/^you paused it: /, '')),
+      auto ? h('div', { class: 'small muted', style: 'margin-top:6px' }, 'Nothing is lost. The harness resumes it within a few minutes, and waits longer each time a model limit comes straight back. You can also resume it now.') : limit ? h('div', { class: 'small muted', style: 'margin-top:6px' }, 'This is the camp\'s own limit: raise it in Settings, then resume.') : null)
+    btn = [train(auto ? 'Resume now' : 'Resume training')]
   } else if (c.status === 'ready') {
     say = `All ${plural(m.all, 'agent')}${m.team ? ' and the team' : ''} passed.`
     sub = 'Publishing writes the agents, their teams and the workflow into Agent Forge. Whatever it replaces is backed up.'
@@ -292,6 +303,7 @@ function hero(c, m) {
     h('div', { class: 'row between' }, h('h1', null, c.name), h('span', { class: `chip ${tone}${c.busy ? ' live' : ''}` }, c.busy ? (m?.training ? 'Training' : 'Working') : word)),
     h('p', { class: 'muted' }, c.goal),
     h('p', { class: 'say' }, say), typeof sub === 'string' ? h('p', { class: 'muted' }, sub) : sub,
+    offline ? h('div', { class: 'note' }, offline) : null,
     message ? h('div', { class: 'note ' + message.tone }, message.text) : null,
     h('div', { class: 'row' }, btn),
     m ? h('div', { class: 'col', style: 'gap:6px' },
@@ -668,7 +680,7 @@ function render() {
   pick.replaceChildren(...(camps.length ? camps.map(k => h('option', { value: k.id, selected: k.id === current }, `${k.name} · ${k.busy ? 'working' : (STATUS[k.status]?.[0] ?? k.status)}`)) : [h('option', { value: '' }, 'No camps yet')]))
   const main = $('main')
   const c = camp
-  if (!c) return main.replaceChildren(h('div', { class: 'card' }, h('h2', null, camps.length ? 'Choose a camp above' : 'No training camp yet'), h('p', { class: 'muted' }, 'A training camp takes one goal, proposes a workflow and the agents for it, trains each agent and the team on generated tasks, tests them on tasks they have never seen, and lets you publish the ones that pass.'), message ? h('div', { class: 'note ' + message.tone }, message.text) : null, h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => $('newDlg').showModal() }, '+ New camp'))))
+  if (!c) return main.replaceChildren(h('div', { class: 'card' }, offline ? h('div', { class: 'note' }, offline) : null, h('h2', null, offline && !camps.length ? 'Waiting for the harness' : camps.length ? 'Choose a camp above' : 'No training camp yet'), h('p', { class: 'muted' }, 'A training camp takes one goal, proposes a workflow and the agents for it, trains each agent and the team on generated tasks, tests them on tasks they have never seen, and lets you publish the ones that pass.'), message ? h('div', { class: 'note ' + message.tone }, message.text) : null, h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => $('newDlg').showModal() }, '+ New camp'))))
   const usable = !!c.workflow && c.approvedVersion === c.workflowVersion
   const m = c.workflow ? model(c) : null
   const tabs = [['overview', 'Overview'], ['agents', `Agents${m ? ' (' + m.all + ')' : ''}`], ['workflow', 'Workflow'], ['results', 'Results'], ['settings', 'Settings']]
@@ -695,7 +707,12 @@ async function refresh(force) {
       if ((ui.tab === 'results' && ui.results === 'steps') || ui.tab === 'workflow' || !steps) steps = await api('GET', `camps/${current}/steps`).catch(() => null)
       if (ui.agent && (force || !reading())) await loadAgent()
     } else camp = null
-  } catch (e) { message = { text: e.message, tone: 'err' } }
+    offline = null
+  } catch (e) {
+    // not reaching the harness is a state of the page, not a result of something you did: it clears itself
+    if (e.offline || e.session) offline = e.session ? e.message : `${e.message} This page tries again every 5 seconds${camp ? '; what you see below is the last state it read' : ''}.`
+    else message = { text: e.message, tone: 'err' }
+  }
   if (force || (!dirty && !reading())) render()
 }
 
