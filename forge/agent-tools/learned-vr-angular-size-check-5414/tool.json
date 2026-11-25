@@ -1,0 +1,87 @@
+{
+  "id": "learned-vr-angular-size-check-5414",
+  "name": "vr_angular_size_check",
+  "description": "Verifies VR UI legibility/ergonomics arithmetic: converts pt or cm at a distance to angular degrees, converts degrees at a distance to cm, and computes vertical gaze angle for a seated viewer. Call when reviewing VR UI specs to check text size and placement numbers.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "checks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "size_to_deg",
+                "deg_to_cm",
+                "gaze_deg"
+              ]
+            },
+            "cm": {
+              "type": "number"
+            },
+            "pt": {
+              "type": "number"
+            },
+            "distance_m": {
+              "type": "number"
+            },
+            "degrees": {
+              "type": "number"
+            },
+            "target_height_m": {
+              "type": "number"
+            },
+            "eye_height_m": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      }
+    },
+    "required": [
+      "checks"
+    ]
+  },
+  "example": {
+    "checks": [
+      {
+        "kind": "size_to_deg",
+        "pt": 18,
+        "distance_m": 2
+      },
+      {
+        "kind": "size_to_deg",
+        "cm": 1,
+        "distance_m": 3
+      },
+      {
+        "kind": "deg_to_cm",
+        "degrees": 1.5,
+        "distance_m": 2
+      },
+      {
+        "kind": "deg_to_cm",
+        "degrees": 2,
+        "distance_m": 2
+      },
+      {
+        "kind": "deg_to_cm",
+        "degrees": 2,
+        "distance_m": 3
+      },
+      {
+        "kind": "gaze_deg",
+        "target_height_m": 2.4,
+        "eye_height_m": 1.2,
+        "distance_m": 2
+      }
+    ]
+  },
+  "source": "camp:c85e1f21b:tc-vr-ui-designer",
+  "ts": "2026-11-25T00:54:42.681Z"
+}

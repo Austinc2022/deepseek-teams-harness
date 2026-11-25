@@ -1,0 +1,57 @@
+{
+  "id": "learned-png-pixel-probe-cf95",
+  "name": "png_pixel_probe",
+  "description": "PNG pixel probe for VR screenshot audits: decodes an 8-bit non-interlaced PNG (zlib built-in), then either (a) renders a downsampled ASCII luminance view of a crop so the auditor can see whether text/UI is clipped or occluded, or (b) returns crop statistics (mean luma, clipped-white fraction, per-channel means, row/column ink profiles). Called when judging screenshot craft claims (white-clip, text",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "string",
+        "description": "path to the PNG relative to the working folder"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "ascii",
+          "stats"
+        ]
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
+      },
+      "w": {
+        "type": "number"
+      },
+      "h": {
+        "type": "number"
+      },
+      "cols": {
+        "type": "number"
+      },
+      "rows": {
+        "type": "number"
+      },
+      "ramp": {
+        "type": "string",
+        "description": "optional ASCII ramp, default ' .:-=+*#%@'"
+      }
+    },
+    "required": [
+      "file",
+      "mode"
+    ]
+  },
+  "example": {
+    "file": "rc/screenshots/first-clear.png",
+    "mode": "stats",
+    "x": 955,
+    "y": 435,
+    "w": 230,
+    "h": 265
+  },
+  "source": "learned:vr-auditor",
+  "ts": "2026-11-25T02:14:58.684Z"
+}

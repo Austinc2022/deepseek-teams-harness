@@ -2,11 +2,12 @@
 name: vr-ceo-playbook
 description: "What vr-ceo has learned from its own work: what to do, what to avoid, and methods that worked. Read it before starting."
 ---
-<!-- written by code from after-action reviews; 5 lessons; updated 2026-11-24T13:44:52.345Z -->
+<!-- written by code from after-action reviews; 6 lessons; updated 2026-11-25T02:22:19.124Z -->
 
 # vr-ceo: playbook
 
 ## Do
+- When the verifier cannot run, do not accept delivery on the builder's report alone: require artifact-level acceptance (evidence/*.json status fields on disk, the control-log with verbatim reds, srcHash/generation stamps) and spot-check at least one load-bearing claim against disk, or re-assign a report-and-verify turn. This ticket's own turn 6 proved notes can claim PASS while the on-disk artifact
 - When a duplicate pair is discovered while both tickets are still queued, stop one immediately instead of letting both run or waiting to see which finishes first: queue-time containment here cost only a dispatch slot — 0 worker turns, work folder still just TICKET.md + NOTES.md '(nothing yet)'. A duplicate that reaches turn 1 burns a full builder run on work that will be thrown away.
 - Stamp the originating build-request id into the ticket header at open time (e.g. 'Answers request b1584f5fd84') and dedupe on that id, never on brief text. Without the id in the artifact, no check can dedupe: grep for b1584f5fd84 across this ticket's folder returns 0 hits and TICKET.md:3 records only ticket id, open time and opener, so the request-to-ticket link lived only in COO thread state.
 - When a ticket is stopped as a duplicate before its first turn, the stop note must name the surviving ticket id and the shared request id — that pair is the only thing the after-action can reuse; with 0 turns there are no build-method lessons to extract, so mine only the dispatch failure and do not read work-quality lessons out of the brief.

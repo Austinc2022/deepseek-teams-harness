@@ -1,0 +1,69 @@
+{
+  "id": "learned-check-draft-answers-against-ddd4",
+  "name": "check_draft_answers_against_inventory",
+  "description": "Checks draft store-questionnaire answers against a build/data inventory string and flags common compliance traps: contradictions with planned markets, self-selected age ratings, \"privacy policy not needed\", absolute no-data claims, EN-only localisation, premature \"ready to submit\".",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "inventory": {
+        "type": "string"
+      },
+      "answers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      }
+    },
+    "required": [
+      "inventory",
+      "answers"
+    ]
+  },
+  "example": {
+    "inventory": "App \"Mirror Marsh\" single-player WebXR puzzle game. Local high-score table on device only; no accounts, no cloud, no analytics, no IAP. Being prepared for US, EU and Brazil store listings in English, German and Portuguese (BR). Ages 10+.",
+    "answers": [
+      {
+        "id": "1",
+        "text": "We will select ESRB E10+, PEGI 12, and the lowest Brazil rating. No rating authority review needed."
+      },
+      {
+        "id": "2",
+        "text": "We collect no personal data at all."
+      },
+      {
+        "id": "4",
+        "text": "Privacy policy URL: Not needed since no data is collected."
+      },
+      {
+        "id": "5",
+        "text": "GDPR: Does not apply — no EU users and no personal data."
+      },
+      {
+        "id": "6",
+        "text": "LGPD: Not relevant; Brazil is not in the plan."
+      },
+      {
+        "id": "8",
+        "text": "English copy will be shipped for all three regions; no translation needed."
+      },
+      {
+        "id": "9",
+        "text": "Ready to submit. Owner only needs to click submit in the dashboard."
+      }
+    ]
+  },
+  "source": "camp:c85e1f21b:tc-vr-launch-marketer",
+  "ts": "2026-11-25T06:11:50.686Z"
+}

@@ -1,0 +1,11 @@
+---
+name: camp-tc-character-prop-artist-web-c4ee
+description: Building three.js props at fixed DESIGN.md world sizes with a "readable at 1 m and 3 m" acceptance gate (small-prop art vendor tickets).
+---
+
+1. Build each prop at TRUE world size (1 unit = 1 m); never scale per camera or per preview tile. Measure the built bounding box with THREE.Box3 and confirm against the DESIGN.md figure (tolerance ±5 mm) — a first build almost always overshoots because finials, loops and lips add height you did not count.
+2. Compute the honest angular size: angDeg = 2*atan(sizeM/2 / distM). Rough thresholds at arm's length: >8° reads with part detail; 4-8° reads as silhouette only; <2-3° is a few-pixel blob. Run these numbers BEFORE writing verdicts.
+3. Verdict per asset per distance in NOTES.md with the angle in the reason. If a small asset fails at 3 m, say "FAIL" plainly and flag it; optionally document a hero-scale remedy (group.scale.setScalar(k), needs gate approval) — never claim an 8 cm prop reads at 3 m. Judge tall props separately; they may pass.
+4. Part-level animation: distinct transforms on distinct child pivots (hoodPivot.rotation, clapperPivot with its own phase, tagPivot.position). Expose them on userData and animate(t) deterministic (sum of sines / smoothstep cycles, NO Math.random). Verify with a Node smoke test: same t -> identical JSON tree; different t -> child matrices differ; for coupled parts assert the two rotation values differ (independence).
+5. preview.html: importmap "three" -> ./node_modules/three/build/three.module.js (no CDN), tiles at exact camera distance d (normalize the offset direction vector so |offset| = d exactly — a raw offset like (0.18,0.12,0.98)*d is 0.36% off), reference only files that exist (check each path), show computed angle per tile.
+6. Verification stack that runs in a sandbox: node module import + Box3 sizes + determinism + motion; file-reference existence scan; local http.server + curl every referenced URL for 200; extract the inline module script and node --check it. Headless Chrome usually fails under Seatbelt (process-singleton socket bind denied) — do NOT disable the sandbox; report "not browser-rendered" honestly with the exact command the user can run.

@@ -1,0 +1,80 @@
+{
+  "id": "learned-vr-angular-size-36eb",
+  "name": "vr_angular_size",
+  "description": "Computes visual angular size in degrees of UI text/elements from physical height and distance, for VR UI legibility audits. Call when auditing UI drafts that give text heights and positions in metres. Also computes the physical height needed to hit a target angular size at a given distance.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "height_m": {
+              "type": "number"
+            },
+            "distance_m": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "name",
+            "height_m",
+            "distance_m"
+          ]
+        }
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "angle_deg": {
+            "type": "number"
+          },
+          "distance_m": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "angle_deg",
+          "distance_m"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ]
+  },
+  "example": {
+    "items": [
+      {
+        "name": "question card text (draft)",
+        "height_m": 0.018,
+        "distance_m": 1.8
+      },
+      {
+        "name": "answer button text (draft)",
+        "height_m": 0.02,
+        "distance_m": 1.8
+      },
+      {
+        "name": "call nurse text (draft)",
+        "height_m": 0.015,
+        "distance_m": 0.4
+      },
+      {
+        "name": "phone comparison 18mm at 30cm",
+        "height_m": 0.018,
+        "distance_m": 0.3
+      }
+    ],
+    "target": {
+      "angle_deg": 3.4366,
+      "distance_m": 1.8
+    }
+  },
+  "source": "camp:c85e1f21b:tc-vr-ui-designer",
+  "ts": "2026-11-25T01:05:25.372Z"
+}

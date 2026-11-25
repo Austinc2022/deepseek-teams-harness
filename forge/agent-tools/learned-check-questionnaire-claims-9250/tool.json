@@ -1,0 +1,56 @@
+{
+  "id": "learned-check-questionnaire-claims-9250",
+  "name": "check_questionnaire_claims",
+  "description": "Flags draft Meta questionnaire answers that contradict a verified build/plan inventory: hand-picked age ratings, 'privacy policy not needed', region/legal mismatches (GDPR/LGPD vs launch regions), 'no personal data at all' without on-device nuance, English-only shipping for localized regions, and 'Ready to submit' status claims. Call it before writing a compliance verdict.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "draftItems": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "launchRegions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "launchLanguages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "dataLeavesDevice": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "draftItems",
+      "launchRegions",
+      "launchLanguages"
+    ]
+  },
+  "example": {
+    "draftItems": [
+      "We target 10+, so we will select ESRB E10+, PEGI 12, and the lowest Brazil rating.",
+      "Privacy policy URL: not needed since no data is collected.",
+      "GDPR: does not apply — no EU users and no personal data."
+    ],
+    "launchRegions": [
+      "US",
+      "EU",
+      "Brazil"
+    ],
+    "launchLanguages": [
+      "English",
+      "German",
+      "Portuguese (BR)"
+    ],
+    "dataLeavesDevice": false
+  },
+  "source": "camp:c85e1f21b:tc-vr-launch-marketer",
+  "ts": "2026-11-25T06:17:09.072Z"
+}

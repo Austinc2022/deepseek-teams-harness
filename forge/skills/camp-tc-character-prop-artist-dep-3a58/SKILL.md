@@ -1,0 +1,14 @@
+---
+name: camp-tc-character-prop-artist-dep-3a58
+description: Building three.js-style character/prop assets for WebXR when the brief requires offline/no-CDN geometry, named animation states, and silhouette-readability evidence at 1–3 m.
+---
+
+1. Fix one asset interface first and keep every module self-contained (no shared imports, no cross-folder imports): `create*()` returns `{ id, interactive, states[], setState(name), update(dt), getMeshes() }` where meshes are `{color, verts:[[x,y,z]], faces:[[i..]]}` in meters, y-up, resting on y=0. Plain-array geometry (tubes, prisms, revolves) needs no three.js and runs in Node for measurement.
+2. Make animation parametric in a continuous driver (e.g. unwound amount u, plate angle) so states ease smoothly without state-transition code. No Math.random — deterministic geometry so measurements reproduce.
+3. One `manifest.js` is the single source of truth: id, label, module namespace, explicit `create` factory, states, defaultState. The preview iterates it and creates one button per named state; interactive props get an extra "grab" button driving the state machine.
+4. Preview = one HTML + one JS module: painter's-algorithm face sort, 60° horizontal FOV camera at 1/2/3 m looking at the bbox centre, silhouette mode fills every face black on white. Serve over `python3 -m http.server` (ES modules need HTTP).
+5. Evidence comes from code, not prose: `tools/measure.mjs` computes measured bboxes and `2·atan(size/(2·d))` degrees at 1/2/3 m for every state that changes the silhouette; copy the numbers verbatim into the doc. A colour-blind occupancy-grid proxy (centred front-view triangle rasterisation at N=40 ≈ 2 m and N=16 ≈ 3 m, Jaccard distance > 0.35 between all pairs) stands in for "identifiable as a flat dark shape".
+6. Smoke-test the state machines headlessly: cycle counts (3 steps then reset), squeeze ratio measured at the moving plate's UNDERSIDE (top-face height includes plate thickness and lies about the ratio), spring return, idle amplitude bounded (slow settle vs bounce), determinism, unknown-state rejection.
+7. Shape changes for distance readability are concrete and numeric: thick rope tube + capped peg (ring with broken centre), exaggerated hat brim diameter, pinched sack neck with folded lip, bellows nozzle + raised grip so the profile isn't a slab.
+8. Scope discipline: build exactly the approved list; record unapproved draft changes in a DECISION.md (in scope? what was built instead? which requests deferred) — never silently build or silently drop them.
+Mistakes to avoid: tilting the bellows top plate the wrong way (rear must LIFT when opening — rotate by negative angle for x < hinge); claiming angular sizes without re-running the measure tool after any geometry edit; backgrounding a local server under a sandboxed shell (run the HTTP check in one foreground Python process instead).
