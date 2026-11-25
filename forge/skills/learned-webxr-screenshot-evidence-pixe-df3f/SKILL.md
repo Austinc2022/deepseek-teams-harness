@@ -1,0 +1,11 @@
+---
+name: learned-webxr-screenshot-evidence-pixe-df3f
+description: Whenever a WebXR kit/game ticket's evidence battery captures canvas screenshots, asserts two shots differ (distinct shots), asserts recapture determinism (same sha256), or a report cites a hero/in-play PNG as craft evidence.
+---
+
+1. Assert pixels, not presence: a `<canvas>` visibility check passes on a black rectangle. Measure a lit-luma floor on the canvas element screenshot (Playwright element screenshots read the composed WebGL frame; in-page getImageData/toDataURL reads blank without preserveDrawingBuffer) — e.g. lit% of pixels above luma 25 must be >= 1, or the kit's look-check subject-vs-surround Rec.709 luma delta >= threshold.
+2. Scope hash claims by what is actually stable. Distinct-shot checks (hashes of two DIFFERENT in-play moments must differ) are robust. Byte-identical recapture (same sha256) is only defensible within one run: same process, pinned browser binary, fixed timestep, settle wait before each capture. Never claim cross-run or cross-machine pixel equality: pixel-exact hashing is brittle across SwiftShader/software-GL versions (argued by pjt222/agent-almanac headless-webgl-verification guide). If a 'same-sha256' row must exist, implement it as capture-time manifest integrity (record sha256 when captured, re-verify the file later) and say so in NOTES.
+3. Fresh page load per verification run — never verify through an HMR'd dev-server tab: GPU state survives hot reload and can mask (or fake) a failure.
+4. If canvas shots come black in the pinned browser, suspect software-GL first: try flags --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist (full chromium; chrome-headless-shell is usually enough for DOM+canvas element shots but is the guide's first suspect for GPU readback). Check document.visibilityState=='visible' BEFORE luminance so rAF-paused-when-hidden failures are attributable.
+5. Give software rasterizers settle time (extra frames/seconds) before capture; take craft-evidence shots mid-verb (in-play), and measure DOM overlay cover (fail above ~2% viewport) so a menu/overlay PNG can never pass as gameplay evidence.
+6. Order in the battery: all code edits done -> tests -> build -> capture/smoke/freeze -> copy logs to evidence -> hygiene LAST; run nothing after cleanup (smoke/freeze regenerate scratch).

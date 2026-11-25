@@ -1,0 +1,6 @@
+---
+name: camp-tc-vr-head-design-vr-game-pl-9b19
+description: When writing a design/PRD plan for a VR (esp. WebXR) game with demos, milestones and store submission.
+---
+
+Structure the plan as: (1) PRD + core loop sentence; (2) MVP scope with explicit exclusions list; (3) ONE monetisation model with 3-region price points and rejected alternatives; (4) architecture sketch incl. desktop fallback; (5) fun design with measurable proxies (time-to-first-reward, repeatability rate, comfort SSO) AND a written acknowledgement that only real players confirm fun; (6) bounded localisation (fixed ship list, externalised strings, CJK/RTL decisions, numeric expansion allowance); (7) store route with cited/UNVERIFIED sources and at least one deliberate non-target region; (8) 1-3 demos each with hypothesis + numeric pass/fail thresholds set BEFORE building; (9) milestones with named gates + risk register + technical reviewer sign-off decision. Set thresholds from capability (e.g. 72/90 fps = 13.9/11.1 ms frame budget) not from aspiration. For WebXR/Meta Quest cite: developers.meta.com PWA overview, In-app purchases in WebXR PWAs (Digital Goods only for store-installed PWAs), IARC ratings, regional pricing pages. Flag any policy claim lacking a fetched source as UNVERIFIED.

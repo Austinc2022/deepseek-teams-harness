@@ -1,0 +1,47 @@
+{
+  "id": "learned-pulsevr-threshold-check-1e6d",
+  "name": "pulsevr_threshold_check",
+  "description": "Recomputes subscription thresholds for PulseVR review: subscribers needed for $1M/year and $1M/day, gross and net of a platform fee, plus share of an addressable base and churn-adjusted year-1 revenue. Use when re-deriving revenue-per-subscriber arithmetic in devil's-advocate reviews.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "price_per_month": {
+        "type": "number"
+      },
+      "platform_fee_pct": {
+        "type": "number"
+      },
+      "addressable_base": {
+        "type": "number"
+      },
+      "claimed_subscribers": {
+        "type": "number"
+      },
+      "monthly_churn_pct": {
+        "type": "number"
+      },
+      "vat_pct_on_eu": {
+        "type": "number"
+      },
+      "eu_share": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price_per_month",
+      "platform_fee_pct",
+      "addressable_base"
+    ]
+  },
+  "example": {
+    "price_per_month": 9.99,
+    "platform_fee_pct": 30,
+    "addressable_base": 4080000,
+    "claimed_subscribers": 122400,
+    "monthly_churn_pct": 4,
+    "vat_pct_on_eu": 20,
+    "eu_share": 0.4
+  },
+  "source": "camp:c85e1f21b:tc-devils-advocate",
+  "ts": "2026-11-24T23:54:20.082Z"
+}

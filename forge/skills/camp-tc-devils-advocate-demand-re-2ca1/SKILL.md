@@ -1,0 +1,6 @@
+---
+name: camp-tc-devils-advocate-demand-re-2ca1
+description: Reviewing a demand/economics report where the multiplication is correct but the inputs may be assumptions — devil's advocate or scoring work.
+---
+
+1. Recompute every chain (base × rate × rate × ARPU) and state plainly when the arithmetic is right; never attack the multiplication when the inputs are the problem. 2. Mark each input: sourced / assumed / measured. Attack assumptions, not arithmetic. 3. Stress-test unsourced inputs over plausible ranges (e.g. interest 3–15%, conversion 0.5–5%) and show the outcome span; if it spans >10x, the model has no discriminating power and high scores built on it are unearned. 4. Back-compute BOTH thresholds ($1M/yr, $1M/day) to required units/subs and compare against the report's own addressable base — flag when required subs exceed 100% of the base. 5. Check the sample cannot measure a parameter it was conditioned on (surveying a wellness Discord cannot estimate % of VR users interested in wellness). 6. State statistical precision explicitly: n=42 → worst-case ±15 pts; report Wilson CI for the headline proportion; note selection bias is not in the CI. 7. Separate what survives (directional resonance) from what dies (TAM %, conversion %, price). 8. Verify market-gap claims against live competitors before accepting 'no competitor exists'.

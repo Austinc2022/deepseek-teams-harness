@@ -1,0 +1,61 @@
+{
+  "id": "learned-venue-economics-5d9f",
+  "name": "venue_economics",
+  "description": "Computes Neon Grid-style free-roam VR venue steady-state economics: capacity build-up, revenue, cost stack, contribution margin, venue counts and capital for daily/yearly revenue goals. Use when re-testing venue capacity or goal arithmetic.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "stations": {
+        "type": "number"
+      },
+      "openHours": {
+        "type": "number"
+      },
+      "sessionMinutes": {
+        "type": "number"
+      },
+      "changeoverMinutes": {
+        "type": "number"
+      },
+      "playersPerSession": {
+        "type": "number"
+      },
+      "ticketPrice": {
+        "type": "number"
+      },
+      "weekdayUtil": {
+        "type": "number"
+      },
+      "weekendUtil": {
+        "type": "number"
+      },
+      "goalPerDay": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "stations",
+      "openHours",
+      "sessionMinutes",
+      "changeoverMinutes",
+      "playersPerSession",
+      "ticketPrice",
+      "weekdayUtil",
+      "weekendUtil",
+      "goalPerDay"
+    ]
+  },
+  "example": {
+    "stations": 8,
+    "openHours": 14,
+    "sessionMinutes": 30,
+    "changeoverMinutes": 10,
+    "playersPerSession": 2,
+    "ticketPrice": 30,
+    "weekdayUtil": 0.25,
+    "weekendUtil": 0.65,
+    "goalPerDay": 1000000
+  },
+  "source": "camp:c85e1f21b:tc-devils-advocate",
+  "ts": "2026-11-24T15:58:41.606Z"
+}

@@ -1,0 +1,19 @@
+{
+  "id": "learned-check-sound-durations-d5c2",
+  "name": "check_sound_durations",
+  "description": "Parses a sound-list markdown table and verifies every discrete feedback cue is under 800 ms; returns per-row pass/fail and a summary.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "markdown": {
+        "type": "string",
+        "description": "audio-spec markdown text containing rows like | id | trigger | ... | duration_ms | kind |"
+      }
+    }
+  },
+  "example": {
+    "markdown": "| seed_pickup | pinch seed from tray | 180 ms | feedback |\n| grow_swell | hold open palm 4 s | 4000 ms | state |\n| moth_flutter | loop while flying | loop ms | state |"
+  },
+  "source": "camp:c85e1f21b:tc-audio-designer",
+  "ts": "2026-11-24T15:58:14.740Z"
+}

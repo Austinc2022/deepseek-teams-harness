@@ -1,0 +1,20 @@
+{
+  "id": "learned-check-evidence-srchash-d325",
+  "name": "check_evidence_srchash",
+  "description": "Recomputes the FORMSMITH evidence srcHash over rc/src using gate-lite header() semantics (sorted relative paths, no dotfiles, path+bytes) and compares it to every evidence JSON header; also reports evidence startIso vs newest src mtime (staleness). Call when auditing whether evidence was measured on the current source.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "root": {
+        "type": "string",
+        "description": "path to the rc tree root, relative to the working folder (default 'rc')"
+      }
+    },
+    "required": []
+  },
+  "example": {
+    "root": "rc"
+  },
+  "source": "learned:vr-head-business",
+  "ts": "2026-11-24T18:59:34.898Z"
+}

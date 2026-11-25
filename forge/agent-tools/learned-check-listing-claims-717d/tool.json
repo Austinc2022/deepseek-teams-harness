@@ -1,0 +1,56 @@
+{
+  "id": "learned-check-listing-claims-717d",
+  "name": "check_listing_claims",
+  "description": "Extracts claim-bearing phrases from a store listing draft and flags them against a JSON fact sheet of build facts (feature counts, multiplayer, reviews, rating certificate). Call when auditing store copy so no fabricated claim slips through.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "listing_text": {
+        "type": "string"
+      },
+      "facts": {
+        "type": "object",
+        "properties": {
+          "single_player_only": {
+            "type": "boolean"
+          },
+          "has_coop": {
+            "type": "boolean"
+          },
+          "user_review_count": {
+            "type": "number"
+          },
+          "rating_certificate": {
+            "type": "boolean"
+          },
+          "decoration_item_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "single_player_only",
+          "has_coop",
+          "user_review_count",
+          "rating_certificate",
+          "decoration_item_count"
+        ]
+      }
+    },
+    "required": [
+      "listing_text",
+      "facts"
+    ]
+  },
+  "example": {
+    "listing_text": "Co-op with a friend - build a hearth together! Over 300 five-star reviews from players! Rated E for Everyone.",
+    "facts": {
+      "single_player_only": true,
+      "has_coop": false,
+      "user_review_count": 0,
+      "rating_certificate": false,
+      "decoration_item_count": 22
+    }
+  },
+  "source": "camp:c85e1f21b:tc-vr-auditor",
+  "ts": "2026-11-24T15:19:21.839Z"
+}

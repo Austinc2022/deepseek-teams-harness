@@ -1,0 +1,34 @@
+{
+  "id": "learned-check-citation-completeness-df16",
+  "name": "check_citation_completeness",
+  "description": "Checks whether a candidate section in a demand report cites at least N sources that each have BOTH a URL and a date. Call when auditing a report's citation acceptance criterion; pass the candidate's citation strings (as they appear in the source list or in-text) and the required count.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "required_count": {
+        "type": "number"
+      },
+      "citations": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "citations",
+      "required_count"
+    ]
+  },
+  "example": {
+    "citations": [
+      "VRXplore blog, \"The VR games market in 2024\" - https://vrxplore.example/2024-market (2024)",
+      "Steam page, Phasmophobia - accessed 2026-11-12",
+      "Reddit r/VRGaming threads on virtual pets - no date",
+      "Developer blog post on Gorilla Tag MAU - no date"
+    ],
+    "required_count": 3
+  },
+  "source": "camp:c85e1f21b:tc-market-analyst",
+  "ts": "2026-11-24T15:22:38.855Z"
+}

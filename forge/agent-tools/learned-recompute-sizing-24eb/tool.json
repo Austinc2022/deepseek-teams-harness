@@ -1,0 +1,83 @@
+{
+  "id": "learned-recompute-sizing-24eb",
+  "name": "recompute_sizing",
+  "description": "Recompute market-sizing arithmetic from a report's stated base, conversion rate, and price; catches order-of-magnitude slips and prints the units/day needed for $1M/year and $1M/day.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "base": {
+              "type": "number"
+            },
+            "ratePct": {
+              "type": "number"
+            },
+            "price": {
+              "type": "number"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "reportClaim": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "label",
+            "base",
+            "ratePct",
+            "price",
+            "unit"
+          ]
+        }
+      },
+      "pricePerUnit": {
+        "type": "number"
+      },
+      "targetDayDollars": {
+        "type": "number"
+      },
+      "targetYearDollars": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "lines",
+      "pricePerUnit",
+      "targetDayDollars",
+      "targetYearDollars"
+    ]
+  },
+  "example": {
+    "lines": [
+      {
+        "label": "US schools",
+        "base": 130000,
+        "ratePct": 5,
+        "price": 3000,
+        "unit": "schools",
+        "reportClaim": 195000000
+      },
+      {
+        "label": "Global students",
+        "base": 1500000000,
+        "ratePct": 1,
+        "price": 10,
+        "unit": "students",
+        "reportClaim": 150000000
+      }
+    ],
+    "pricePerUnit": 3000,
+    "targetDayDollars": 1000000,
+    "targetYearDollars": 1000000
+  },
+  "source": "camp:c85e1f21b:tc-market-analyst",
+  "ts": "2026-11-25T00:18:05.672Z"
+}

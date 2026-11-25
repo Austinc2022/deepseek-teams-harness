@@ -1,0 +1,70 @@
+{
+  "id": "learned-gate-arithmetic-5d8a",
+  "name": "gate_arithmetic",
+  "description": "Gate-decision arithmetic for demo evidence: Wilson 95% confidence intervals on fun/replay/nausea proportions, two-proportion z-tests to compare two demo arms (did a fix actually move the metric?), and revenue conversions (copies/day to copies/year, gross vs net after a platform fee, copies needed to hit a dollar target). Call whenever reconciling two demo reports or restating a revenue claim in bu",
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "example": {
+    "proportions": [
+      {
+        "label": "Demo1 Quest3 replay",
+        "k": 15,
+        "n": 18
+      },
+      {
+        "label": "Demo2 Quest2 replay",
+        "k": 2,
+        "n": 10
+      },
+      {
+        "label": "MiniTest Quest2-fixed replay",
+        "k": 9,
+        "n": 12
+      }
+    ],
+    "comparisons": [
+      {
+        "label": "replay Demo1 Q3 vs Demo2 Q2 stock",
+        "k1": 15,
+        "n1": 18,
+        "k2": 2,
+        "n2": 10
+      },
+      {
+        "label": "replay MiniTest Q2 fixed vs Demo2 Q2 stock",
+        "k1": 9,
+        "n1": 12,
+        "k2": 2,
+        "n2": 10
+      }
+    ],
+    "revenue": [
+      {
+        "label": "unverified sales claim",
+        "price": 20,
+        "copiesPerDay": 50000,
+        "platformFeePct": 30
+      }
+    ],
+    "targets": [
+      {
+        "label": "1M per year",
+        "dollars": 1000000,
+        "period": "year",
+        "price": 20,
+        "platformFeePct": 30
+      },
+      {
+        "label": "1M per day",
+        "dollars": 1000000,
+        "period": "day",
+        "price": 20,
+        "platformFeePct": 30
+      }
+    ]
+  },
+  "source": "camp:c85e1f21b:tc-vr-ceo",
+  "ts": "2026-11-24T23:28:47.930Z"
+}

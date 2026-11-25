@@ -1,0 +1,33 @@
+{
+  "id": "learned-angular-readability-check-07de",
+  "name": "angular_readability_check",
+  "description": "Computes the angular size (degrees) of text of a given point size viewed at a given distance, and flags whether it meets a legibility threshold (~1.0 deg for comfortable reading, ~0.35 deg absolute minimum). Use when judging a VR demo claim that UI text at distance D with point size P is 'readable'.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "pointSizePt": {
+        "type": "number",
+        "description": "text size in points (1pt = 0.3528 mm)"
+      },
+      "distanceM": {
+        "type": "number",
+        "description": "viewing distance in meters"
+      },
+      "thresholdDeg": {
+        "type": "number",
+        "description": "angular-size threshold in degrees; default 1.0 (comfortable reading)"
+      }
+    },
+    "required": [
+      "pointSizePt",
+      "distanceM"
+    ]
+  },
+  "example": {
+    "pointSizePt": 14,
+    "distanceM": 2,
+    "thresholdDeg": 1
+  },
+  "source": "camp:c85e1f21b:tc-vr-playtest-analyst",
+  "ts": "2026-11-24T18:39:17.461Z"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "learned-check-demand-report-math-20cf",
+  "name": "check_demand_report_math",
+  "description": "Recomputes sizing arithmetic in a demand report: given a base count, a stated percentage/adoption rate and a price, returns the correct derived units and revenue, plus a flag when the report's stated derived units or revenue disagree. Call whenever a report claims \"N units at X% = Y units at $P = $Z\" so no 10x errors slip through.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "base": {
+        "type": "number"
+      },
+      "pct": {
+        "type": "number"
+      },
+      "price_per_unit": {
+        "type": "number"
+      },
+      "report_units": {
+        "type": "number"
+      },
+      "report_revenue": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "base",
+      "pct",
+      "price_per_unit",
+      "report_units",
+      "report_revenue"
+    ]
+  },
+  "example": {
+    "base": 130000,
+    "pct": 5,
+    "price_per_unit": 3000,
+    "report_units": 65000,
+    "report_revenue": 195000000
+  },
+  "source": "camp:c85e1f21b:tc-market-analyst",
+  "ts": "2026-11-25T00:26:20.161Z"
+}

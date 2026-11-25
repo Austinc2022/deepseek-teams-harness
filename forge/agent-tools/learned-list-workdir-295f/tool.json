@@ -1,0 +1,19 @@
+{
+  "id": "learned-list-workdir-295f",
+  "name": "list_workdir",
+  "description": "Lists files in the agent's working folder (recursive, with sizes) so a read-only reviewer can discover attached plan and fixture files by name.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "relative path inside the working folder, default '.'"
+      }
+    }
+  },
+  "example": {
+    "path": "."
+  },
+  "source": "camp:c85e1f21b:tc-feasibility-engineer",
+  "ts": "2026-11-24T23:44:27.941Z"
+}

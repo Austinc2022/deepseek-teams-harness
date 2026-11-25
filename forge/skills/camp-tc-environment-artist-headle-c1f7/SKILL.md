@@ -1,0 +1,12 @@
+---
+name: camp-tc-environment-artist-headle-c1f7
+description: Verifying that a three.js/WebXR index.html loads with no console errors and renders a frame, when running under the macOS Seatbelt sandbox where normal browser launches are blocked.
+---
+
+1. Do not use `open`/osascript (Launch Services is blocked) and do not expect Chrome's default launch to work: Chromium dies on Mach-port IPC (`bootstrap_check_in ... Permission denied`) and on its ProcessSingleton unix-socket bind.
+2. Serve the working folder over HTTP first (ES modules fail on file://): a tiny Node `http.createServer` reading files from the folder, listening on 127.0.0.1, in the background. TCP bind works fine in the sandbox.
+3. Launch `~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell` with `--headless --disable-gpu --no-sandbox --single-process --no-zygote --in-process-gpu --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --disable-crashpad --disable-breakpad --user-data-dir=$TMPDIR/<unique> --remote-debugging-port=<unique-port> about:blank`, run in background. `--single-process --no-zygote` avoids the Mach rendezvous crash; SwiftShader gives a software WebGL context (without it, WebGL creation fails and you only prove the error path).
+4. Pick a rarely used port (e.g. 9377): port 9223 may already be held by another browser in the environment — check `bind() failed: Address already in use` in the instance log before trusting the endpoint. Confirm with `curl 127.0.0.1:<port>/json/list` that you see the target you expect.
+5. Drive it with CDP over the page's `webSocketDebuggerUrl` using Node's built-in WebSocket (Node >= 22): Runtime.enable + Page.enable, `Emulation.setDeviceMetricsOverride` for a deterministic viewport, Page.navigate, wait ~5 s, record `Runtime.consoleAPICalled` (error type) and `Runtime.exceptionThrown`, then `Page.captureScreenshot` and write the PNG yourself. Headless `--screenshot` mode hangs in this sandbox before writing the file.
+6. Read the PNG with the image-reading Read tool to confirm the scene actually composed (not a blank/error page), and re-run the whole check after every scene edit. Record exactly what ran (browser version, software GL) in your notes; never claim a desktop browser check you did not do.
+7. Cleanup: pkill is often denied; let background tasks expire, or reuse one long-lived headless instance + static server for many captures.

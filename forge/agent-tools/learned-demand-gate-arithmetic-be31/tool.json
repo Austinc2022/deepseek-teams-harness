@@ -1,0 +1,61 @@
+{
+  "id": "learned-demand-gate-arithmetic-be31",
+  "name": "demand_gate_arithmetic",
+  "description": "Computes demand-gate revenue arithmetic: observed retained revenue from deposit cohort, subscribers needed for $1M/yr and $1M/day floors, segment ceiling, and stretch case. Called when judging a paid-demand pilot with deposits, refunds, and month-2 retention counts.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "deposits": {
+        "type": "number"
+      },
+      "depositPrice": {
+        "type": "number"
+      },
+      "refunded": {
+        "type": "number"
+      },
+      "kept": {
+        "type": "number"
+      },
+      "month2Active": {
+        "type": "number"
+      },
+      "monthlyPrice": {
+        "type": "number"
+      },
+      "segmentSize": {
+        "type": "number"
+      },
+      "stretchSubscribers": {
+        "type": "number"
+      },
+      "floorPerYear": {
+        "type": "number"
+      },
+      "floorPerDay": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "deposits",
+      "depositPrice",
+      "refunded",
+      "kept",
+      "month2Active",
+      "monthlyPrice",
+      "segmentSize"
+    ]
+  },
+  "example": {
+    "deposits": 41,
+    "depositPrice": 29,
+    "refunded": 30,
+    "kept": 11,
+    "month2Active": 4,
+    "monthlyPrice": 29,
+    "segmentSize": 600000,
+    "stretchSubscribers": 500
+  },
+  "source": "camp:c85e1f21b:tc-ic-chair",
+  "ts": "2026-11-24T15:22:17.363Z"
+}

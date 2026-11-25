@@ -1,0 +1,13 @@
+---
+name: camp-tc-qa-automation-qa-frozen-m-6481
+description: Writing automated tests for a frozen/approved build artifact where you must report defects honestly without modifying the product code.
+---
+
+1. Read the fixture's spec header (documented rules) and treat it as the contract. Write assertions against the SPEC, not the implementation; compute expected values by hand (integer arithmetic) and hardcode them — never derive expected from the code under test.
+2. Probe the suspected defect with a real strict assertion (e.g. assert.strictEqual(promoDiscount(1999,"VIP20"), 400)). Add one exact-match case (where buggy and correct code agree, e.g. 2000→400) to show the defect is specifically in the failing dimension (rounding direction), plus one more failing case (e.g. 999) to show it is systematic. Include green guard tests (unknown inputs, zero/negative clamps) so the suite is complete.
+3. Build a one-command runner (tests/run.sh) that runs ALL suites even if the first fails and exits non-zero if any failed. Verify exit-code propagation by ALSO running each suite standalone once and comparing.
+4. Headless "smoke" test without browser/network: drive the module's public API through realistic end-to-end scenarios (browse→add→promo→receipt) in a plain Node process; a tiny scenario() harness with try/catch prints PASS/FAIL per scenario and exits 1 on any failure.
+5. Module-system trap: a parent directory's package.json "type":"module" silently flips CommonJS fixtures/tests to ESM (ReferenceError: require is not defined). Fix the ENVIRONMENT, not the fixture: add package.json with {"type":"commonjs"} in YOUR test workspace (nearest package boundary wins). This is not a product change — say so in the report.
+6. Triage every failure before writing the report: product defect vs test-authoring error. If YOUR expected constant is arithmetically wrong (e.g. 2×1299+350 mis-set to 1999), fixing it is NOT weakening the test — assert the true value and add extra cases; disclose the correction and the run it appeared in. NEVER skip/soften/remove a failing product assertion.
+7. Prove fixture integrity: SHA-256 the frozen file before testing and after; identical hashes + "no writes targeted src/" is your evidence (git may not track the file).
+8. Report (test-report.md): every command actually run with observed exit code (including failed harness runs — log them), each failure with expected vs actual and file:line, root-cause pointer to the exact source line vs spec line, customer impact, suggested fix FOR THE BUILD TEAM (you do not apply it), and a plain verdict: test-clean or reported defect.

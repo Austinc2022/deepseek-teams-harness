@@ -1,0 +1,13 @@
+---
+name: camp-tc-producer-producer-drop-in-8b78
+description: When integrating specialist drop reports (code/art/design/audio/QA/build) into a single integration.md with a deliverables ledger, conflicts, missing items, an ordered plan, and a go/no-go judgment — especially before a greenlight decision.
+---
+
+1. Read every fixture file in full; list exactly which roles dropped and which never reported. Never infer a report exists because a summary mentions it. If drops are bundled in shared files, say so in the ledger so the drop count is auditable.
+2. Build a deliverables ledger with one row per role (including roles with NO drop). For each claimed item classify: delivered (artifact inspected), unverified (claim in text, no artifact to check), partial, or missing. A claim you cannot check is unverified, not delivered. 'We'll do that later' / 'waiting on X' counts as missing.
+3. Judge the handoff/summary note against the underlying brief, not against itself. Cross-check every summary claim against each drop's own content. Quote the disagreeing values verbatim in each conflict, naming the two parts (e.g. handoff note vs design brief). Note scope conflicts too (e.g. requirement covers devices A+B, claim covers only A) even when the numbers don't contradict.
+4. Record genuine agreements separately from conflicts (two independent reports agreeing on a value is corroboration of the claim, still unverified until an artifact is inspected).
+5. Missing items: each gets a named role owner and the specific gate it blocks. Distinguish optional-by-brief items (not blockers) from required ones. Map 'later' promises to missing with the quote as evidence.
+6. Integration plan: order steps by dependency (content/conformance first, then the minimal pipeline that unblocks verification, then verification, then release hardening, then the decision review). Every step needs concrete entry and exit checks; a failed exit routes back to the owning step. The greenlight/decision review is the LAST step, never the first.
+7. Go/no-go: one paragraph that names the evidence (quote the reports' own words) — no-go when required-by-brief items have zero evidence or the only evidence is unverified extrapolation. State what would flip the verdict and by when it can realistically happen.
+8. Finish with knowledge_add (the verdict, strength argued/measured with source path) and memory_save (state + what a follow-up run should check). Common mistakes: accepting 'everything is green', counting a desktop extrapolation as a performance result, letting 'optional' swallow a brief-essential item, and inventing conflicts where two reports actually agree.

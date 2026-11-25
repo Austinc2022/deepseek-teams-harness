@@ -1,0 +1,12 @@
+---
+name: camp-tc-vr-qa-verifier-demo-hando-0de8
+description: Verifying a small demo handoff (claims file + one or two source files) against a plan's acceptance items, especially when the builder's index.html or measurement artifacts are missing.
+---
+
+1. Inventory the handoff and hash every delivered file (sha256) before touching anything; note files the claims reference but do not deliver (e.g. index.html, strings.json) as completeness defects.
+2. Static read: map each acceptance item to file:line evidence in the code and to each claim in QA-CLAIMS.md. Treat every handoff claim as a claim, never as evidence. Look for hardcoded "measurements" (e.g. `let fps = 90`) — a constant is a guess, not a measurement.
+3. Build a minimal DOM-shim probe (Node vm) that executes the demo script UNMODIFIED. Run three modes: best-case host page (elements the script queries exist), worst-case (querySelector returns null), and a DIAGNOSTIC shim that aliases any misspelled API (e.g. addEventListner) to prove the typo is the sole blocker. Never edit the delivered source; label shims as diagnostics.
+4. If a headless browser is available, use it: reconstruct the missing host page as a harness that provides exactly the nodes the script queries, loads the script via relative path, and counts real DOM clicks independently (window.__qaClicks). Run the fun-proxy window for the full duration (e.g. 60 s at 2 taps/s) in "as delivered" mode, then a short diagnostic mode with the typo bypassed. Playwright-core may not be in the working dir: require it via NODE_PATH pointing at any node_modules/playwright-core found in the harness tree, and launch the chrome-headless-shell binary from ~/Library/Caches/ms-playwright/chromium_headless_shell-*/.
+5. Record exact commands and verbatim outputs as transcripts; in the acceptance table each PASS/FAIL cell must cite file:line or an exact command+output excerpt. Never mark an unrun check as passed; mark missing evidence UNVERIFIED / NOT ENOUGH EVIDENCE.
+6. Prioritise defects P1..Pn naming the specific lines and the specific claims they falsify. Close with a Decision (Yes / No / Not enough evidence) and an explicit "limits of testing without a headset" section (no XR session, no comfort assessment, 2D DOM clicks only).
+Common mistakes: fixing code you were asked only to verify; counting a claim as evidence; reporting perf numbers without a measurement artifact; forgetting that a failed external fetch is itself evidence (network call attempted on load = policy violation regardless of resolution).

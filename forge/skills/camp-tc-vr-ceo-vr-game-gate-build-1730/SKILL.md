@@ -1,0 +1,12 @@
+---
+name: camp-tc-vr-ceo-vr-game-gate-build-1730
+description: Deciding go / revise demos / stop for a VR prototype against a studio whose goal is a fun game with a path to a revenue target (e.g. $1M/day), when the evidence pack mixes fun signals with utility/commercial signals.
+---
+
+1. Separate the two gates up front. A GAME gate is passed only by fun behaviour: observed repeat play (not stated intent), long/absorbing session length, and high measured fun ratings. A UTILITY gate is passed by usefulness, willingness-to-use-at-work, and paid commercial signal. Never let one substitute for the other.
+2. Put the fun evidence and the utility evidence side by side per feature. A feature that scores high on utility and low on fun is a work tool, not a game feature. If the whole product is utility-strong and fun-weak (e.g. useful 4.6/5 but fun 2.1/5, 0 pleasure replay, would-not-use-at-home), it fails the GAME gate regardless of how good the utility is.
+3. Distinguish a fixable defect from a category error. REVISE DEMOS only when you can name the specific defect and the fix, and there is real fun to be salvaged (e.g. a latency bug suppressing an otherwise-fun loop). STOP when the gap is category-level: making it fun would mean inventing a different product. No identified fix = STOP, not revise.
+4. Watch for the utility/revenue conflation trap. Sales will often claim "$1M/day — enterprises will pay" while finance prices it as a consumer game ($/copy). Do BOTH models honestly: (a) $/copy model — divide the target by the price (e.g. $1M/day at $20 = 50,000 copies/day = 18.25M/yr) and compare to real category benchmarks (Beat Saber ~4M lifetime); (b) enterprise model — convert any pilot/seat offer to per-seat-year and per-day, then compute how many seats/firms the target needs. Show that the two models are incompatible and neither supports the claim.
+5. Recognise revenue at zero until contracted and collected. Non-binding LOIs and "offered" pilots are $0. Note negotiation pressure if the per-seat price is above category comparables.
+6. Deliverables: verdict (go / revise demos / stop); final feature list each tagged with its REAL evidence label (fun vs utility); cut list; effort budget with milestones (for a STOP the game budget is $0 / 0 milestones; any separate validation track is capped, kill-gated, and explicitly NOT game budget); honest revenue restatement vs the target; reopen conditions.
+7. If no file-write tool exists in the run, deliver the full build-decision.md text in the final message rather than leaving it unwritten.

@@ -1,0 +1,47 @@
+{
+  "id": "learned-acv-revenue-math-eb15",
+  "name": "acv_revenue_math",
+  "description": "Compute revenue at N sites, site counts required for $1M/year and $1M/day targets, and TAM penetration, for demand-gate verdicts. Call whenever a verdict needs revenue scaling math from a per-site monthly price.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "monthly_price_per_site": {
+        "type": "number"
+      },
+      "tam_sites": {
+        "type": "number"
+      },
+      "site_counts": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      },
+      "targets_yearly": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "required": [
+      "monthly_price_per_site",
+      "tam_sites",
+      "site_counts"
+    ]
+  },
+  "example": {
+    "monthly_price_per_site": 600,
+    "tam_sites": 45000,
+    "site_counts": [
+      25,
+      60
+    ],
+    "targets_yearly": [
+      1000000,
+      365000000
+    ]
+  },
+  "source": "camp:c85e1f21b:tc-ic-chair",
+  "ts": "2026-11-24T15:19:02.495Z"
+}

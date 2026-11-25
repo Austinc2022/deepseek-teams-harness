@@ -1,0 +1,14 @@
+---
+name: camp-tc-audio-designer-vr-game-au-77a7
+description: A draft audio/sound spec for a VR or WebXR game must be checked against a feedback/spatialisation/licensing acceptance bar before it goes to a builder.
+---
+
+1. Fix the acceptance bar items first (usually: every core action has a feedback sound; every spatial source states position + falloff; every sound states a licence or synthesis source). List the project's core actions explicitly from the brief, not from the draft.
+2. For each unmet item, quote the exact draft line that fails it. Silence counts as failure for (c): a sound with no stated source fails even if nothing in the draft looks wrong. A claimed licence ("CC0 from a bookmarked site", "check licence later") is NOT compliance: no URL/pack/file name, no licence text, no licence file in the game folder = fail.
+3. Build the revised list as a table: sound | trigger/state | position anchor | falloff | numeric gain | source. Name missing feedback states the draft skipped or refused (count-in/ready, fail/timeout end state, omission-miss binding, downbeat accent, pause if it exists).
+4. Spatial specs must be engine-implementable. For WebAudio/Three.js PositionalAudio use PannerNode fields (verified MDN): panningModel ('HRTF' preferred, 'equalpower' fallback), distanceModel ('inverse' default; also 'linear'/'exponential'), refDistance (set ≈ the sound's intended play distance, e.g. 0.6 m arm's-length), maxDistance, rolloffFactor. "3D" alone is not a spec. For non-spatial sounds write "non-spatial, head-locked bus" explicitly.
+5. Mix levels: give linear gain on a shared bus with a stated peak ceiling (e.g. -3 dBFS limiter). Replace adjectives ("bad is loud") with numbers and enforce hierarchy: cues above music, failure cues within ~+2 dB of hit cues (salience via timbre/pitch, not level — loud failure cues fatigue in headset). Note coincident sums (e.g. pluck + hit on one action).
+6. Licensing rule of the team (e.g. CC0 + licence file in game folder, or synthesised) applies per sound INCLUDING music. Prefer zero-risk synthesis recipes (short spec: waveform/harmonics, ADSR, pitch sequence, layers) and name at least one verified CC0 fallback (e.g. Kenney packs — kenney.nl/support states all asset-page assets are CC0 and each pack includes its license file; require copying that file into the game folder and recording pack + file name).
+7. Rhythm/metagame check: music and any metronome must share one beat clock (BPM + phase) or players face two timing authorities; state ducking/sidechain and start/stop behaviour.
+8. Close with: what was verified and how (URLs fetched), and what cannot be verified without a build (loudness/headroom, on-device spatialisation and pose tracking, input-to-sound latency, grid alignment) — never claim an unrun test.
+9. Verdict up top: FAIL as drafted / PASS after adopting the revision, so the lead can act on one line.

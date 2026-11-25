@@ -1,0 +1,40 @@
+{
+  "id": "learned-count-listing-fields-5e52",
+  "name": "count_listing_fields",
+  "description": "Counts Unicode characters (including spaces) and words for each store-listing field passed in as {fields: {name: text}}. Call it when preparing or checking per-locale store listing drafts so field lengths can be measured in the target language (German expands ~10-35% vs English) and compared against each store's field limits before handover.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "fields": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "map of field name (e.g. title, short, full, bullet_1) to its text"
+      },
+      "limit": {
+        "type": "number",
+        "description": "optional per-field character limit to check against; fields over it are flagged"
+      }
+    },
+    "required": [
+      "fields"
+    ]
+  },
+  "example": {
+    "fields": {
+      "title": "Hushlight: Lantern Keeper",
+      "short": "Trage eine Laterne durch einen flüsternden Wald. Halte das Licht am Leben.",
+      "full": "Hushlight ist ein ruhiger, langsamer Waldspaziergang aus der ersten Person. Halte eine Laterne in einer Hand, sammle Glühwürmchen und entzünde die uralten Lampen. Kein Kampf, kein Timer – ein sanftes Erlebnis von rund 12 Minuten für WebXR im Browser. Alle Texte im Spiel sind englischsprachig; es gibt keine Sprachausgabe.",
+      "bullet_1": "Kein Kampf",
+      "bullet_2": "Kein Timer",
+      "bullet_3": "Rund 12 Minuten Spieldauer",
+      "bullet_4": "Läuft im Browser (WebXR)",
+      "bullet_5": "Spielbar mit Tastatur und Maus",
+      "bullet_6": "Optionales Hand-Tracking (experimentell, möglicherweise nicht auf allen Headsets)",
+      "bullet_7": "Englische Text-Einblendungen zur Atmosphäre, keine Sprachausgabe"
+    }
+  },
+  "source": "camp:c85e1f21b:tc-vr-launch-marketer",
+  "ts": "2026-11-24T16:48:38.007Z"
+}

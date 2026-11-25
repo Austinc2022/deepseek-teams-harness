@@ -1,0 +1,52 @@
+{
+  "id": "learned-subscriber-requirement-math-66ce",
+  "name": "subscriber_requirement_math",
+  "description": "Computes subscriber counts needed to hit revenue targets and the low/likely/high revenue range from funnel evidence. Use at the demand gate when a concept has subscription+hardware pricing and funnel evidence (waitlist, deposits, retained payers).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "monthlyPrice": {
+        "type": "number"
+      },
+      "hardwarePrice": {
+        "type": "number"
+      },
+      "waitlist": {
+        "type": "number"
+      },
+      "deposits": {
+        "type": "number"
+      },
+      "retainedPayers": {
+        "type": "number"
+      },
+      "targets": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "required": [
+      "monthlyPrice",
+      "hardwarePrice",
+      "waitlist",
+      "deposits",
+      "retainedPayers",
+      "targets"
+    ]
+  },
+  "example": {
+    "monthlyPrice": 19,
+    "hardwarePrice": 129,
+    "waitlist": 2300,
+    "deposits": 96,
+    "retainedPayers": 6,
+    "targets": [
+      1000000,
+      365000000
+    ]
+  },
+  "source": "camp:c85e1f21b:tc-ic-chair",
+  "ts": "2026-11-24T23:33:27.871Z"
+}

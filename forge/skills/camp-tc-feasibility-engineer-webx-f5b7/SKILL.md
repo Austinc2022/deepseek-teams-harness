@@ -1,0 +1,17 @@
+---
+name: camp-tc-feasibility-engineer-webx-f5b7
+description: When reviewing a WebXR/three.js plan that targets Meta Quest — the six-dimension feasibility gate review (WebXR feasibility, performance budget, localisation, store route, scope/build time).
+---
+
+# WebXR→Quest plan feasibility gate review
+
+1. **Locate the plan first.** Probe the work dir and camp root for the plan document. If absent, say exactly where you probed and give SEND BACK with the required-content gates (never invent or assume a plan).
+2. **Extract and classify every technical claim** as Feasible / Feasible-with-conditions (name the condition) / Infeasible (cite the limit) / Unverified (say what would verify it). No claim silently dropped.
+3. **Performance gate — demand a budget table with numbers.** Sourced anchors: Meta's WebXR perf workflow page gives 72fps = 13.7ms, 90fps = 11.1ms, 60fps = 16.6ms; app logic >2ms = optimize; draw calls are CPU-side (1k tris as unique draws run <72fps); fixed foveated rendering available. VRC.Quest.Performance.4 (recommended) = ≥85% render scale; Performance.1 (required) = run at the specified refresh rate; Performance.3 = head-tracked graphics ≤4s or loading indicator. Quest Browser WebXR defaults to 72fps, change via session.supportedFrameRates / updateTargetFrameRate. Secondary budgets: ~100–150 draw calls (Quest: <100), ≤200–300k visible tris, KTX2 for textures. Require: CPU/GPU ms split at chosen Hz, draw-call/triangle/texture budgets, render-scale + foveation policy, measurement method (OVR Metrics Tool, RenderDoc, Chrome Tracing, renderer.info) + device + Browser version. "Runs smoothly" = blocking defect.
+4. **Architecture gate:** setAnimationLoop must own the render loop; session end/re-enter + session-loss recovery; input abstraction covering controllers AND hands, focus-aware (VRC.Quest.Input.4); local-floor reference space + recenter control (VRC.Quest.Functional.9); GLTF + KTX2/ASTC asset pipeline.
+5. **Store-route gate (the usual gap):** the Quest VRC guidelines are written for packaged APKs and contain NO WebXR/browser provisions — so require the plan to name the delivery vehicle (wrapper APK vs browser-URL distribution) and a submission checklist mapped to VRC IDs: Privacy.1–5 (policy URL, data disclosures, deletion), Publishing.1–8 (support/TOS URLs), Asset.1–10 (logo/cover/screenshots, trailer ≤2 min), Tracking.1–2 (play-mode + input metadata), Input.4, IARC rating; dashboard-only steps marked owner-only. Re-open the VRC doc each review and note the date checked — it changes.
+6. **Localisation gate:** locale list + fallback chain, strings externalised from day one, CJK text-rendering plan (MSDF/bitmap fonts or DOM overlay — a real budget item), store-listing copy per language.
+7. **Scope gate:** features split into build units; agent-days labelled guess vs measured; integration 15–20% + QA 10–15% buffers as visible line items; milestones as evidence gates risk-first (riskiest tech/fun assumption first, e.g. frame budget on device); MVP ≤8 weeks for a small AI-assisted team.
+8. **Output order:** verdict + score first, blocking findings, claim table (claim → verdict → evidence → required fix), evidence refs (only pages actually opened; everything else labelled Unverified), unverified list.
+
+**Common mistakes:** asserting store policy or hardware specs from memory; missing the WebXR store-route packaging gap; budgets without a measurement method; timing milestones by date instead of evidence gates; labelling guesses as measured.

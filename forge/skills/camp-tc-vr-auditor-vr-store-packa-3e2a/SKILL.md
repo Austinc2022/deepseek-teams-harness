@@ -1,0 +1,14 @@
+---
+name: camp-tc-vr-auditor-vr-store-packa-3e2a
+description: When auditing a VR store/marketing package (listings, prices, compliance, owner actions) plus its supporting demo evaluation against acceptance criteria, before issuing an accept/reject verdict.
+---
+
+1. List every acceptance criterion as a numbered checklist before reading the package; judge each one separately at the end so none is silently skipped.
+2. Build a fact sheet from the plan/charter only (regions, features, fps, what is forbidden for the team). Never let the package's summary substitute for it.
+3. Region coverage: diff the plan's region/language list against (a) listing files present, (b) price rows present. Check whether missing items are listed as explicit gaps. Any silent omission is a criterion failure.
+4. Claim matching: quote every factual claim in each listing (fps, input methods, multiplayer/leaderboards, review quotes) and match against the fact sheet. Any feature or review quote with no evidence source is an invented claim. Rounded numbers (e.g. "60 fps" from measured 58–61) are a minor misstatement — note them, don't inflate them into blockers.
+5. Prices: every row must be marked draft and carry reasoning tied to the evaluation. Flag rows marked final or approved by anyone other than the owner (charter: pricing is an owner decision). Cross-check price reasoning against the evaluation's own limits (e.g. if the eval took no willingness-to-pay measurement, "matches eval" reasoning is invalid).
+6. Flags: machine-translated copy must carry an explicit native-review flag (not just a translation date); compliance items (age rating, privacy policy, data processing) must carry an explicit lawyer-review flag. "Assumed" and "to be written later" without review flags are failures.
+7. Owner actions vs. performed actions: read the owner-actions file for any completed outreach, spending, or sharing of builds. Cross-check against the Status/summary claims ("nothing bought/submitted"). Any contradiction is a defect; if the team performed owner-only actions it is a charter breach — if the owner did them, the claim must still be corrected.
+8. Demo evaluation reliance: for each plan criterion require pass/fail WITH evidence; a "NOT RUN" row that the scoreboard marks PASS is falsified evidence. Fun requires its own pass/fail plus the plain disclaimer covering BOTH "not a real player test" and "cannot prove fun or willingness to buy" — one half alone is a gap. Comfort must address locomotion, motion and scale. Keep/change/cut recommendations must cover every plan feature, not a subset.
+9. Write the verdict only after the checklist is complete. For each defect: quote the offending text or name file/section, name the broken criterion, state the fix. Also state what is genuinely correct. Do not invent defects the evidence does not support; note explicitly when the package is only available as excerpts so findings are scoped to what was shown.

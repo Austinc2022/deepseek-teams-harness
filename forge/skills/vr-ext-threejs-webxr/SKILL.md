@@ -1,84 +1,48 @@
 ---
 name: vr-ext-threejs-webxr
-description: "WebXR integration for three.js: WebXRManager and XRManager on the renderer, session initialization patterns, VRButton and ARButton helpers, XRControllerModelFactory and hand model families, XREstimatedLight, XRPlanes, and related addon Webxr utilities. Use for immersive sessions and controller/hand tracking—not for standard desktop camera projection (threejs-camera) or composer post effects (three"
+description: "WebXR in three.js and R3F: AR placement with hit testing, VR sessions, controllers, hands, DOM overlays, XR scale and performance rules. Use when a scene opens in a headset or places a model in a room. Hands off to `web3d-model-viewer`."
 ---
-<!-- downloaded 2026-11-24T12:00:23.082Z from github.com/full-stack-skills/threejs-skills skills/threejs-webxr/SKILL.md; audited by vr-auditor. This is guidance from the internet: the agent's own hard rules come first. -->
-## When to use this skill
+<!-- downloaded 2026-11-24T15:33:10.989Z from github.com/emiliodominguez/threejs-skills skills/threejs-webxr/SKILL.md; audited by vr-auditor. This is guidance from the internet: the agent's own hard rules come first. -->
 
-**ALWAYS use this skill when the user mentions:**
+# WebXR
 
-- Entering VR/AR, `navigator.xr`, reference spaces, session `requestAnimationFrame` loop via renderer
-- `VRButton`, `ARButton`, `XRButton` creation patterns from examples
-- Controller models, hand tracking meshes, estimated real-world lighting probes
+WebXR runs three.js scenes in headsets (immersive VR) and on phones (immersive AR with hit testing). Support is
+uneven, so decide the target first:
 
-**IMPORTANT: webxr vs renderers vs camera**
+- Android Chrome: immersive AR with hit test, anchors, DOM overlay, light estimation.
+- Meta Quest browser: immersive VR and passthrough AR, controllers and hands.
+- Apple Vision Pro Safari: immersive VR with hand and gaze input.
+- iPhone Safari: no immersive WebXR. For "view this product in my room" on iOS, use `web3d-model-viewer`
+  (Quick Look), which also covers Android with less code.
 
-| Topic | Skill |
-|-------|--------|
-| Enable XR on renderer, sizing | **threejs-renderers** (basics) + **threejs-webxr** (session) |
-| Desktop projection | **threejs-camera** |
+## Process
 
-**Trigger phrases include:**
+1. Model scale is meters in XR, always: a 180-unit centimeter model fills the room. Inspect and fix scale first
+   (`threejs-model-inspect`).
+2. Read the recipe for the stack: `references/vanilla.md` (three's `XRButton`/`ARButton`, `renderer.xr`) or
+   `references/r3f.md` (`@react-three/xr` 6: `createXRStore`, `<XR>`, hit-test hooks).
+3. Render with `renderer.setAnimationLoop` only; `requestAnimationFrame` stops inside an XR session. In R3F this is
+   automatic.
+4. Request only the session features you use (`hit-test`, `anchors`, `dom-overlay`, `hand-tracking`,
+   `light-estimation`); missing optional features must degrade, not crash.
+5. Light AR content from the real room when possible (`XREstimatedLight` in vanilla), or at least with an
+   environment map, so placed models do not look pasted on.
+6. Hold 72-90 fps on the headset: halve draw calls and texture sizes compared with desktop, avoid post-processing,
+   and keep the pixel ratio at the device default (the XR framebuffer sets it).
+7. Test on the real device. Desktop browsers can emulate sessions (the Immersive Web Emulator extension), which is
+   fine for logic, not for comfort or performance.
 
-- "WebXR", "VRButton", "ARButton", "XRControllerModelFactory", "hand tracking"
-- "虚拟现实", "增强现实", "沉浸式"
+## Anti-patterns
 
-## How to use this skill
+- Moving the camera in XR; the headset owns it. Move a parent of the content (or the XR origin) instead.
+- Showing an "Enter AR" button without checking `navigator.xr.isSessionSupported("immersive-ar")`.
+- Placing models without hit testing, so they float or sink in the room.
+- Large text in 3D canvases for UI; use DOM overlay on phones and readable, world-anchored panels in headsets.
 
-1. **HTTPS** requirement and feature detection for XR availability.
-2. **Buttons**: use official button factories to create DOM entry points; handle session end.
-3. **Renderer**: call `renderer.xr.enabled = true` patterns per docs; prefer `setAnimationLoop` for XR loops.
-4. **Controllers**: attach models via factories; read gamepad axes/buttons carefully with fallbacks.
-5. **Hands**: opt-in hand models when runtime supports; performance implications.
-6. **Lighting**: `XREstimatedLight` for AR realism—combine with **threejs-lights** cautiously.
-7. **Exit**: restore non-XR render loop and resize handling on session end.
+## Done when
 
-See [examples/workflow-xr-button.md](examples/workflow-xr-button.md).
+- The session starts from a user gesture on the target devices, and unsupported devices see a fallback.
+- Placed or VR content is at real-world scale and lit to match.
+- Frame rate holds on the target headset for a full minute of movement.
 
-## Doc map (official)
-
-| Docs section | Representative links |
-|--------------|----------------------|
-| Renderer XR | https://threejs.org/docs/WebXRManager.html |
-| Webxr addons | https://threejs.org/docs/VRButton.html |
-| Webxr addons | https://threejs.org/docs/ARButton.html |
-| Webxr addons | https://threejs.org/docs/XRControllerModelFactory.html |
-
-## Scope
-
-- **In scope:** Documented WebXR manager + listed addons for buttons/controllers/hands/planes.
-- **Out of scope:** Store submission, OpenXR runtime specifics, custom native layers.
-
-## Common pitfalls and best practices
-
-- Desktop testing requires XR emulation or hardware; fail gracefully.
-- Mismatched reference space causes floor offset—validate stage vs local-floor.
-- Heavy post chains may not meet VR frame time—profile aggressively.
-
-## Documentation and version
-
-WebXR entry points span **Addons → Webxr** and renderer [`WebXRManager`](https://threejs.org/docs/WebXRManager.html) in [three.js docs](https://threejs.org/docs/). Browser and device capabilities vary—answers should cite the official example name and three.js version when possible.
-
-## Agent response checklist
-
-When answering under this skill, prefer responses that:
-
-1. Link `WebXRManager`, `VRButton`, `ARButton`, or controller factories as relevant.
-2. Use `setAnimationLoop` patterns with **threejs-renderers** for XR render loops.
-3. Avoid duplicating desktop **threejs-camera** projection advice for XR eyes.
-4. Mention reference space choice (local-floor, etc.) at a high level with docs link.
-5. Flag performance interaction with **threejs-postprocessing** in VR.
-
-## References
-
-- https://threejs.org/docs/WebXRManager.html
-- https://threejs.org/docs/VRButton.html
-- https://threejs.org/docs/ARButton.html
-- https://threejs.org/docs/XRControllerModelFactory.html
-
-## Keywords
-
-**English:** webxr, vr, ar, xr session, controller, hand tracking, three.js
-
-**中文：** WebXR、VR、AR、VRButton、手柄、手部追踪、沉浸式、three.js
-
+Next: `web3d-model-viewer` when the requirement is only product AR.

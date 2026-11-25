@@ -1,0 +1,48 @@
+{
+  "id": "learned-check-spawn-error-shape-f1db",
+  "name": "check_spawn_error_shape",
+  "description": "Measures how Node's child_process reports an exec failure: synchronous throw vs async 'error' event vs spawnSync {error}, with the error code. Used to verify claims about which errnos (EPERM vs ENOENT etc.) throw synchronously from spawn/execFile/execFileSync — e.g. when auditing a sandbox-exec-deny emulation.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "string",
+        "description": "absolute path of the program to execute"
+      },
+      "args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "arguments to pass"
+      },
+      "mode": {
+        "type": "string",
+        "description": "spawn | spawnSync | execFileSync | execSync",
+        "enum": [
+          "spawn",
+          "spawnSync",
+          "execFileSync",
+          "execSync"
+        ]
+      },
+      "waitMs": {
+        "type": "number",
+        "description": "how long to wait for an async 'error' event before concluding it never comes (default 500)"
+      }
+    },
+    "required": [
+      "file",
+      "mode"
+    ]
+  },
+  "example": {
+    "file": "/bin/echo",
+    "args": [
+      "hi"
+    ],
+    "mode": "spawn"
+  },
+  "source": "learned:vr-auditor",
+  "ts": "2026-11-24T13:46:15.130Z"
+}

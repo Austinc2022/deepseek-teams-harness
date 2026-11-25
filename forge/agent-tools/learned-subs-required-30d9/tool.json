@@ -1,0 +1,50 @@
+{
+  "id": "learned-subs-required-30d9",
+  "name": "subs_required",
+  "description": "Given a revenue target (per day or per year), monthly price, monthly churn and platform fee, compute: required active paying subscribers, subscription payments per day, share of a given MAU base, churn-replacement adds per day, and implied annual UA spend at a given CAC. Used for VR subscription revenue feasibility memos.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "target_per_day_usd": {
+        "type": "number"
+      },
+      "monthly_price_usd": {
+        "type": "number"
+      },
+      "monthly_churn_pct": {
+        "type": "number"
+      },
+      "mau": {
+        "type": "number"
+      },
+      "platform_fee_pct": {
+        "type": "number",
+        "default": 30
+      },
+      "cac_usd": {
+        "type": "number",
+        "default": 20
+      },
+      "days": {
+        "type": "number",
+        "default": 365
+      }
+    },
+    "required": [
+      "target_per_day_usd",
+      "monthly_price_usd",
+      "monthly_churn_pct",
+      "mau"
+    ]
+  },
+  "example": {
+    "target_per_day_usd": 1000000,
+    "monthly_price_usd": 9.99,
+    "monthly_churn_pct": 6,
+    "mau": 18000000,
+    "platform_fee_pct": 30,
+    "cac_usd": 20
+  },
+  "source": "camp:c85e1f21b:tc-market-analyst",
+  "ts": "2026-11-24T15:18:55.918Z"
+}

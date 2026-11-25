@@ -1,0 +1,11 @@
+---
+name: learned-smoke-hears-scheduler-two-side-77e8
+description: When a kit/game browser smoke must prove that a Web-Audio or scheduler code path really works in the real browser (unit tests cannot see Web-API receiver bugs like 'Illegal invocation'), and the smoke evidence JSON must be trustworthy.
+---
+
+1. Add a read-mostly window probe next to the existing perf hook (mirroring window.__kitStats in app.js): ctxState(), beat(t) which pushes ONE event through the SHIPPED path (Scheduler.push -> SchedWire's 25 ms timer tick -> pump -> Audio.beat), pump(), and stats() reading the Scheduler's own fired/late/dropped counters. Only tools/smoke.mjs calls it; game logic never writes it.
+2. In tools/smoke.mjs: click Play, wait ~300 ms (startAudio arms the wire timer), call probe.beat() from the page, then let the SHIPPED timer pump it — never pump from the smoke itself; the timer's bound-window receiver is exactly the crash surface you are testing.
+3. Record "audio": {"ctxState", "scheduled", "late", "dropped"} in the evidence JSON where scheduled = Scheduler.fired (events the shipped pump actually started, not just pushed). FAIL unless ctxState is 'running' (or 'suspended' with an explicitly recorded headless-autoplay reason), scheduled >= 1, and pageErrors is 0.
+4. Unit side (vitest + MOCK AudioContext): the probe publishes on window; beat() + pump() move scheduled 0 -> 1. Failing control: delete the probe block from app.js, show both tests fail ('expected undefined to be truthy').
+5. Browser side two-sided proof: run the smoke normally (PASS, scheduled >= 1), then remove ONLY the schedule call and re-run through tools/job.mjs — it must report FAIL with scheduled 0 (quote both outputs in CHANGES.md). Restore, and make the FINAL smoke run the last thing after the last src edit (freeze row 6 needs evidence newer than src).
+6. Same pattern for write-time timestamps: the correct relation is 0 <= Date.parse(header.startIso) - Date.parse(generatedAt) <= 5000 ms (header stamps inside writeEvidence, AFTER the write-time stamp); test the WRITTEN evidence file plus a bad fixture via an env-var path override (SMOKE_JSON=...) so the failing control never rewrites real evidence bytes — the manifest hashes them.

@@ -1,0 +1,34 @@
+{
+  "id": "learned-rev-revenue-math-9a9b",
+  "name": "rev_revenue_math",
+  "description": "Compute copies/day, copies/year and net revenue from price and target dollars/day or dollars/year; used to restate marketing revenue claims honestly in build gates.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "price_usd": {
+        "type": "number"
+      },
+      "target_per_day_usd": {
+        "type": "number"
+      },
+      "target_per_year_usd": {
+        "type": "number"
+      },
+      "platform_fee_pct": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price_usd",
+      "target_per_day_usd",
+      "target_per_year_usd"
+    ]
+  },
+  "example": {
+    "price_usd": 20,
+    "target_per_day_usd": 1000000,
+    "target_per_year_usd": 1000000
+  },
+  "source": "camp:c85e1f21b:tc-vr-ceo",
+  "ts": "2026-11-24T23:34:02.324Z"
+}

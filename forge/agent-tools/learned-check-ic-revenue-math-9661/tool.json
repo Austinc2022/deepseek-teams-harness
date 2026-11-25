@@ -1,0 +1,65 @@
+{
+  "id": "learned-check-ic-revenue-math-9661",
+  "name": "check_ic_revenue_math",
+  "description": "Verifies IC demand-gate arithmetic: net paid revenue, refund rate, ad engagement, TAM-share claims, and unit gaps to $1M/year and $1M/day at a given price. Call whenever a memo claims a waitlist, LOI, TAM fraction, or paying sales as demand evidence.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "priceUsd": {
+        "type": "number"
+      },
+      "grossPurchases": {
+        "type": "number"
+      },
+      "refunds": {
+        "type": "number"
+      },
+      "adSpendUsd": {
+        "type": "number"
+      },
+      "emailsCollected": {
+        "type": "number"
+      },
+      "emailsOpened": {
+        "type": "number"
+      },
+      "tamUsdB": {
+        "type": "number"
+      },
+      "tamShareClaimedPct": {
+        "type": "number"
+      },
+      "businessModel": {
+        "type": "string",
+        "enum": [
+          "one_time",
+          "monthly_sub"
+        ]
+      }
+    },
+    "required": [
+      "priceUsd",
+      "grossPurchases",
+      "refunds",
+      "adSpendUsd",
+      "emailsCollected",
+      "emailsOpened",
+      "tamUsdB",
+      "tamShareClaimedPct",
+      "businessModel"
+    ]
+  },
+  "example": {
+    "priceUsd": 4.99,
+    "grossPurchases": 14,
+    "refunds": 12,
+    "adSpendUsd": 3000,
+    "emailsCollected": 20000,
+    "emailsOpened": 600,
+    "tamUsdB": 60,
+    "tamShareClaimedPct": 0.5,
+    "businessModel": "one_time"
+  },
+  "source": "camp:c85e1f21b:tc-ic-chair",
+  "ts": "2026-11-24T23:40:31.061Z"
+}

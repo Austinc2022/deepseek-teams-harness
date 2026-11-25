@@ -1,0 +1,19 @@
+{
+  "id": "learned-check-plan-completeness-e49f",
+  "name": "check_plan_completeness",
+  "description": "Checks a plan document (markdown string) for the required Tidepool plan sections and explicit-exclusion language; returns a list of missing requirements. Call when validating a plan.md before delivery.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "markdown": {
+        "type": "string",
+        "description": "the full plan markdown text"
+      }
+    }
+  },
+  "example": {
+    "markdown": "# Tidepool Plan\nScoop decision: re-scope the scoop. Demos pass/fail pre-registered at 72 fps, comfort %, clarity, fun. PRD, core loop, exclusions list. Monetisation $14.99 US, JPY 2200 Japan, EUR 14.99 Germany, BRL 59.90 Brazil. three.js WebXR architecture. Fun proxies with real-players-needed caveat. Localisation en/ja/de/pt-BR, CJK handling, externalised strings. Store route: Horizon Store New Tab Page, https://developers.meta.com/ sources, unverified items flagged, target regions US Japan Germany Brazil. Milestones M0-M4. Risks and mitigations. Feasibility sign-off."
+  },
+  "source": "camp:c85e1f21b:tc-vr-head-design",
+  "ts": "2026-11-24T15:20:07.587Z"
+}

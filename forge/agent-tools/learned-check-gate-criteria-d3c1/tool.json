@@ -1,0 +1,204 @@
+{
+  "id": "learned-check-gate-criteria-d3c1",
+  "name": "check_gate_criteria",
+  "description": "Compares a builder's demo-report evidence claims against plan gate criteria (numeric limits, device requirements, default flags) and returns a per-criterion pass/fail/insufficient verdict with the deciding numbers. Use when judging a WebXR demo gate submission.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "criteria": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "min_fps": {
+                  "type": "number"
+                },
+                "max_snap_turn_deg": {
+                  "type": "number"
+                },
+                "max_reach_cm": {
+                  "type": "number"
+                },
+                "max_first_score_s": {
+                  "type": "number"
+                },
+                "require_human_testers": {
+                  "type": "boolean"
+                },
+                "require_daily_seed": {
+                  "type": "boolean"
+                },
+                "no_smooth_locomotion": {
+                  "type": "boolean"
+                },
+                "no_camera_bob": {
+                  "type": "boolean"
+                },
+                "tool_scale_1to1": {
+                  "type": "boolean"
+                },
+                "seated_default": {
+                  "type": "boolean"
+                },
+                "min_restarts": {
+                  "type": "number"
+                },
+                "min_median_fun": {
+                  "type": "number"
+                },
+                "require_fps_device": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            }
+          },
+          "required": [
+            "id",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "evidence": {
+        "type": "object",
+        "properties": {
+          "human_testers": {
+            "type": "number"
+          },
+          "bot_runs": {
+            "type": "number"
+          },
+          "restarts": {
+            "type": "number"
+          },
+          "median_fun": {
+            "type": "number"
+          },
+          "snap_turn_deg": {
+            "type": "number"
+          },
+          "smooth_locomotion_deg_s": {
+            "type": "number"
+          },
+          "camera_bob_cm": {
+            "type": "number"
+          },
+          "tool_scale": {
+            "type": "number"
+          },
+          "reach_cm": {
+            "type": "number"
+          },
+          "seated_default": {
+            "type": "boolean"
+          },
+          "fps_by_scene": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "scene": {
+                  "type": "string"
+                },
+                "fps": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "device",
+                "scene",
+                "fps"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "first_score_s": {
+            "type": "number"
+          },
+          "mandatory_tutorial_before_score": {
+            "type": "boolean"
+          },
+          "high_score": {
+            "type": "boolean"
+          },
+          "restart": {
+            "type": "boolean"
+          },
+          "daily_seed": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    },
+    "required": [
+      "criteria",
+      "evidence"
+    ],
+    "additionalProperties": false
+  },
+  "example": {
+    "criteria": [
+      {
+        "id": "C1",
+        "text": "Comfort: seated by default; snap turn <=30 degrees; no smooth locomotion; no camera bob/shake; 1:1 tool scale; no reach beyond 45 cm",
+        "limits": {
+          "max_snap_turn_deg": 30,
+          "no_smooth_locomotion": true,
+          "no_camera_bob": true,
+          "tool_scale_1to1": true,
+          "max_reach_cm": 45,
+          "seated_default": true
+        }
+      },
+      {
+        "id": "P1",
+        "text": ">=72 fps sustained on Quest 3 standalone at native resolution in the busiest scene",
+        "limits": {
+          "min_fps": 72,
+          "require_fps_device": "Quest 3"
+        }
+      }
+    ],
+    "evidence": {
+      "snap_turn_deg": 45,
+      "smooth_locomotion_deg_s": 120,
+      "camera_bob_cm": 3,
+      "tool_scale": 1.6,
+      "reach_cm": 62,
+      "seated_default": false,
+      "fps_by_scene": [
+        {
+          "device": "RTX 3080",
+          "scene": "desktop",
+          "fps": 144
+        },
+        {
+          "device": "Quest 3",
+          "scene": "pouring hall",
+          "fps": 54
+        },
+        {
+          "device": "Quest 3",
+          "scene": "pouring hall 3+ blobs",
+          "fps": 38
+        }
+      ]
+    }
+  },
+  "source": "camp:c85e1f21b:tc-vr-playtest-analyst",
+  "ts": "2026-11-24T16:36:10.378Z"
+}

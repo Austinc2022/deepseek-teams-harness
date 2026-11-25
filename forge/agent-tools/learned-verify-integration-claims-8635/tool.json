@@ -1,0 +1,71 @@
+{
+  "id": "learned-verify-integration-claims-8635",
+  "name": "verify_integration_claims",
+  "description": "Recompute the arithmetic claims asserted in the Harbor Light integration plan (chapter timing, avatar/doorway geometry, QA pass rate, VO per-chapter length) so the producer can confirm each number before publishing a go/no-go.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "chapters": {
+        "type": "number"
+      },
+      "totalMinutesStated": {
+        "type": "number"
+      },
+      "autoAdvanceSeconds": {
+        "type": "number"
+      },
+      "voDeliveredChapters": {
+        "type": "number"
+      },
+      "voTotalSeconds": {
+        "type": "number"
+      },
+      "avatarRadiusMeters": {
+        "type": "number"
+      },
+      "doorwayMeters": {
+        "type": "number"
+      },
+      "smokeTests": {
+        "type": "number"
+      },
+      "smokePassed": {
+        "type": "number"
+      },
+      "captionsEntries": {
+        "type": "number"
+      },
+      "manifestAudioFiles": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "chapters",
+      "totalMinutesStated",
+      "autoAdvanceSeconds",
+      "voDeliveredChapters",
+      "voTotalSeconds",
+      "avatarRadiusMeters",
+      "doorwayMeters",
+      "smokeTests",
+      "smokePassed",
+      "captionsEntries",
+      "manifestAudioFiles"
+    ]
+  },
+  "example": {
+    "chapters": 8,
+    "totalMinutesStated": 8,
+    "autoAdvanceSeconds": 45,
+    "voDeliveredChapters": 6,
+    "voTotalSeconds": 320,
+    "avatarRadiusMeters": 1,
+    "doorwayMeters": 0.8,
+    "smokeTests": 12,
+    "smokePassed": 11,
+    "captionsEntries": 6,
+    "manifestAudioFiles": 6
+  },
+  "source": "camp:c85e1f21b:tc-producer",
+  "ts": "2026-11-24T23:29:36.440Z"
+}

@@ -1,0 +1,65 @@
+{
+  "id": "learned-check-f2p-model-errors-372c",
+  "name": "check_f2p_model_errors",
+  "description": "Flags common F2P revenue-model errors in a report's figures: blended-ARPDAU double-count, daily-vs-monthly conversion misread, DAU derived from lifetime installs, store fee applied to web revenue. Call when reviewing revenue models for direction-of-error (overstates/understates).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "dau": {
+        "type": "number"
+      },
+      "dauDerivation": {
+        "type": "string"
+      },
+      "arpdau": {
+        "type": "number"
+      },
+      "arpdauBasis": {
+        "type": "string"
+      },
+      "iapConversionPct": {
+        "type": "number"
+      },
+      "iapConversionPeriod": {
+        "type": "string",
+        "enum": [
+          "daily",
+          "monthly",
+          "unspecified"
+        ]
+      },
+      "iapPrice": {
+        "type": "number"
+      },
+      "storeFeePct": {
+        "type": "number"
+      },
+      "platform": {
+        "type": "string"
+      },
+      "blendedIncludesIAP": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "dau",
+      "arpdau",
+      "platform",
+      "blendedIncludesIAP"
+    ]
+  },
+  "example": {
+    "dau": 3000000,
+    "dauDerivation": "1 in 4 of 12M lifetime installs still active",
+    "arpdau": 0.33,
+    "arpdauBasis": "mobile racing games",
+    "iapConversionPct": 2,
+    "iapConversionPeriod": "daily",
+    "iapPrice": 4.99,
+    "storeFeePct": 30,
+    "platform": "WebXR browser",
+    "blendedIncludesIAP": true
+  },
+  "source": "camp:c85e1f21b:tc-devils-advocate",
+  "ts": "2026-11-25T00:08:07.240Z"
+}

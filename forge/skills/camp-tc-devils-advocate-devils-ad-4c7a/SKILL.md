@@ -1,0 +1,6 @@
+---
+name: camp-tc-devils-advocate-devils-ad-4c7a
+description: When reviewing an analyst's venture/concept report and producing a devil's-advocate evaluation with steady-state rebuild.
+---
+
+1. Rebuild unit economics from physical capacity (stations × sessions/hour × hours × players × price), never from the analyst's extrapolation. 2. Reconcile the analyst's own headline number against their own unit assumptions — flag if the headline cannot be produced by their stated units. 3. List what a launch/proof data point is contaminated by (novelty, PR, comps, scarcity, weekend-only, favourable geography). 4. Test claimed margin at YOUR steady-state volume, not theirs; include omitted cost categories (insurance, utilities, marketing, payment fees, maintenance, management). 5. Compute venue counts for each goal at weak/central/strong per-venue volume; capital at both the analyst's build-out cost and a comparable's disclosed cost; rollout time at a benchmarked opening rate from real comparable networks. 6. State both readings of "revenue" for franchised concepts: system gross vs franchisor royalty take. 7. Kill criteria must be venue-level, numeric, and time-bounded (quarters, utilisation %, payback years). 8. Give a plain implausible/plausible verdict per goal with a realistic range.

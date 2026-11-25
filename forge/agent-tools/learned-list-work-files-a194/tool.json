@@ -1,0 +1,22 @@
+{
+  "id": "learned-list-work-files-a194",
+  "name": "list_work_files",
+  "description": "Recursively lists files in the working directory (with sizes) so a reviewer can find submitted documents without shell access. Call it whenever you need to discover what files exist under the working folder.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "relative path under the working folder to list; default '.'"
+      },
+      "maxDepth": {
+        "type": "integer",
+        "description": "maximum recursion depth, default 4"
+      }
+    },
+    "required": []
+  },
+  "example": {},
+  "source": "camp:c85e1f21b:tc-feasibility-engineer",
+  "ts": "2026-11-24T23:36:23.347Z"
+}

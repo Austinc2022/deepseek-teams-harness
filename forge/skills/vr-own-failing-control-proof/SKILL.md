@@ -1,14 +1,14 @@
 ---
 name: vr-own-failing-control-proof
-description: "Prove every code/config change with a failing control: run its test on the edited file (must pass) and the same test with the pre-edit file swapped in (must fail with a quoted exact error). A test that passes on the broken file proves nothing. Use whenever a change is claimed verified — kit edits, tool fixes, new tests, or any report that says an edit is proven."
+description: "Prove every code/config change with a failing control: run its test on the edited file (must pass), then the same test with the pre-edit file swapped in (must fail with a quoted exact error) — a test that passes on the broken file proves nothing. For a check that compares two timestamps or counters (\"A >= B\", \"A after B\"), read the code that stamps EACH side, take the order that actually runs, and"
 ---
-<!-- written by vr-skill-smith 2026-11-24T12:29:38.434Z: proposed by the builder of ticket kacb79d3ef2; audited by vr-auditor: The skill is safe to publish as agent guidance. It is a verification-strictness skill: its entire purpose is to make claims of 'verified' edits provable via failing controls (green on edited code, red
+<!-- written by vr-skill-smith 2026-11-24T13:32:42.573Z: proposed by coo; audited by vr-auditor: SAFE to publish as agent guidance. The skill is a verification-strictness procedure: it prescribes no code downloads, no data egress, and no commerce, and it strengthens rather than weakens checks and
 ...[truncated] -->
 
 # Failing-control proof for code edits
 
 ## When to use
-Whenever you deliver or re-verify a code or config change and claim a test proves it — kit edits, tool fixes, new test files — and whenever a report, CHANGES.md or after-action review says an edit is "verified". One failing control per edit.
+Whenever you deliver or re-verify a code or config change and claim a test proves it — kit edits, tool fixes, new test files — and whenever a report, CHANGES.md or after-action review says an edit is "verified". One failing control per edit. This covers any check that compares two timestamps or counters ("A >= B", "A after B", "count grew"): those get the same two-sided proof **plus** a look at what stamps each side.
 
 **Why:** a test that passes on the broken file proves nothing. The only evidence a fix is real *and* its test is sensitive enough is the same test FAILING on the pre-edit code with the exact error the fix removes.
 
@@ -22,6 +22,13 @@ Whenever you deliver or re-verify a code or config change and claim a test prove
 7. **Record one row per edit in the deliverable**, not just in logs: edit → file:line → test → failing-control quote (CHANGES.md style).
 8. **Recovery turns:** do not redo work. Re-measure each done-when on disk and cite the recorded failing control. Label anything unmeasured (MOCK tests, headless runs) as such in the same row.
 
+### Ordering checks — two timestamps or counters (do this before writing the check)
+When the check compares two stamped values ("A >= B", "A after B", "count grew"), settle the direction first:
+1. **Read the code that stamps EACH side and note which runs first** — cite file:line for both stampers. Never infer the order from the field names; a helper stamped *inside* the write lands *after* the writer's own stamp even when the names suggest the opposite.
+2. **Prefer a bounded difference in the known order, not a one-way relation.** If the two are stamped back to back (a writer stamps A, then calls a helper that stamps B), a strict or one-way check on the wrong side (`A >= B` when B runs after A) passes only when both land in the same millisecond — and can pass on the old, broken code too. Use `0 <= B - A <= tolerance` with the order you observed (e.g. `0 <= startIso - generatedAt <= 5000 ms`).
+3. **Two-sided proof:** correct code passes; the old code (e.g. the stamp-at-run-start version) fails by its measured gap — quote both values and the delta, not just PASS/FAIL. Worked example: v1.1's run-start stamp gives `generatedAt 12:08:17.359Z` vs `startIso 12:08:39.338Z` (gap 21,980 ms); Orbwend's write-time stamp gives both `12:28:24.623Z` (n=1 same-ms coincidence, which is exactly what a wrong-side `>=` hides).
+4. **Never "fix" a failing ordering check by stamping again or rewriting the file after it is written.** Evidence files are hashed into a manifest, and a rewrite breaks integrity. If the check fails on the correct code, the check's direction or tolerance is wrong — fix the check, not the data.
+
 ## Edge cases
 - **Documentation-only edits** have no behaviour: mark the control `n/a (no behaviour)` and quote the stale sentence the edit replaces.
 - **New test files:** the failing control is the same new file run against the pre-edit source.
@@ -30,7 +37,8 @@ Whenever you deliver or re-verify a code or config change and claim a test prove
 ## Checks that prove it worked
 - Every behaviour row carries a verbatim failing-control quote naming the exact error the fix removes, with counts and exit code.
 - No row where the test passes on both pre-edit and edited code.
-- After all controls: full suite green; negative-control inputs removed and re-verified green.
+- Every ordering row cites file:line for both stampers and asserts a bounded difference in the observed order — never a bare `>=`/`<=` — and its failing control shows the old code failing by a quoted, measured gap.
+- After all controls: full suite green; negative-control inputs removed and re-verified green; no evidence file rewritten after it was written (manifest still verifies).
 - Mock/headless evidence labelled (e.g. "MOCK navigator.xr — not real-headset evidence").
 
 ## Pitfalls
@@ -40,3 +48,6 @@ Whenever you deliver or re-verify a code or config change and claim a test prove
 - Leaving negative-control artifacts in the tree — they break later checks (a leftover `extra.png` fails the freeze gate forever after).
 - Inventing constants or helpers just to make the test pass — use the literals the surrounding code actually uses.
 - Claiming a mock or headless-browser run as real-hardware evidence.
+- Asserting `A >= B` (or "A after B") from the field names without reading the code that stamps each side — the true order is often the opposite, and the check then passes only on a same-millisecond coincidence (n=1).
+- "Fixing" a failing ordering check by re-stamping or rewriting the file after write — evidence is hashed into a manifest; a rewrite breaks integrity. The defect is in the check's direction, not the data.
+- Choosing an ordering tolerance that also admits the old defect: the tolerance must separate the two measured cases (e.g. ms-level back-to-back vs the 21,980 ms run-start gap), not just be "small".
